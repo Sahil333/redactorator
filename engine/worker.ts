@@ -1,0 +1,121 @@
+import * as mupdf from "mupdf";
+import {
+  isPageIndex,
+  isPoints,
+  parseEngineRequest,
+  type EngineMessage,
+  type FileNumber,
+  type PageIndex,
+  type PageModel,
+} from "./contract";
+
+let openDocument: mupdf.Document | undefined;
+
+function post(message: EngineMessage, transfer: Transferable[] = []): void {
+  postMessage(message, { transfer });
+}
+
+function pageModel(document: mupdf.Document, index: number): PageModel {
+  const page = document.loadPage(index);
+  try {
+    const [x0, y0, x1, y1] = page.getBounds();
+    const width = x1 - x0;
+    const height = y1 - y0;
+    if (!isPageIndex(index) || !isPoints(width) || !isPoints(height)) {
+      throw new Error(`Page ${index + 1} has no size`);
+    }
+    return { index, width, height };
+  } finally {
+    page.destroy();
+  }
+}
+
+function openFailed(file: FileNumber, message: string): EngineMessage {
+  return { type: "error", file, error: { code: "open-failed", message } };
+}
+
+function open(file: FileNumber, bytes: ArrayBuffer): EngineMessage {
+  openDocument?.destroy();
+  openDocument = undefined;
+  let document: mupdf.Document | undefined;
+  try {
+    document = mupdf.Document.openDocument(bytes, "application/pdf");
+    const pages: PageModel[] = [];
+    for (let index = 0; index < document.countPages(); index++) {
+      pages.push(pageModel(document, index));
+    }
+    const [first, ...rest] = pages;
+    if (first === undefined) {
+      document.destroy();
+      return openFailed(file, "This PDF has no pages. Choose another file.");
+    }
+    openDocument = document;
+    return { type: "opened", file, document: { pages: [first, ...rest] } };
+  } catch {
+    // A file that opens but fails later is still held in WebAssembly memory until destroyed.
+    document?.destroy();
+    return openFailed(file, "This file could not be opened as a PDF. Check that it is a PDF and try again.");
+  }
+}
+
+function renderFailed(file: FileNumber, message: string): void {
+  post({ type: "error", file, error: { code: "render-failed", message } });
+}
+
+function render(file: FileNumber, index: PageIndex, scale: number): void {
+  const document = openDocument;
+  let page: mupdf.Page | undefined;
+  let pixmap: mupdf.Pixmap | undefined;
+  try {
+    if (document === undefined || index >= document.countPages()) {
+      renderFailed(file, "That page is not in the open document. Open the PDF again.");
+      return;
+    }
+    page = document.loadPage(index);
+    pixmap = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false);
+    const width = pixmap.getWidth();
+    const height = pixmap.getHeight();
+    const stride = pixmap.getStride();
+    const rgb = pixmap.getPixels();
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const from = y * stride + x * 3;
+        const to = (y * width + x) * 4;
+        rgba[to] = rgb[from] ?? 0;
+        rgba[to + 1] = rgb[from + 1] ?? 0;
+        rgba[to + 2] = rgb[from + 2] ?? 0;
+        rgba[to + 3] = 255;
+      }
+    }
+    const image = new ImageData(rgba, width, height);
+    post({ type: "rendered", file, page: index, image }, [rgba.buffer]);
+  } catch {
+    renderFailed(file, `Page ${index + 1} could not be drawn. Open the PDF again.`);
+  } finally {
+    pixmap?.destroy();
+    page?.destroy();
+  }
+}
+
+addEventListener("message", (event: MessageEvent<unknown>) => {
+  const request = parseEngineRequest(event.data);
+  if (request === undefined) {
+    post({
+      type: "error",
+      file: undefined,
+      error: { code: "bad-message", message: "The engine got a message it does not know." },
+    });
+    return;
+  }
+  switch (request.type) {
+    case "open":
+      post(open(request.file, request.bytes));
+      break;
+    case "render":
+      render(request.file, request.page, request.scale);
+      break;
+  }
+});
+
+post({ type: "ready" });
