@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
 export const twoPagePdf = new URL("../../fixtures/two-pages.pdf", import.meta.url).pathname;
+export const noPagesPdf = new URL("../../fixtures/no-pages.pdf", import.meta.url).pathname;
 
 export async function openApp(page: Page): Promise<void> {
   await page.goto("/");

@@ -25,7 +25,7 @@ export interface PageModel {
 }
 
 export interface DocumentModel {
-  readonly pages: readonly PageModel[];
+  readonly pages: readonly [PageModel, ...PageModel[]];
 }
 
 export type EngineRequest =
@@ -77,7 +77,8 @@ function parseDocumentModel(value: unknown): DocumentModel | undefined {
     if (model === undefined) return undefined;
     pages.push(model);
   }
-  return { pages };
+  const [first, ...rest] = pages;
+  return first && { pages: [first, ...rest] };
 }
 
 function parseEngineError(value: unknown): EngineError | undefined {

@@ -4,10 +4,22 @@ import { parseEngineMessage, type DocumentModel, type EngineRequest } from "../e
 // PDF points are 1/72 inch and CSS pixels 1/96 inch, so this shows a page at its printed size.
 const CSS_PIXELS_PER_POINT = 96 / 72;
 
+type EngineState = "starting" | "ready" | "stopped";
+
+function statusText(engine: EngineState, document: DocumentModel | undefined): string {
+  if (engine === "starting") return "Starting the PDF engine…";
+  if (engine === "stopped") return "The PDF engine is not running.";
+  if (document === undefined) return "Choose a PDF to open.";
+  return `Page 1 of ${document.pages.length}`;
+}
+
 export function App() {
   const workerRef = useRef<Worker | undefined>(undefined);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [engineReady, setEngineReady] = useState(false);
+  const [engine, setEngine] = useState<EngineState>("starting");
+  // One file at a time: until the current file has rendered or failed, a reply
+  // could otherwise land after a newer pick and show the wrong document.
+  const [opening, setOpening] = useState(false);
   const [document, setDocument] = useState<DocumentModel | undefined>(undefined);
   const [firstPageImage, setFirstPageImage] = useState<ImageData | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -24,32 +36,32 @@ export function App() {
       }
       switch (message.type) {
         case "ready":
-          setEngineReady(true);
+          setEngine("ready");
           break;
         case "opened": {
           setDocument(message.document);
-          const firstPage = message.document.pages[0];
-          if (firstPage !== undefined) {
-            const request: EngineRequest = {
-              type: "render",
-              page: firstPage.index,
-              scale: CSS_PIXELS_PER_POINT * window.devicePixelRatio,
-            };
-            worker.postMessage(request);
-          }
+          const request: EngineRequest = {
+            type: "render",
+            page: message.document.pages[0].index,
+            scale: CSS_PIXELS_PER_POINT * window.devicePixelRatio,
+          };
+          worker.postMessage(request);
           break;
         }
         case "rendered":
           setFirstPageImage(message.image);
+          setOpening(false);
           break;
         case "error":
           setError(message.error.message);
+          setOpening(false);
           break;
       }
     });
-    worker.addEventListener("error", () =>
-      setError("The PDF engine could not start. Reload the page to try again."),
-    );
+    worker.addEventListener("error", () => {
+      setEngine("stopped");
+      setError("The PDF engine stopped. Reload the page to try again.");
+    });
     return () => worker.terminate();
   }, []);
 
@@ -68,9 +80,15 @@ export function App() {
     setDocument(undefined);
     setFirstPageImage(undefined);
     setError(undefined);
-    const bytes = await file.arrayBuffer();
-    const request: EngineRequest = { type: "open", bytes };
-    worker.postMessage(request, [bytes]);
+    setOpening(true);
+    try {
+      const bytes = await file.arrayBuffer();
+      const request: EngineRequest = { type: "open", bytes };
+      worker.postMessage(request, [bytes]);
+    } catch {
+      setOpening(false);
+      setError("This file could not be read. Choose it again.");
+    }
   }
 
   const firstPage = document?.pages[0];
@@ -83,18 +101,12 @@ export function App() {
         <input
           type="file"
           accept="application/pdf"
-          disabled={!engineReady}
+          disabled={engine !== "ready" || opening}
           onChange={openFile}
           className="text-sm file:mr-2 file:rounded file:border file:border-zinc-400 file:bg-white file:px-2 file:py-1 disabled:opacity-50"
         />
       </label>
-      <p role="status">
-        {!engineReady
-          ? "Starting the PDF engine…"
-          : document === undefined
-            ? "Choose a PDF to open."
-            : `Page 1 of ${document.pages.length}`}
-      </p>
+      <p role="status">{statusText(engine, document)}</p>
       {error !== undefined && (
         <p role="alert" className="text-red-700">
           {error}

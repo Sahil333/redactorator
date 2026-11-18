@@ -13,7 +13,8 @@ test("every request in a session goes to the app's own origin", async ({ page, c
   await expect.poll(() => inkedPixels(page)).toBeGreaterThan(0);
 
   const appOrigin = new URL(baseURL ?? "").origin;
-  expect(requested.length).toBeGreaterThan(0);
+  // The engine worker fetches the WebAssembly file, so seeing it shows worker traffic is recorded too.
+  expect(requested.some((url) => url.endsWith(".wasm"))).toBe(true);
   expect(requested.filter((url) => new URL(url).origin !== appOrigin)).toEqual([]);
 });
 

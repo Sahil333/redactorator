@@ -29,25 +29,31 @@ function pageModel(document: mupdf.Document, index: number): PageModel {
   }
 }
 
+function openFailed(message: string): EngineMessage {
+  return { type: "error", error: { code: "open-failed", message } };
+}
+
 function open(bytes: ArrayBuffer): EngineMessage {
   openDocument?.destroy();
   openDocument = undefined;
+  let document: mupdf.Document | undefined;
   try {
-    const document = mupdf.Document.openDocument(bytes, "application/pdf");
+    document = mupdf.Document.openDocument(bytes, "application/pdf");
     const pages: PageModel[] = [];
     for (let index = 0; index < document.countPages(); index++) {
       pages.push(pageModel(document, index));
     }
+    const [first, ...rest] = pages;
+    if (first === undefined) {
+      document.destroy();
+      return openFailed("This PDF has no pages. Choose another file.");
+    }
     openDocument = document;
-    return { type: "opened", document: { pages } };
+    return { type: "opened", document: { pages: [first, ...rest] } };
   } catch {
-    return {
-      type: "error",
-      error: {
-        code: "open-failed",
-        message: "This file could not be opened as a PDF. Check that it is a PDF and try again.",
-      },
-    };
+    // A file that opens but fails later is still held in WebAssembly memory until destroyed.
+    document?.destroy();
+    return openFailed("This file could not be opened as a PDF. Check that it is a PDF and try again.");
   }
 }
 
@@ -57,13 +63,13 @@ function renderFailed(message: string): void {
 
 function render(index: PageIndex, scale: number): void {
   const document = openDocument;
-  if (document === undefined || index >= document.countPages()) {
-    renderFailed("That page is not in the open document. Open the PDF again.");
-    return;
-  }
   let page: mupdf.Page | undefined;
   let pixmap: mupdf.Pixmap | undefined;
   try {
+    if (document === undefined || index >= document.countPages()) {
+      renderFailed("That page is not in the open document. Open the PDF again.");
+      return;
+    }
     page = document.loadPage(index);
     pixmap = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false);
     const width = pixmap.getWidth();
