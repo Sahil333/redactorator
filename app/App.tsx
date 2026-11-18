@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { parseEngineMessage, type DocumentModel, type EngineRequest } from "../engine/contract";
+import {
+  isAboutOlderFile,
+  parseEngineMessage,
+  type DocumentModel,
+  type EngineRequest,
+} from "../engine/contract";
 
 // PDF points are 1/72 inch and CSS pixels 1/96 inch, so this shows a page at its printed size.
 const CSS_PIXELS_PER_POINT = 96 / 72;
@@ -15,11 +20,9 @@ function statusText(engine: EngineState, document: DocumentModel | undefined): s
 
 export function App() {
   const workerRef = useRef<Worker | undefined>(undefined);
+  const latestFile = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [engine, setEngine] = useState<EngineState>("starting");
-  // One file at a time: until the current file has rendered or failed, a reply
-  // could otherwise land after a newer pick and show the wrong document.
-  const [opening, setOpening] = useState(false);
   const [document, setDocument] = useState<DocumentModel | undefined>(undefined);
   const [firstPageImage, setFirstPageImage] = useState<ImageData | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -27,13 +30,18 @@ export function App() {
   useEffect(() => {
     const worker = new Worker(new URL("../engine/worker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
+    const stop = (message: string) => {
+      setEngine("stopped");
+      setError(message);
+    };
 
     worker.addEventListener("message", (event: MessageEvent<unknown>) => {
       const message = parseEngineMessage(event.data);
       if (message === undefined) {
-        setError("The PDF engine sent something unexpected. Reload the page to try again.");
+        stop("The PDF engine sent something unexpected. Reload the page to try again.");
         return;
       }
+      if (isAboutOlderFile(message, latestFile.current)) return;
       switch (message.type) {
         case "ready":
           setEngine("ready");
@@ -42,6 +50,7 @@ export function App() {
           setDocument(message.document);
           const request: EngineRequest = {
             type: "render",
+            file: message.file,
             page: message.document.pages[0].index,
             scale: CSS_PIXELS_PER_POINT * window.devicePixelRatio,
           };
@@ -50,18 +59,16 @@ export function App() {
         }
         case "rendered":
           setFirstPageImage(message.image);
-          setOpening(false);
           break;
         case "error":
           setError(message.error.message);
-          setOpening(false);
           break;
       }
     });
-    worker.addEventListener("error", () => {
-      setEngine("stopped");
-      setError("The PDF engine stopped. Reload the page to try again.");
-    });
+    worker.addEventListener("messageerror", () =>
+      stop("The PDF engine sent something unreadable. Reload the page to try again."),
+    );
+    worker.addEventListener("error", () => stop("The PDF engine stopped. Reload the page to try again."));
     return () => worker.terminate();
   }, []);
 
@@ -74,21 +81,24 @@ export function App() {
   }, [firstPageImage]);
 
   async function openFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const picked = event.target.files?.[0];
     const worker = workerRef.current;
-    if (file === undefined || worker === undefined) return;
+    if (picked === undefined || worker === undefined) return;
+    const file = ++latestFile.current;
     setDocument(undefined);
     setFirstPageImage(undefined);
     setError(undefined);
-    setOpening(true);
+    let bytes: ArrayBuffer;
     try {
-      const bytes = await file.arrayBuffer();
-      const request: EngineRequest = { type: "open", bytes };
-      worker.postMessage(request, [bytes]);
+      bytes = await picked.arrayBuffer();
     } catch {
-      setOpening(false);
-      setError("This file could not be read. Choose it again.");
+      if (file === latestFile.current) setError("This file could not be read. Choose it again.");
+      return;
     }
+    // Only the latest pick may reach the worker, so its open document is always the one on screen.
+    if (file !== latestFile.current) return;
+    const request: EngineRequest = { type: "open", file, bytes };
+    worker.postMessage(request, [bytes]);
   }
 
   const firstPage = document?.pages[0];
@@ -101,7 +111,7 @@ export function App() {
         <input
           type="file"
           accept="application/pdf"
-          disabled={engine !== "ready" || opening}
+          disabled={engine !== "ready"}
           onChange={openFile}
           className="text-sm file:mr-2 file:rounded file:border file:border-zinc-400 file:bg-white file:px-2 file:py-1 disabled:opacity-50"
         />

@@ -13,6 +13,17 @@ test("opening a PDF renders page 1", async ({ page }) => {
   await expect.poll(() => inkedPixels(page)).toBeGreaterThan(500);
 });
 
+test("an engine that fails to start says so and disables the picker", async ({ page }) => {
+  await page.route("**/assets/worker-*.js", (route) =>
+    route.fulfill({ contentType: "text/javascript", body: "throw new Error('engine broken');" }),
+  );
+  await page.goto("/");
+
+  await expect(page.getByRole("alert")).toHaveText("The PDF engine stopped. Reload the page to try again.");
+  await expect(page.getByRole("status")).toHaveText("The PDF engine is not running.");
+  await expect(page.getByLabel("Open a PDF")).toBeDisabled();
+});
+
 test("a PDF with no pages shows an error", async ({ page }) => {
   await openApp(page);
   await openPdf(page, noPagesPdf);

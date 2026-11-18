@@ -29,11 +29,11 @@ function pageModel(document: mupdf.Document, index: number): PageModel {
   }
 }
 
-function openFailed(message: string): EngineMessage {
-  return { type: "error", error: { code: "open-failed", message } };
+function openFailed(file: number, message: string): EngineMessage {
+  return { type: "error", file, error: { code: "open-failed", message } };
 }
 
-function open(bytes: ArrayBuffer): EngineMessage {
+function open(file: number, bytes: ArrayBuffer): EngineMessage {
   openDocument?.destroy();
   openDocument = undefined;
   let document: mupdf.Document | undefined;
@@ -46,28 +46,28 @@ function open(bytes: ArrayBuffer): EngineMessage {
     const [first, ...rest] = pages;
     if (first === undefined) {
       document.destroy();
-      return openFailed("This PDF has no pages. Choose another file.");
+      return openFailed(file, "This PDF has no pages. Choose another file.");
     }
     openDocument = document;
-    return { type: "opened", document: { pages: [first, ...rest] } };
+    return { type: "opened", file, document: { pages: [first, ...rest] } };
   } catch {
     // A file that opens but fails later is still held in WebAssembly memory until destroyed.
     document?.destroy();
-    return openFailed("This file could not be opened as a PDF. Check that it is a PDF and try again.");
+    return openFailed(file, "This file could not be opened as a PDF. Check that it is a PDF and try again.");
   }
 }
 
-function renderFailed(message: string): void {
-  post({ type: "error", error: { code: "render-failed", message } });
+function renderFailed(file: number, message: string): void {
+  post({ type: "error", file, error: { code: "render-failed", message } });
 }
 
-function render(index: PageIndex, scale: number): void {
+function render(file: number, index: PageIndex, scale: number): void {
   const document = openDocument;
   let page: mupdf.Page | undefined;
   let pixmap: mupdf.Pixmap | undefined;
   try {
     if (document === undefined || index >= document.countPages()) {
-      renderFailed("That page is not in the open document. Open the PDF again.");
+      renderFailed(file, "That page is not in the open document. Open the PDF again.");
       return;
     }
     page = document.loadPage(index);
@@ -88,9 +88,9 @@ function render(index: PageIndex, scale: number): void {
       }
     }
     const image = new ImageData(rgba, width, height);
-    post({ type: "rendered", page: index, image }, [rgba.buffer]);
+    post({ type: "rendered", file, page: index, image }, [rgba.buffer]);
   } catch {
-    renderFailed(`Page ${index + 1} could not be drawn. Open the PDF again.`);
+    renderFailed(file, `Page ${index + 1} could not be drawn. Open the PDF again.`);
   } finally {
     pixmap?.destroy();
     page?.destroy();
@@ -100,15 +100,19 @@ function render(index: PageIndex, scale: number): void {
 addEventListener("message", (event: MessageEvent<unknown>) => {
   const request = parseEngineRequest(event.data);
   if (request === undefined) {
-    post({ type: "error", error: { code: "bad-message", message: "The engine got a message it does not know." } });
+    post({
+      type: "error",
+      file: undefined,
+      error: { code: "bad-message", message: "The engine got a message it does not know." },
+    });
     return;
   }
   switch (request.type) {
     case "open":
-      post(open(request.bytes));
+      post(open(request.file, request.bytes));
       break;
     case "render":
-      render(request.page, request.scale);
+      render(request.file, request.page, request.scale);
       break;
   }
 });

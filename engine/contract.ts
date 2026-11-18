@@ -28,9 +28,11 @@ export interface DocumentModel {
   readonly pages: readonly [PageModel, ...PageModel[]];
 }
 
+// `file` numbers each file the UI opens; the worker echoes it in every reply so
+// the UI can drop a reply about a file the user has since replaced.
 export type EngineRequest =
-  | { readonly type: "open"; readonly bytes: ArrayBuffer }
-  | { readonly type: "render"; readonly page: PageIndex; readonly scale: number };
+  | { readonly type: "open"; readonly file: number; readonly bytes: ArrayBuffer }
+  | { readonly type: "render"; readonly file: number; readonly page: PageIndex; readonly scale: number };
 
 const engineErrorCodes = ["open-failed", "render-failed", "bad-message"] as const;
 
@@ -41,9 +43,10 @@ export interface EngineError {
 
 export type EngineMessage =
   | { readonly type: "ready" }
-  | { readonly type: "opened"; readonly document: DocumentModel }
-  | { readonly type: "rendered"; readonly page: PageIndex; readonly image: ImageData }
-  | { readonly type: "error"; readonly error: EngineError };
+  | { readonly type: "opened"; readonly file: number; readonly document: DocumentModel }
+  | { readonly type: "rendered"; readonly file: number; readonly page: PageIndex; readonly image: ImageData }
+  // `file` is undefined only for a request the worker could not read.
+  | { readonly type: "error"; readonly file: number | undefined; readonly error: EngineError };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -51,13 +54,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isPositiveNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
 
+const isFileNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value > 0;
+
 export function parseEngineRequest(data: unknown): EngineRequest | undefined {
-  if (!isRecord(data)) return undefined;
+  if (!isRecord(data) || !isFileNumber(data.file)) return undefined;
+  const { file } = data;
   if (data.type === "open" && data.bytes instanceof ArrayBuffer) {
-    return { type: "open", bytes: data.bytes };
+    return { type: "open", file, bytes: data.bytes };
   }
   if (data.type === "render" && isPageIndex(data.page) && isPositiveNumber(data.scale)) {
-    return { type: "render", page: data.page, scale: data.scale };
+    return { type: "render", file, page: data.page, scale: data.scale };
   }
   return undefined;
 }
@@ -89,22 +96,27 @@ function parseEngineError(value: unknown): EngineError | undefined {
 
 export function parseEngineMessage(data: unknown): EngineMessage | undefined {
   if (!isRecord(data)) return undefined;
+  const { file } = data;
   switch (data.type) {
     case "ready":
       return { type: "ready" };
     case "opened": {
       const document = parseDocumentModel(data.document);
-      return document && { type: "opened", document };
+      return isFileNumber(file) && document ? { type: "opened", file, document } : undefined;
     }
     case "rendered":
-      return isPageIndex(data.page) && data.image instanceof ImageData
-        ? { type: "rendered", page: data.page, image: data.image }
+      return isFileNumber(file) && isPageIndex(data.page) && data.image instanceof ImageData
+        ? { type: "rendered", file, page: data.page, image: data.image }
         : undefined;
     case "error": {
       const error = parseEngineError(data.error);
-      return error && { type: "error", error };
+      return error && (file === undefined || isFileNumber(file)) ? { type: "error", file, error } : undefined;
     }
     default:
       return undefined;
   }
 }
+
+/** True for a reply about a file the user has since replaced. */
+export const isAboutOlderFile = (message: EngineMessage, latestFile: number): boolean =>
+  message.type !== "ready" && message.file !== undefined && message.file !== latestFile;
