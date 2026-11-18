@@ -63,7 +63,7 @@ What the user can do:
 
 Out of scope: detectors, working sets, storage (files stay in memory), accounts.
 
-**The outside checker.** Tests never trust the app's own check. A small command-line wrapper around the POC's `verify.py` (PyMuPDF and pdfminer.six) reads each downloaded file and searches for every marked value in the text layers, raw streams, metadata and annotations. The POC thus becomes the oracle for the new code from day one.
+**The outside checker.** Tests never trust the app's own check. A separate checker, built fresh in `tests/oracle/` as part of phase 1, reads each downloaded file with extractors the app does not use (such as PyMuPDF and pdfminer.six). It searches for every marked value in the text layers, raw streams, metadata and annotations. It is written from the requirements, not from the POC: the POC is not the oracle, and agents never read it.
 
 Phase 1 browser tests:
 
@@ -128,7 +128,7 @@ Proposed mix: 100 born-digital PDFs, 50 scanned PDFs, 20 images and 30 emails or
 
 Labelling:
 
-1. Pre-label with the POC (rules and both models).
+1. Pre-label with off-the-shelf PII detectors run as a separate script, not the POC, so people correct labels rather than start from blank.
 2. Correct each document in the phase 1 tool's labelling mode.
 3. A second person re-labels 20% blind; agreement is reported, and disagreements update the guideline.
 4. The guideline adapts TAB's published annotation guidelines to our entity types.
@@ -194,7 +194,7 @@ Integration tests come first because they find the bugs that matter here, leaks 
 | Layer | What it runs | Judged by | When |
 | --- | --- | --- | --- |
 | Browser flows | Playwright drives the real app through user steps on fixtures | Visible results and downloaded files | Every pull request |
-| Leak suite | One fixture per POC leak vector, then image and DOCX vectors | The outside checker (POC `verify.py`) | Every pull request |
+| Leak suite | One fixture per POC leak vector, then image and DOCX vectors | The outside checker in `tests/oracle/` | Every pull request |
 | Dataset scoring | The app's engine over the dataset splits | Recall and precision per type, per level, per name-origin group | Smoke subset per pull request; full set nightly |
 | Network allowlist | A full session with every request recorded | The allowlist and the telemetry schema | Every pull request from phase 8 |
 | Devices | The dataset run on the three reference devices | Speed and memory per level | Weekly from phase 6 |
@@ -225,7 +225,7 @@ Rules that keep this fast:
 | Risk | Effect | Mitigation |
 | --- | --- | --- |
 | MuPDF.js lacks the image-pixel option | Scans under OCR text stay visible | Found in phase 1, not later; fallback is re-encoding the image |
-| Labelling 200 documents takes longer than planned | Phase 6 has no real test split | Start labelling as soon as phase 1 ships; pre-label with the POC; label in batches of 50 |
+| Labelling 200 documents takes longer than planned | Phase 6 has no real test split | Start labelling as soon as phase 1 ships; pre-label with off-the-shelf detectors; label in batches of 50 |
 | Real-document licences differ by country | Some sources are unusable | Check each source before collecting; the manifest records licences |
 | Synthetic data covers only US locales | Rules look better than they are elsewhere | Our generator fills the five other countries; real documents are spread across all six |
 | Models are too heavy for many devices | Most users get Basic detection | The spike's budgets per level; the banner tells them; manual review stays strong |
@@ -235,7 +235,7 @@ Rules that keep this fast:
 
 - [ ] Team size and target dates, so phases can get durations.
 - [ ] Hosting for the static app, the Accounts API and the telemetry store. Not decided in the HLD; needed by phase 8, and a preview host by phase 0.
-- [ ] A new public repository for the AGPL app, with this POC repository kept private as the oracle and dataset tooling? Recommended.
+- [ ] Whether and when the app's repository becomes public for the AGPL. The POC stays local, outside any repository.
 - [ ] Recall targets per entity type, to set at the start of phase 4.
 - [ ] The three reference devices: which machines, and who owns them.
 - [ ] Who labels the real documents, and who does the 20% second pass.
