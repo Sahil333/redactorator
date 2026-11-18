@@ -32,8 +32,10 @@ export type EngineRequest =
   | { readonly type: "open"; readonly bytes: ArrayBuffer }
   | { readonly type: "render"; readonly page: PageIndex; readonly scale: number };
 
+const engineErrorCodes = ["open-failed", "render-failed", "bad-message"] as const;
+
 export interface EngineError {
-  readonly code: "open-failed" | "render-failed" | "bad-message";
+  readonly code: (typeof engineErrorCodes)[number];
   readonly message: string;
 }
 
@@ -80,11 +82,8 @@ function parseDocumentModel(value: unknown): DocumentModel | undefined {
 
 function parseEngineError(value: unknown): EngineError | undefined {
   if (!isRecord(value) || typeof value.message !== "string") return undefined;
-  const { code, message } = value;
-  if (code === "open-failed" || code === "render-failed" || code === "bad-message") {
-    return { code, message };
-  }
-  return undefined;
+  const code = engineErrorCodes.find((known) => known === value.code);
+  return code && { code, message: value.message };
 }
 
 export function parseEngineMessage(data: unknown): EngineMessage | undefined {

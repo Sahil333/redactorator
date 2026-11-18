@@ -15,8 +15,6 @@ export function App() {
   useEffect(() => {
     const worker = new Worker(new URL("../engine/worker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
-    const send = (request: EngineRequest, transfer: Transferable[] = []) =>
-      worker.postMessage(request, transfer);
 
     worker.addEventListener("message", (event: MessageEvent<unknown>) => {
       const message = parseEngineMessage(event.data);
@@ -32,11 +30,12 @@ export function App() {
           setDocument(message.document);
           const firstPage = message.document.pages[0];
           if (firstPage !== undefined) {
-            send({
+            const request: EngineRequest = {
               type: "render",
               page: firstPage.index,
               scale: CSS_PIXELS_PER_POINT * window.devicePixelRatio,
-            });
+            };
+            worker.postMessage(request);
           }
           break;
         }

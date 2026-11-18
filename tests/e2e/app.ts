@@ -11,7 +11,6 @@ export async function openPdf(page: Page, path: string): Promise<void> {
   await page.getByLabel("Open a PDF").setInputFiles(path);
 }
 
-/** Counts pixels on the page canvas that are not white, i.e. that something was drawn on. */
 export async function inkedPixels(page: Page): Promise<number> {
   return page.getByRole("img", { name: "Page 1" }).evaluate((element) => {
     if (!(element instanceof HTMLCanvasElement)) throw new Error("Page 1 is not a canvas");

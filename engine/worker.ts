@@ -3,7 +3,6 @@ import {
   isPageIndex,
   isPoints,
   parseEngineRequest,
-  type DocumentModel,
   type EngineMessage,
   type PageIndex,
   type PageModel,
@@ -40,8 +39,7 @@ function open(bytes: ArrayBuffer): EngineMessage {
       pages.push(pageModel(document, index));
     }
     openDocument = document;
-    const model: DocumentModel = { pages };
-    return { type: "opened", document: model };
+    return { type: "opened", document: { pages } };
   } catch {
     return {
       type: "error",
