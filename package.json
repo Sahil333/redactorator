@@ -1,0 +1,9 @@
+{
+  "name": "redactorator",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "fallow": "3.43.2"
+  },
+  "packageManager": "pnpm@9.1.2"
+}

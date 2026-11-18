@@ -65,7 +65,7 @@ What the user can do:
 
 Out of scope: detectors, working sets, storage (files stay in memory), accounts.
 
-**The outside checker.** Tests never trust the app's own check. A small stand-alone checker in `tests/oracle/`, built on pdfminer.six and a raw scan of every PDF object (neither shares code with MuPDF.js), reads each downloaded file and searches for every marked value in the text layers, raw streams, metadata and annotations. Nothing from the POC is used: no code, fixtures, leak lists or numbers.
+**The outside checker.** Tests never trust the app's own check. A stand-alone checker, built fresh in `tests/oracle/` as part of phase 1 and written from the requirements, reads each downloaded file with pdfminer.six and a raw scan of every PDF object (neither shares code with MuPDF.js) and searches for every marked value in the text layers, raw streams, metadata and annotations. Nothing from the POC is used: no code, fixtures, leak lists or numbers, and agents never read it.
 
 Phase 1 browser tests:
 
@@ -133,9 +133,10 @@ Proposed mix: 100 born-digital PDFs, 50 scanned PDFs, 20 images and 30 emails or
 
 Labelling:
 
-1. Label each document by hand in the phase 1 tool's labelling mode. From phase 4, pre-label with the app's own rules first.
-2. A second person re-labels 20% blind; agreement is reported, and disagreements update the guideline.
-3. The guideline adapts TAB's published annotation guidelines to our entity types.
+1. Pre-label with off-the-shelf PII detectors run as a separate script, not the POC, so people correct labels rather than start from blank. From phase 4, the app's own rules can pre-label as well.
+2. Correct each document in the phase 1 tool's labelling mode.
+3. A second person re-labels 20% blind; agreement is reported, and disagreements update the guideline.
+4. The guideline adapts TAB's published annotation guidelines to our entity types.
 
 These documents hold real personal data, even if public. They live in private storage, not in the AGPL repository. A manifest records each one's URL and licence, and they are used for testing only.
 
@@ -252,7 +253,7 @@ P0 requirements and HLD controls the phases above do not name, and the phase tha
 | Risk | Effect | Mitigation |
 | --- | --- | --- |
 | MuPDF.js lacks the image-pixel option | Pixels under boxes on embedded images and scans stay in the file | Found in phase 1; phase 1b re-encodes the image |
-| Labelling 200 documents takes longer than planned | Phase 6 has no real test split | Start labelling as soon as phase 1 ships; from phase 4, pre-label with the app's own rules; label in batches of 50 |
+| Labelling 200 documents takes longer than planned | Phase 6 has no real test split | Start labelling as soon as phase 1 ships; pre-label with off-the-shelf detectors; label in batches of 50 |
 | Real-document licences differ by country | Some sources are unusable | Check each source before collecting; the manifest records licences |
 | Synthetic data names the US as the only launch-country locale | Rules look better than they are elsewhere | Our generator fills the five other countries; real documents are spread across all six |
 | Models are too heavy for many devices | Most users get Basic detection | The spike's budgets per level; the banner tells them; manual marking and the working-set matcher work at every level |
@@ -273,4 +274,4 @@ P0 requirements and HLD controls the phases above do not name, and the phase tha
 
 - [ ] Team size and target dates.
 - [ ] Who labels the real documents, and who does the 20% second pass.
-- [ ] One public AGPL app repository; real documents stay in private storage.
+- [ ] Whether and when the app's repository becomes public for the AGPL; real documents stay in private storage. The POC stays local, outside any repository.
