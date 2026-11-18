@@ -71,7 +71,7 @@ Redact and Pseudonymise can be mixed in one document. A typical policy redacts I
 
 ## User journey
 
-*Diagram (user journey · 5 steps, then the AI round trip): see the [live doc](https://claude.ai/artifact/5BCW7q4dr5jygrAu2ToSiK).*
+![user journey · 5 steps, then the AI round trip](images/prd-user-journey.png)
 
 Every decision made in Review is saved to the working set, so the next document added starts with it already applied. Files that are only redacted stop at Export; the lower row applies to pseudonymised output.
 
@@ -239,7 +239,7 @@ Privacy and irreversibility are hard gates: a release that fails either does not
 
 ## Release phasing
 
-*Diagram (release roadmap · 3 phases, 2 gates): see the [live doc](https://claude.ai/artifact/5BCW7q4dr5jygrAu2ToSiK).*
+![release roadmap · 3 phases, 2 gates](images/prd-release-roadmap.png)
 
 The MVP is deliberately the shortest path to one complete loop: clean, send, restore. It rebuilds in the browser the PDF redaction the POC proved, adds OCR so scanned pages and images are covered, and adds plain text, the format AI replies arrive in. Sign-in and the free plan ship with the MVP; billing and the paid plan follow in v1. No dates are set yet.
 

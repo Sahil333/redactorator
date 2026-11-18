@@ -20,7 +20,7 @@ Seven rules decide most questions in this design.
 
 ## Architecture at a glance
 
-*Diagram (architecture · UI, engine pipeline, local storage, and the two things outside): see the [live doc](https://claude.ai/artifact/BtxzLu9BUqFq3zkPNYxag7).*
+![architecture · UI, engine pipeline, local storage, and the two things outside](images/hld-architecture.png)
 
 Everything inside the box runs in the user's browser tab. Two things sit outside it: our servers, which send the app, models and packs and handle accounts, and the cloud AI, which only sees pseudonymised text the user copies out.
 

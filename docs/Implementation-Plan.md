@@ -24,7 +24,7 @@ No durations are given: team size is not set yet. Each phase lists what done mea
 
 ## Phase overview
 
-*Diagram (Implementation tracks · 9 build phases, 3 dataset steps, 3 spikes): see the [live doc](https://claude.ai/artifact/UjRsDYz5fMUCVJfThqguMG).*
+![Implementation tracks · 9 build phases, 3 dataset steps, 3 spikes](images/plan-tracks.png)
 
 The build track runs in order. The dataset and spike tracks start in week one, beside phase 0. The synthetic documents feed both spikes, and the phase 1 tool is also the labelling tool for the real documents.
 
