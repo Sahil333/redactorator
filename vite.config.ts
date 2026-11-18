@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -18,7 +19,7 @@ const contentSecurityPolicy = [
 
 export default defineConfig({
   root: "app",
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   build: { outDir: "../dist", emptyOutDir: true, target: "esnext" },
   worker: { format: "es" },
   optimizeDeps: { exclude: ["mupdf"] },

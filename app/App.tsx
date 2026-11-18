@@ -77,11 +77,17 @@ export function App() {
   const firstPage = document?.pages[0];
 
   return (
-    <main>
-      <h1>Redactorator</h1>
+    <main className="flex flex-col items-start gap-3">
+      <h1 className="text-3xl font-bold">Redactorator</h1>
       <label>
         Open a PDF{" "}
-        <input type="file" accept="application/pdf" disabled={!engineReady} onChange={openFile} />
+        <input
+          type="file"
+          accept="application/pdf"
+          disabled={!engineReady}
+          onChange={openFile}
+          className="text-sm file:mr-2 file:rounded file:border file:border-zinc-400 file:bg-white file:px-2 file:py-1 disabled:opacity-50"
+        />
       </label>
       <p role="status">
         {!engineReady
@@ -90,12 +96,17 @@ export function App() {
             ? "Choose a PDF to open."
             : `Page 1 of ${document.pages.length}`}
       </p>
-      {error !== undefined && <p role="alert">{error}</p>}
+      {error !== undefined && (
+        <p role="alert" className="text-red-700">
+          {error}
+        </p>
+      )}
       {firstPage !== undefined && (
         <canvas
           ref={canvasRef}
           role="img"
           aria-label="Page 1"
+          className="max-w-none bg-white shadow"
           style={{
             width: `${firstPage.width * CSS_PIXELS_PER_POINT}px`,
             height: `${firstPage.height * CSS_PIXELS_PER_POINT}px`,
