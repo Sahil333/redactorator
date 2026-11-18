@@ -2,7 +2,7 @@
 
 Nov 15, 2026 · @Sahil Chaddha
 
-Redactorator is a web app, served from our site and working entirely in the browser, that removes or pseudonymises personal data in PDFs, Word files, images and plain text before they leave the user's browser, and puts the real values back into whatever comes home. Nothing a user loads is ever sent to our servers. This PRD is a first draft for partner review; the companion HLD covers how it is built.
+Redactorator is a web app, served from our site and working entirely in the browser, that removes or pseudonymises personal data in PDFs, Word files, images and plain text before they leave the user's browser, and puts the real values back into whatever comes home. Nothing a user loads is ever sent to our servers. This PRD is a first draft for partner review; the companion [HLD](HLD.md) covers how it is built, and the [Implementation Plan](Implementation-Plan.md) the order of work.
 
 ## Problem and opportunity
 
@@ -15,7 +15,7 @@ The tools on offer each fail one test:
 - **One-way anonymisers** strip the data but cannot restore it in the AI's answer, so the answer is hard to use.
 - **Single-file tools** forget their decisions, so the same name is hidden in one document and visible in the next.
 
-The opportunity is one tool that does all four properly: removal that can be proven, pseudonyms that can be reversed locally, consistency across a set of related documents, and no upload at any step. The POC already proves the hardest part, provable PDF redaction, on a 210-page IRS form.
+The opportunity is one tool that does all four properly: removal that can be proven, pseudonyms that can be reversed locally, consistency across a set of related documents, and no upload at any step.
 
 ## Users and use cases
 
@@ -89,8 +89,9 @@ Requirements are grouped by area and tagged P0 (MVP), P1 (v1) or P2 (later). IDs
 | DOC-4 | Anything that cannot be fully processed (encrypted file, unknown format, a page OCR cannot read) is refused or flagged, never passed through silently | P0 |
 | DOC-5 | Import several files at once by drag and drop or folder pick | P0 |
 | DOC-6 | Import DOCX, covering body, tables, headers, footers, footnotes, text boxes, comments and tracked changes | P1 |
-| DOC-7 | Import scanned PDFs, PDFs that mix text with scanned images, and image files (PNG, JPEG, TIFF) through OCR that runs in the browser | P0 |
+| DOC-7 | Import scanned PDFs, PDFs that mix text with scanned images, and image files (PNG, JPEG, WebP; TIFF if the PDF engine can decode it) through OCR that runs in the browser | P0 |
 | DOC-8 | Import XLSX, PPTX and email files | P2 |
+| DOC-9 | Import more image formats: HEIC, GIF, BMP, and TIFF if it is not in the MVP | P1 |
 
 ### Detection
 
@@ -150,11 +151,12 @@ Requirements are grouped by area and tagged P0 (MVP), P1 (v1) or P2 (later). IDs
 | PSE-6 | Restore reports surrogates it did not recognise and never guesses | P1 |
 | PSE-7 | The vault stays in the browser, encrypted. Deleting it is offered as a deliberate, irreversible action | P0 |
 | PSE-8 | Different spellings of one entity link to one surrogate; the user can merge and split entities | P1 |
-| PSE-9 | Realistic surrogates generator (fake names, addresses, numbers of the right shape) as an option per type | P0 |
-| PSE-10 | Restore into files: `.txt`, `.md` and DOCX returned by an AI tool | P0 |
+| PSE-9 | Realistic surrogates generator (fake names, addresses, numbers of the right shape) as an option per type | P1 |
+| PSE-10 | Restore into files: `.txt` and `.md` returned by an AI tool | P0 |
 | PSE-11 | Export and import a vault so a colleague can restore | P1 |
 | PSE-12 | An optional one-line prompt hint that asks the model to keep placeholders unchanged | P1 |
 | PSE-13 | Date shifting and other format-preserving surrogates | P2 |
+| PSE-14 | Restore into DOCX files returned by an AI tool | P1 |
 
 ### Working sets
 
@@ -191,7 +193,7 @@ Requirements are grouped by area and tagged P0 (MVP), P1 (v1) or P2 (later). IDs
 | ACC-8 | A lapsed or cancelled plan never locks data: open, export, back up, purge and restore existing pseudonyms still work, also at a balance of zero | P1 |
 | ACC-9 | Team plans with seats | P2 |
 | ACC-10 | A plan is a monthly number of document redactions plus a separate monthly allowance of pasted-text characters; every feature is on every plan. A document counts once, at its first cleaned output; re-exports of it are free, and restoring an AI reply never counts. Free plan: 10 documents and 20,000 characters a month | P0 |
-| ACC-11 | Usage telemetry with a published schema of counts and events and no document content; users can switch it off in settings | P0 |
+| ACC-11 | Usage telemetry with a published schema of counts and events and no document content; on by default, and users can switch it off or on in settings | P0 |
 | ACC-12 | A visitor can clean one document before signing up | P0 |
 
 ## Configuration
@@ -208,7 +210,7 @@ Settings resolve in one order: built-in default, then global, then working set, 
 | Review strictness | Whether needs-review findings block export or count as accepted | Yes | Override | P0 |
 | Redaction appearance | A configurable coloured box or type label | Yes | Override | P0 |
 | Hidden content | Remove all comments and annotations, or only those with findings; keep or drop accessibility tags | Yes | Override | P0 |
-| Detection depth | Fast (patterns only) or thorough (patterns plus ML models) | Yes | Override | P0 |
+| Detection level | Full, Standard or Basic (DET-12). The app picks one from the device; the user can choose a higher one | Yes | Override | P0 |
 | Vault lock | Passphrase and auto-lock timeout | Yes | No | P0 |
 | Surrogate style | Placeholder or realistic, per type | Yes | Override | P1 |
 | Region and language | Country packs, phone regions, OCR languages | Yes | Override | P1 |
@@ -225,14 +227,14 @@ Privacy and irreversibility are hard gates: a release that fails either does not
 
 | Area | Requirement |
 | --- | --- |
-| Privacy | No document bytes, extracted text, findings or vault entries leave the browser. Once loaded, the app works offline. The only network use is loading the app, models and rule packs, plus account and billing calls that carry no document data, one of which spends a credit per new document, and usage telemetry that carries counts and events, never document content. |
-| Telemetry | Off by default. Ask for the user consent with details that only operational data is exported and no content |
+| Privacy | No document bytes, extracted text, findings or vault entries leave the browser. Once loaded, the app works offline. The only network use is loading the app, rule packs, models and libraries (models and libraries may come from their public hosts, pinned and hash-checked), plus account and billing calls that carry no document data, one of which spends a credit per new document, and usage telemetry that carries counts and events, never document content. |
+| Telemetry | On by default; users can switch it off or on in settings. It carries only operational data under a published schema, never document content. |
 | Irreversibility | A redacted value cannot be recovered from the output by text extraction, copy and paste, metadata, revision history or raw file inspection. Verified per file. |
 | Honest limits | The certificate proves detected values are gone. It does not prove nothing was missed, and the UI says so. |
 | Data at rest | Vault and working-set data are encrypted on disk. Logs and reports hold no raw values. |
 | Safety | Originals are never modified. Decisions autosave. A crash loses no work. |
-| Performance | First pattern-based findings within seconds of import. Full ML pass at 2 seconds per page or better on a recent laptop. The Python POC measured about 1.7 on CPU; the in-browser figure is still to be measured. The UI stays responsive while documents process. |
-| Footprint | The POC's two models are about 4 GB, too large for a browser as they are. Browser-sized models are an open HLD decision (D5). Fast mode must work without any model. |
+| Performance | First pattern-based findings within seconds of import. Full ML pass at 2 seconds per page or better on a recent laptop; the in-browser figure is still to be measured. The UI stays responsive while documents process. |
+| Footprint | Models must be small enough to download and run in a browser. Which models fill each detection level is an open HLD decision (D10). The Basic level must work without any model. |
 | Platforms | Current desktop Chrome, Edge, Firefox and Safari. Nothing to install. |
 | Accessibility | UI meets WCAG 2.2 AA and is fully keyboard-operable. PDF accessibility tags can be kept on request. |
 | Licensing | Every bundled component permits the way we distribute. The PDF engine's AGPL licence is met by publishing the browser app's source; the server side stays closed. |
@@ -241,18 +243,18 @@ Privacy and irreversibility are hard gates: a release that fails either does not
 
 ![release roadmap · 3 phases, 2 gates](images/prd-release-roadmap.png)
 
-The MVP is deliberately the shortest path to one complete loop: clean, send, restore. It rebuilds in the browser the PDF redaction the POC proved, adds OCR so scanned pages and images are covered, and adds plain text, the format AI replies arrive in. Sign-in and the free plan ship with the MVP; billing and the paid plan follow in v1. No dates are set yet.
+The MVP is deliberately the shortest path to one complete loop: clean, send, restore. It builds provable PDF redaction in the browser, adds OCR so scanned pages and images are covered, and adds plain text, the format AI replies arrive in. Sign-in and the free plan ship with the MVP; billing and the paid plan follow in v1. No dates are set yet.
 
 ## Success metrics
 
-One metric is a gate and the rest are targets. All targets are proposals; none has a baseline outside the POC yet.
+One metric is a gate and the rest are targets. All targets are proposals; none has a baseline yet. Targets are reported, not gates.
 
 | Metric | Proposed target | How it is measured |
 | --- | --- | --- |
-| Recoverable redacted values in exported files | Zero (gate) | The leak test suite on every build, per format |
+| Recoverable redacted values in exported files | Zero (gate) | The leak test suite, per format, passing before any build reaches users outside the team |
 | Detection recall on structured identifiers | 99% or better | A labelled benchmark set we build per format |
-| Detection recall on names and addresses, before review | To set after a real-document benchmark | Same benchmark. The POC's 100% is on synthetic fixtures only |
-| False positives a reviewer must reject | Under 5% of findings | Same benchmark. The POC reached about 3% on the IRS form after tuning |
+| Detection recall on names and addresses, before review | To set after a real-document benchmark | Same benchmark |
+| False positives a reviewer must reject | Under 5% of findings | Same benchmark |
 | Surrogates correctly restored in AI replies | 99% or better for placeholders | Round-trip tests against real model outputs |
 | Time from first visit to first cleaned document | Under 5 minutes | Pilot sessions |
 | Review time per page | To set after pilots | Pilot sessions |
@@ -265,11 +267,11 @@ The largest product risk is over-trust: a user reads "redacted" as "nothing was 
 
 | Risk | Why it matters | Mitigation |
 | --- | --- | --- |
-| Missed personal data | ML recall on real documents is well below the synthetic results; the POC notes span F1 near 0.48 for one model on a public benchmark | Review band on by default, always-hide lists, honest wording on what the certificate proves |
+| Missed personal data | ML recall on real documents is usually well below results on synthetic data | Review band on by default, always-hide lists, honest wording on what the certificate proves |
 | Re-identification from context | A pseudonymised text can still identify someone by role, dates or events | Warn in the product; offer redaction of quasi-identifiers such as dates and job titles |
 | AI models alter surrogates | A changed token cannot be restored | Tokens designed to survive; tolerant matching; a report of anything unrecognised |
 | Pseudonyms in PDFs and images | A stand-in rarely fits the space and font of the original | Placeholders fitted into the redaction box; set the expectation that layout is approximate |
-| First-load weight | Models and WebAssembly modules make the first visit a large download, and weak devices run them slowly | Fast mode without models; staged, cached downloads; browser-sized models |
+| First-load weight | Models and WebAssembly modules make the first visit a large download, and weak devices run them slowly | The Basic detection level works without models; staged, cached downloads; browser-sized models |
 | The working set is itself sensitive | It remembers values in order to stay consistent across documents | Encryption at rest, purge, optional retention limit |
 | PDF engine licence | MuPDF is AGPL or commercial | Decide before the app is public (HLD D2) |
 | Trust in a hosted app | The browser runs whatever code our site serves, so "nothing leaves" rests on our release process | No upload route, a claim users can test offline, public source, reproducible builds with signed release hashes shown in the app, and a verifier extension in v1 (HLD D9) |
@@ -286,28 +288,14 @@ The largest product risk is over-trust: a user reads "redacted" as "nothing was 
 - **Redacted values:** the working set stores them, encrypted, so later documents match and spellings can be linked.
 - **Originals:** a working set keeps its own encrypted copy of each original, included in set export and backup.
 - **Teams:** v1 is single-user. Colleagues share a working set through its encrypted export (SET-8); shared vaults and team plans stay P2.
-- **Launch scope:** English, with identifier packs for the US, UK, Canada, Australia, New Zealand and Ireland. India is not at launch; the POC's India pack waits.
+- **Launch scope:** English, with identifier packs for the US, UK, Canada, Australia, New Zealand and Ireland. India is not at launch; it follows in v1 (DET-11).
 - **Free plan:** 10 documents and 20,000 characters of pasted text a month, each resetting monthly; restoring never counts. One document before sign-up.
 - **Sign-in:** Auth0, with no passwords. Enterprise single sign-on comes with team plans.
 - **Licence:** the browser app is open source under the AGPL; accounts, billing and telemetry stay closed. To be confirmed with counsel.
 - **Trust in served code:** public source, reproducible builds and signed release hashes at launch; a verifier browser extension in v1.
 - **Bias testing:** a synthetic test set with names of many origins found in the launch countries and each country's address formats. Recall per group is measured and published with each release; it does not gate a release.
 - **Models:** chosen by device capability (DET-12). A weaker device gets a lower detection level, and the app always says so.
-
-## What the POC already proves
-
-The POC is a Python command-line tool that covers the hardest requirement, provable PDF redaction, and none of the user-facing ones. It is a test rig and a reference: the product is rebuilt for the browser and measured against it.
-
-| Requirement | POC status |
-| --- | --- |
-| True PDF redaction (RED-1, RED-2) | Done. 27 leak vectors handled, each with a test |
-| Verification and certificate (RED-3, RED-4) | Done. Output is re-read by two independent extractors and re-scanned |
-| Pattern and checksum detection (DET-1, DET-2) | Done for 10 identifier types |
-| Local ML detection (DET-3) | Done with two pinned open models, fully offline |
-| Confidence bands (DET-5) | Done |
-| Repeat handling inside one document | Done; the basis for SET-2 |
-| Review | Partial: a highlighted preview PDF, no interactive UI |
-| Configuration | Partial: one YAML file |
-| DOCX, images, OCR, pseudonymisation, vault, restore, working sets, web UI | Not started |
-
-Results so far: 129 of 129 planted values removed across 7 synthetic PDFs, and 0 of 223 specific values recoverable from a 210-page IRS form processed in about 6 minutes on a laptop CPU.
+- **Model and library hosting:** models and libraries may load from their public hosts (for example the Hugging Face Hub or a CDN), each pinned to an exact revision and hash-checked. The promise is that no document is uploaded without the user's consent; downloads carry no document content.
+- **Telemetry:** on by default; users can switch it off or on in settings (ACC-11).
+- **Priorities changed on 18 Nov 2026:** realistic surrogates (PSE-9) and restore into DOCX (PSE-14) are v1. MVP images are PNG, JPEG and WebP; TIFF joins if the PDF engine decodes it; HEIC, GIF and BMP are v1 (DOC-9).
+- **The earlier POC:** nothing from it is used, to avoid bias: not its code, tests, fixtures or measured figures. The product is specified and tested on its own terms.

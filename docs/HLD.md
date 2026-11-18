@@ -2,7 +2,7 @@
 
 Nov 15, 2026 · @Sahil Chaddha
 
-Redactorator is a hosted single-page web app that does all document work in the browser. Our servers deliver the app, models and rule packs and run sign-in and billing; they never receive a document. Each stage of the work (read, detect, decide, transform, write, verify) sits behind a small contract, so a format, a detector or the implementation language can change without touching the rest. The Python POC is a test rig and a reference, not the product's code base. This HLD is a draft for partner review and pairs with the PRD.
+Redactorator is a hosted single-page web app that does all document work in the browser. Our servers deliver the app and rule packs and run sign-in, billing and usage telemetry; models and libraries may come from their public hosts. No server ever receives a document. Each stage of the work (read, detect, decide, transform, write, verify) sits behind a small contract, so a format, a detector or the implementation language can change without touching the rest. Nothing from the earlier Python POC is used: not its code, tests, fixtures or measured figures. This HLD is a draft for partner review. It pairs with the [PRD](PRD.md), and the order of work is in the [Implementation Plan](Implementation-Plan.md).
 
 **Confirmed on 15 November 2026.** "Hosted" means hosted delivery with processing in the browser. Documents are never processed on our servers, which is what lets the requirement that no private data reaches our cloud hold.
 
@@ -20,29 +20,31 @@ Seven rules decide most questions in this design.
 
 ## Architecture at a glance
 
-![architecture · UI, engine pipeline, local storage, and the two things outside](images/hld-architecture.png)
+![architecture · UI, engine pipeline, local storage, and the three things outside](images/hld-architecture.png)
 
-Everything inside the box runs in the user's browser tab. Two things sit outside it: our servers, which send the app, models and packs and handle accounts, and the cloud AI, which only sees pseudonymised text the user copies out.
+Everything inside the box runs in the user's browser tab. Things outside it: our servers, which send the app and rule packs, handle accounts and receive usage telemetry; the public hosts that serve pinned models and libraries; and the cloud AI, which only sees pseudonymised text the user copies out.
 
 ## Component contracts
 
-Six stage contracts and one helper make up the engine. Each has one job and a typed input and output. The POC column names the Python module that shows the behaviour; it is a reference to test against, not code to ship.
+Six stage contracts and one helper make up the engine. Each has one job and a typed input and output.
 
-| Stage | Takes | Returns | First implementations | POC reference |
-| --- | --- | --- | --- | --- |
-| Reader (format adapter) | File bytes | `DocumentModel`: ordered text blocks with every character anchored to a native location, plus side channels (metadata, comments, fields) | PDF, text, image; then DOCX | `extract.py`, `mapping.py` |
-| Detector | A text block and its context | `Finding[]`: span, type, score, detector id | Regex packs, GLiNER2-PII, Privacy Filter, term lists, working-set matcher | `detectors/` |
-| Resolver | Findings, the entity registry, the policy | `Decision[]`: entity, action, confidence band | Merge overlaps, link to entities, apply thresholds and lists, propagate repeats | `merge.py` |
-| Transformer | Decisions | `Edit[]`: an anchor range plus removal or replacement text | Redactor, Pseudonymiser, Restorer | `pipeline.label_for` |
-| Writer (format adapter) | Original bytes and edits | New bytes in the same format, side channels scrubbed | PDF, text, image; then DOCX | `redact.py`, `scrub.py` |
-| Verifier (format adapter) | Output bytes and the removed values, held in memory | A certificate, or a failure that blocks release | PDF, text, image; then DOCX | `verify.py` |
-| Surrogate generator | Entity type and id | A surrogate string | Counter placeholders; then realistic fakes | none yet |
+| Stage | Takes | Returns | First implementations |
+| --- | --- | --- | --- |
+| Reader (format adapter) | File bytes | `DocumentModel`: ordered text blocks with every character anchored to a native location, plus side channels (metadata, comments, fields) | PDF, text, image; then DOCX |
+| Detector | A text block and its context | `Finding[]`: span, type, score, detector id | Regex packs, GLiNER2-PII, Privacy Filter, term lists, working-set matcher |
+| Resolver | Findings, the entity registry, the policy | `Decision[]`: entity, action, confidence band | Merge overlaps, link to entities, apply thresholds and lists, propagate repeats |
+| Transformer | Decisions | `Edit[]`: an anchor range plus removal or replacement text | Redactor, Pseudonymiser, Restorer |
+| Writer (format adapter) | Original bytes and edits | New bytes in the same format, side channels scrubbed | PDF, text, image; then DOCX |
+| Verifier (format adapter) | Output bytes and the removed values, held in memory | A certificate, or a failure that blocks release | PDF, text, image; then DOCX |
+| Surrogate generator | Entity type and id | A surrogate string | Counter placeholders; then realistic fakes |
+
+Boxes use one convention everywhere: points in MuPDF's page space, origin top-left. An `Edit` is either a text range or a free box with no text behind it.
 
 A format adapter is three functions and a detector is one. The notation stays neutral so the contracts read the same in any language; the implementation is TypeScript (D1):
 
 ```text
 FormatAdapter
-  formats                        names it handles: "pdf", or "png", "jpg", "tiff"
+  formats                        names it handles: "pdf", or "png", "jpg", "webp"
   read(bytes)                    -> DocumentModel
   write(bytes, edits, options)   -> bytes
   verify(bytes, removedValues)   -> checks
@@ -67,24 +69,24 @@ This is what a pivot reuses:
 
 ## Format adapters
 
-Each format gets one adapter that knows how to read it, how to truly remove content from it, and where it hides copies of data. The POC proved the PDF approach in Python; all four adapters are still to be built for the browser.
+Each format gets one adapter that knows how to read it, how to remove content from it, and where it hides copies of data. All four adapters are still to be built for the browser.
 
 | Format | Read | Redact (remove for good) | Pseudonymise | Hidden carriers to scrub | Browser building block (candidate) |
 | --- | --- | --- | --- | --- | --- |
-| PDF, text-based | Glyph-level text with a box per character, all layers on, no clipping | Delete glyphs from the content stream, blank image pixels under the box, full rewrite of the file. Removal of content shall not change the formatting of the document, eg. sentence line number changes | Remove as for redaction, then draw the surrogate fitted into the box with a fallback font | The 27 vectors in the POC's `LEAK_VECTORS.md`: metadata, XMP, annotations, form values, bookmarks, attachments, scripts, thumbnails, structure tree, ActualText, old revisions | MuPDF.js (MuPDF compiled to WebAssembly); PDF.js as an independent cross-check |
-| Image and scanned PDF | OCR to words with boxes | Overwrite the pixels, re-encode from the pixel buffer, drop any OCR text layer under the box | Paint the box, draw the surrogate on it | EXIF, XMP, embedded thumbnails, trailing data after the image end marker | Tesseract.js for OCR; canvas for pixels |
+| PDF, text-based | Glyph-level text with a box per character, all layers on, no clipping | Delete glyphs from the content stream, blank image pixels under the box, full rewrite of the file. Glyphs outside each box stay where they were | Remove as for redaction, then draw the surrogate fitted into the box with a fallback font | Our PDF leak-vector list (Implementation Plan, phase 3): metadata, XMP, annotations, form values, bookmarks, attachments, scripts, thumbnails, structure tree, ActualText, old revisions | MuPDF.js (MuPDF compiled to WebAssembly); PDF.js as an independent cross-check |
+| Image (PNG, JPEG, WebP; TIFF if MuPDF.js decodes it) and scanned PDF | OCR to words with boxes | Overwrite the pixels, re-encode from the pixel buffer, drop any OCR text layer under the box | Paint the box, draw the surrogate on it | EXIF, XMP, embedded thumbnails, trailing data after the image end marker | Tesseract.js for OCR; canvas for pixels |
 | DOCX | Walk the OOXML parts and map runs to character offsets: body, tables, headers, footers, footnotes, text boxes, comments | Rewrite run text in the XML; resolve tracked changes; drop comments and document properties | Replace run text, keeping the run's formatting | Core, app and custom properties; comments; tracked insertions and deletions; hidden text; field codes; hyperlink targets; alt text; custom XML; embedded objects; thumbnails; revision ids | A zip library and the browser's XML parser |
 | Text and Markdown | Read as is | Replace the span | Replace the span | None | None needed |
 
 Three notes on the unbuilt adapters:
 
-- **DOCX has the largest unproven leak surface.** Before writing its adapter we write its leak-vector list and fixtures, the same way the POC did for PDF. Images embedded in a DOCX are handed to the image adapter.
+- **DOCX has the largest unproven leak surface.** Before writing its adapter we write its leak-vector list and fixtures, as phase 3 of the Implementation Plan does for PDF. Images embedded in a DOCX are handed to the image adapter.
 - **OCR quality bounds image safety.** A word the OCR misses cannot be detected. Image pages default to the review band, low-confidence OCR regions are flagged, and box-drawing by hand is always available.
-- **Pseudonyms in PDFs and images are approximate.** The surrogate is fitted into the space of the original. Replacement shall not change the format of the documents.
+- **Pseudonyms in PDFs and images are approximate.** The surrogate is fitted into the space of the original; text outside that box does not move.
 
 ### How OCR output maps back to the image
 
-OCR engines return every word with a box in the pixel coordinates of the image they were given. Mapping back is bookkeeping: record each transform applied before OCR, then invert it. A local spike with Tesseract 5.5.1 and the POC's PyMuPDF 1.27.2.3 ran the path end to end.
+OCR engines return every word with a box in the pixel coordinates of the image they were given. Mapping back is bookkeeping: record each transform applied before OCR, then invert it. A local spike with Tesseract 5.5.1 and PyMuPDF 1.27.2.3 ran the path end to end.
 
 1. **Render or load.** A scanned PDF page is rendered at 300 dpi through a known matrix. An image file is loaded with its EXIF orientation applied. Any deskew or rescale before OCR is recorded as one more matrix.
 2. **OCR to words.** Tesseract's TSV output has one row per word: `left`, `top`, `width`, `height` in pixels from the top-left corner, a 0-100 confidence, and the text ([TSV and hOCR output](https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html)).
@@ -93,7 +95,7 @@ OCR engines return every word with a box in the pixel coordinates of the image t
 5. **Back to the source.** Boxes pass through the inverse matrix: pixels to page points for a PDF, deskewed pixels to original pixels for an image. A box that comes back rotated is widened to its enclosing rectangle.
 6. **Remove the pixels.** For a PDF, `apply_redactions` with `PDF_REDACT_IMAGE_PIXELS` blanks the pixels inside the embedded scan ([PyMuPDF Page](https://pymupdf.readthedocs.io/en/latest/page.html)). For an image file, the box is painted into the pixel buffer and the file re-encoded.
 
-The spike ran on the POC's Python stack.  Do not use or read anything from that POC code. In the browser the build according to HLD steps use the same engines compiled to WebAssembly: [Tesseract.js](https://github.com/naptha/tesseract.js) for word boxes and confidences, and [MuPDF.js](https://github.com/ArtifexSoftware/mupdf.js) for `applyRedactions`. Two things to check when the spike is repeated in a browser: Tesseract.js switches every output except plain text off by default since version 6, and MuPDF.js must expose the image-pixel option.
+The spike ran in Python. The browser build uses the same engines compiled to WebAssembly: [Tesseract.js](https://github.com/naptha/tesseract.js) for word boxes and confidences, and [MuPDF.js](https://github.com/ArtifexSoftware/mupdf.js) for `applyRedactions`. Two things to check when the spike is repeated in a browser: Tesseract.js switches every output except plain text off by default since version 6, and MuPDF.js must expose the image-pixel option.
 
 | Spike check | Result | Design consequence |
 | --- | --- | --- |
@@ -115,15 +117,15 @@ If D6 swaps the engine, only step 2 changes, because the adapter normalises ever
 
 Two limits follow. An engine that returns text without per-word boxes cannot locate anything, however accurate its text. PaddleOCR's docs do not say which image its boxes refer to when its own orientation or unwarping steps run, so that needs a test before use.
 
-Scans that already carry an invisible OCR layer work today (leak vectors 3 and 10): the layer's text is detected and the pixels under it are blanked. That layer came from unknown software, so image pages are also OCRed by us and the findings merged. Tesseract reads best at 300 dpi or more ([Tesseract: improving quality](https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html)), which sets the render resolution in step 1.
+For scans that already carry an invisible OCR layer, the layer's text is detected and the pixels under it are blanked. That layer came from unknown software, so image pages are also OCRed by us and the findings merged. Tesseract reads best at 300 dpi or more ([Tesseract: improving quality](https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html)), which sets the render resolution in step 1.
 
 ## Detection stack
 
-Detection is a union of four detector families, merged by the resolver. Patterns give precision on structured identifiers; ML models find the names and addresses patterns cannot. In the POC, patterns alone found 0 of 21 names.
+Detection is a union of four detector families, merged by the resolver. Patterns give precision on structured identifiers; ML models find the names and addresses patterns cannot.
 
 1. **Working-set matcher.** Finds every known spelling of entities already in the set. This is what makes a decision carry to the next document.
 2. **Term lists.** The user's always-hide terms.
-3. **Rule packs.** Regex plus a validator and context words, grouped by country or theme. The POC ships 10 identifier types this way.
+3. **Rule packs.** Regex plus a validator and context words, grouped by country or theme.
 4. **NER models.** Run in the browser on ONNX Runtime through [Transformers.js](https://huggingface.co/docs/transformers.js/index), on WebGPU where the device has it and WebAssembly otherwise, pinned by revision and cached after first load. The [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) model card shows a browser example. GLiNER2-PII in the browser is unproven: community ONNX exports exist but need the spike. Which models run depends on the device's detection level, below.
 
 **Detection levels by device (D5).** On first run the app checks the device: a WebGPU adapter and its limits, memory where the browser reports it, and a short timed test run. It then picks a level:
@@ -134,7 +136,7 @@ Detection is a union of four detector families, merged by the resolver. Patterns
 | Standard | Patterns, validators and the smaller model | Most laptops, WebAssembly only |
 | Basic | Patterns and validators only, plus the working-set matcher and manual marking | Low-memory or old devices |
 
-The level is never silent. The app shows it in a banner ("Basic detection on this device: names and addresses are not detected automatically; review each page"), in the review view and on each document's certificate. The user can choose a higher level and accept the slowdown. Each document records the level it was cleaned at, so it can be re-checked later on a stronger device. The spike (build step 1) compares candidate models and decides which fills each slot, and sets the thresholds (D10).
+The level is never silent. The app shows it in a banner ("Basic detection on this device: names and addresses are not detected automatically; review each page"), in the review view and on each document's certificate. The user can choose a higher level and accept the slowdown. Each document records the level it was cleaned at, so it can be re-checked later on a stronger device. The NER spike (Implementation Plan, spike track) compares candidate models and decides which fills each slot, and sets the thresholds (D10).
 
 ### Open-source rule sets to combine
 
@@ -148,17 +150,17 @@ Three sources cover most of what we need: Presidio for personal identifiers by c
 | [OpenRedaction](https://github.com/sam247/openredaction) | 570+ regex patterns in TypeScript; government IDs for 50+ countries; compliance presets | MIT | Mine for countries Presidio lacks. Each pattern is ported and must pass fixtures before it is enabled |
 | [detect-secrets](https://github.com/Yelp/detect-secrets) | Regex plugins plus entropy and keyword detectors | Apache-2.0 | Reference for a generic high-entropy secret detector |
 | [secrets-patterns-db](https://github.com/mazen160/secrets-patterns-db) | 1,600+ secret regexes graded by confidence, with a converter to gitleaks format | CC BY-SA 4.0 per the repo; the README says CC BY 4.0 and marks its TruffleHog-derived data AGPL | Optional extended pack, high-confidence rules only, after the licence is clarified |
-| [DataFog](https://github.com/datafog/datafog-python) | Offline regex engine for email, phone, SSN, card, IP, date, ZIP, plus a German locale | MIT | Cross-check only; it overlaps what the POC has |
+| [DataFog](https://github.com/datafog/datafog-python) | Offline regex engine for email, phone, SSN, card, IP, date, ZIP, plus a German locale | MIT | Cross-check only; it overlaps the country packs |
 
 Not used: TruffleHog's detectors, which third-party listings give as AGPL-3.0 and which lean on live credential verification, a network call we do not make.
 
 ### How the sets become one
 
-- **One pack format.** A pack is a YAML file of rules. Each rule records its source and licence, so attribution and audits are mechanical.
+- **One pack format.** A pack is a YAML file of rules, compiled to JSON at build time so the app needs no YAML parser. Each rule records its source and licence, so attribution and audits are mechanical.
 - **Converters, not copies.** One script per source (Presidio recognisers, gitleaks TOML) regenerates our packs, so upstream fixes can be pulled.
 - **Fixtures gate every rule.** A rule ships only with positive and negative examples that pass. Regex dialects differ between Go, JavaScript and Python, so ported patterns are tested, not trusted.
-- **Validator beats pattern.** When two sources cover one identifier, we keep the rule with a checksum. Rules with no validator must have context words nearby, as the POC's `needs_context` already enforces.
-- **User patterns are sandboxed.** Custom regexes run with a time limit so a bad pattern cannot hang the engine.
+- **Validator beats pattern.** When two sources cover one identifier, we keep the rule with a checksum. Rules with no validator must have context words nearby.
+- **User patterns are sandboxed.** Custom regexes run in a separate worker that is stopped when it passes a time limit, so a bad pattern cannot hang the engine.
 
 ```yaml
 pack: in-identifiers
@@ -173,8 +175,6 @@ rules:
     source: presidio
     licence: MIT
 ```
-
-The POC's `Rule` dataclass already has these fields. Moving its rules from Python into this file is a mechanical change.
 
 ## Pseudonymisation and the vault
 
@@ -200,9 +200,9 @@ A surrogate is assigned once per entity per working set and stored in the workin
 
 **The vault**
 
-- Each working set is one encrypted store in the browser's origin-private storage, holding its entities, surrogates, decisions and policy. Encrypting the whole store covers the entity registry as well as the surrogate map.
-- The key is generated in the browser with Web Crypto and kept non-extractable. A passphrase can wrap it.
-- Purging a working set deletes its store and its key. Exporting a vault writes one encrypted file, with the passphrase shared out of band.
+- The vault is the surrogate-to-original columns of the working set's entity registry, not a separate store. Each working set's records (entities, surrogates, decisions and policy) are kept in IndexedDB, encrypted per record with AES-GCM; its originals and each document's extracted text model are encrypted files in the origin-private file system (see Data model and storage).
+- One random data key, generated with Web Crypto, encrypts the set. It is wrapped by a key derived from the vault passphrase (PBKDF2), or, when no passphrase is set, kept as a non-extractable key in IndexedDB. Without a passphrase, encryption protects against other sites and casual inspection of the disk, not against someone using the unlocked browser profile.
+- Purging a working set deletes its records, its files and its wrapped key. Exporting a set writes one encrypted file, re-encrypted under a key derived from an export passphrase that is shared out of band.
 - Browser storage can be cleared by the user or evicted by the browser, and a lost vault cannot be rebuilt. The app asks for persistent storage and prompts for a vault backup after pseudonymising.
 
 **What is stored for redacted entities** is decided (D3). Carrying a redaction to the next document needs something to match on, so the normalised value is kept in the encrypted registry with no surrogate, because the originals sit in the same encrypted store anyway. The stricter alternative, a keyed hash only, was rejected: it limits matching to exact repeats and rules out linking spellings.
@@ -214,22 +214,22 @@ Consistency across documents comes from one mechanism: decisions attach to entit
 **Example: a manual redaction spreads to the whole set.** No detector flagged "Project Falcon". The user selects it in the third contract and marks it redacted. From then on it is redacted in every document of that working set: the ones already imported and any imported later. The review list shows each place it was found. A detection spreads the same way once the user approves it; until then it stays in its own document.
 
 1. **Import.** The reader produces the document model. Detectors run, including the working-set matcher, which finds every known spelling of approved entities.
-2. **Link.** The resolver ties each finding to an entity by normalised value (case, spacing and number formatting ignored, as the POC's propagation already does). An unknown value becomes a new entity with the policy's default action, pending until the user approves it.
-3. **Decide.** The user approves a detection, changes an action on an entity, or marks text by hand in any document, or the policy sets it. The change is one row in the registry. Approving a detection or marking text by hand makes the entity approved, and the working-set matcher runs again over every document already in the set to find its other occurrences.
+2. **Link.** The resolver ties each finding to an entity by normalised value (case, spacing and number formatting ignored), matched at word boundaries. An unknown value becomes a new entity with the policy's default action, pending until the user approves it.
+3. **Decide.** The user approves a detection, changes an action on an entity, or marks text by hand in any document, or the policy sets it. The change is one row in the registry. Approving a detection or marking text by hand makes the entity approved, and the working-set matcher searches every document already in the set for its other occurrences. The search runs in the worker against each document's stored text model, so no file is parsed again. It is batched rather than run per click, and runs at the latest when the user leaves the current document. Opening or exporting any document first applies every pending spread.
 4. **Render.** Any document with an occurrence of that entity is now stale. Its output is rebuilt from the original when it is next viewed or exported.
 
-Because outputs are derived (principle 4), "redacted in one document means redacted in all" needs no propagation code. There is nothing to patch; the registry changed and the outputs follow.
+Because outputs are derived (principle 4), "redacted in one document means redacted in all" needs no code that patches outputs: the registry changed, the matcher found the occurrences, and the outputs follow.
 
 Two limits to be honest about:
 
-- **Linking spellings** ("J. Roe" to "Jane Roe") is rule-based in v1: shared surname plus matching initial is suggested, and the user confirms. Automatic exact-match linking is in the MVP.
-- **Only approved entities spread across documents.** A detection the user has not approved stays in the document where it was found. It is redacted there by default, failing toward privacy, but touches no other document. Within that document the POC's rule holds: only values that are validated or found by two detectors spread to repeats, so "Bill" does not redact every "bill".
-- **Approval spreads it to the whole set.** Approving a detection and marking text by hand both count as approval. The value then spreads to every exact match in the set, even when it is short. The review list shows each match, so a wrong hit can be undone.
+- **Linking spellings** ("J. Roe" to "Jane Roe") is rule-based in v1: shared surname plus matching initial is suggested, and the user confirms. Automatic linking of normalised matches is in the MVP.
+- **Only approved entities spread across documents.** A detection the user has not approved stays in the document where it was found. It is redacted there by default, failing toward privacy, but touches no other document. Within that document, only values that are validated or found by two detectors spread to repeats, so "Bill" does not redact every "bill".
+- **Approval spreads it to the whole set.** Approving a detection and marking text by hand both count as approval. The value then spreads to every normalised match at word boundaries in the set, even when it is short. The review list shows each match, so a wrong hit can be undone.
 - **A box with no text behind it** (drawn over a signature or a photo) applies only to that document, because there is nothing to match in the others.
 
 ## Irreversibility and verification
 
-Redaction is trusted only after the written file is re-opened and searched for what was removed. The POC does this for PDF; each new adapter must bring its own checks before it ships.
+Redaction is trusted only after the written file is re-opened and searched for what was removed. Each adapter brings its own checks before it ships.
 
 | Format | How content is destroyed | What the verifier checks on the written bytes |
 | --- | --- | --- |
@@ -248,7 +248,7 @@ What the certificate does not claim: that nothing was missed by detection, or th
 
 ## Hosted delivery and the privacy boundary
 
-The browser loads the app from our servers, then does all document work itself. Our servers deliver code, models and rule packs and run accounts. They have no route that accepts a document.
+The browser loads the app from our servers, then does all document work itself. Our servers deliver the app and rule packs, run accounts and receive usage telemetry; models and libraries may come from their public hosts. No server has a route that accepts a document. The principle is that no document is uploaded without the user's consent; downloads from public hosts carry no document content.
 
 **How it runs**
 
@@ -262,8 +262,9 @@ The browser loads the app from our servers, then does all document work itself. 
 | Control | What it stops |
 | --- | --- |
 | No upload route: the accounts API has no endpoint that takes document bytes, text or findings | A code change that quietly sends content, because there is nowhere to send it |
-| Content Security Policy: `connect-src` lists only our own asset and accounts hosts; no third-party scripts | A library or injected script sending data to another host |
-| Code, models and packs served from our own origin under hashed file names | A third-party host swapping a file |
+| Content Security Policy: scripts and connections are limited to our own hosts and the named public hosts that serve models and libraries | A library or injected script sending data to an unlisted host |
+| Every model and library pinned to an exact revision, and each downloaded file's hash checked before use | A host swapping a file |
+| A network test that fails on any request to a download host that is not a plain download | A regression that sends data through an allowed host. It cannot stop a compromised library in a user's browser; that risk is accepted |
 | A fixed, published list of fields that account calls may send, with a test that fails on any other request | Usage or content leaking through account calls |
 | The whole pipeline is tested with the network blocked | A regression that makes document work depend on a server |
 | The loaded app keeps working with the network disconnected | Gives users and auditors a simple way to check the claim |
@@ -272,11 +273,11 @@ The browser loads the app from our servers, then does all document work itself. 
 
 **What our servers do**
 
-They host the app, model snapshots and rule packs, each pinned by hash. They also run sign-in, plans and billing, described in the next section. They never receive a document: the app's only calls are asset downloads, account requests and usage telemetry. Telemetry carries counts and events, never document content (see Accounts, plans and billing).
+They host the app and rule packs, each pinned by hash; models and libraries come from our servers or their public hosts, pinned by revision and hash-checked. They also run sign-in, plans and billing, described in the next section. They never receive a document: the app's only calls are asset downloads, account requests and usage telemetry. Telemetry carries counts and events, never document content (see Accounts, plans and billing).
 
-**Deployment.** Static assets sit behind a content delivery network on our own domain. The accounts API is a separate small service. Nothing else runs server-side.
+**Deployment.** Static assets sit behind a content delivery network on our own domain. The accounts API is a separate small service, beside the telemetry endpoint and its analytics store. Nothing else runs server-side.
 
-**What moved out of scope** is a locally installed engine, the first draft's recommendation. It allowed full-size models and reuse of the Python POC, at the price of an install step. The hosted app trades those for no install and one code base to update.
+**What moved out of scope** is a locally installed engine, the first draft's recommendation. It allowed full-size models, at the price of an install step. The hosted app trades those for no install and one code base to update.
 
 ## Accounts, plans and billing
 
@@ -321,7 +322,7 @@ Sign-in, plans and billing are ordinary web-app features here, with one rule add
 | App version | Hashes or other fingerprints of a document's contents |
 | Usage telemetry: counts of documents, pages and working sets, which features were used, timings, error codes, browser and device class | Error messages or anything the user typed, since either can hold document text |
 
-**Telemetry.** The app sends usage events, batched, to our own endpoint, tagged with the account id. Every event follows a fixed schema of numbers, enums and identifiers we define. There is no free-text field, so document text has nowhere to go. An error is reported as a code and its stack frames, never its message. The schema is published, a test fails on any field outside it, and users can switch telemetry off in settings. The events land in a self-hosted analytics store; no third-party script runs in the app.
+**Telemetry.** The app sends usage events, batched, to our own endpoint, tagged with the account id. Every event follows a fixed schema of numbers, enums and identifiers we define. There is no free-text field, so document text has nowhere to go. An error is reported as a code and its stack frames, never its message. The schema is published and a test fails on any field outside it. Telemetry is on by default, and users can switch it off or on in settings. The events land in a self-hosted analytics store; no third-party script runs in the app.
 
 **The free plan.** 10 document redactions a month, plus 20,000 characters of pasted text a month counted separately; paid plans raise both. Every feature is on every plan, and restoring an AI reply never spends anything. Before signing up, a visitor can clean one document. That count lives in the browser, so clearing storage resets it; this is accepted for a trial.
 
@@ -337,19 +338,19 @@ The language is TypeScript (D1, decided); the table below records the options th
 
 | Concern | Candidate | Why | To confirm |
 | --- | --- | --- | --- |
-| PDF read, redact, rewrite | [MuPDF.js](https://github.com/ArtifexSoftware/mupdf.js) | Official WebAssembly build of the engine the POC proved; has `applyRedactions` | The image-pixel redaction option; results on the POC's 27 leak tests; the licence, below |
-| PDF cross-check | PDF.js text extraction | An independent second reader for the verifier, the job pdfminer did in the POC |  |
+| PDF read, redact, rewrite | [MuPDF.js](https://github.com/ArtifexSoftware/mupdf.js) | Official WebAssembly build of MuPDF; has `applyRedactions` | The image-pixel redaction option; results on our PDF leak suite; the licence, below |
+| PDF cross-check | PDF.js text extraction | An independent second reader for the verifier |  |
 | OCR | [Tesseract.js](https://github.com/naptha/tesseract.js), Apache-2.0 | The engine used in the OCR spike, in WebAssembly | Speed and accuracy on real scans (D6) |
 | NER models | [Transformers.js](https://huggingface.co/docs/transformers.js/index) on ONNX Runtime; WebGPU with a WebAssembly fallback | Runs models in the browser with no server; quantised weights cut the download | Which models fit a browser (D5) |
 | DOCX | A zip library and the browser's XML parser | A DOCX is a zip of XML parts | Leak-vector list comes first |
 | Images | Canvas | Built in | That re-encoding drops metadata, per format |
-| Storage | Origin-private file system and IndexedDB | Built in and private to our origin | Eviction rules, under Data model and storage |
+| Storage | IndexedDB for encrypted records; origin-private file system for encrypted files | Built in and private to our origin | Eviction rules, under Data model and storage |
 | Encryption | Web Crypto: AES-GCM with non-extractable keys | Built in; no custom cryptography |  |
 | UI | A mainstream single-page framework with TypeScript | Easy to hire for | The team's choice |
 | Sign-in | A bought identity provider that speaks OpenID Connect | No password storage or home-made auth | Vendor (D8) |
 | Billing | Stripe Billing: hosted Checkout, customer portal, webhooks | Card data never reaches us; the least code |  |
 | Accounts API | One small service with a relational database | Holds a few rows per user | Language follows the team |
-| Tests | The POC's fixtures and leak-vector lists as a conformance suite, run in headless browsers | The expected behaviour is already written down and measured |  |
+| Tests | Unit tests and Playwright browser tests run locally with one command; our own leak-vector lists and fixtures; a stand-alone outside checker (pdfminer.six and a raw object scan) | Leaks are checked on the written file by a reader the app does not use |  |
 
 **Language options for the engine**
 
@@ -357,35 +358,38 @@ The language is TypeScript (D1, decided); the table below records the options th
 | --- | --- | --- |
 | TypeScript, calling the WebAssembly modules | One language with the UI; every building block above has a JavaScript API | Rules and validators are rewritten; outside a browser it runs only on JavaScript runtimes |
 | A Rust core compiled to WebAssembly | One core for the browser, a command line and a server later; predictable speed and memory | A second language beside the UI's; calling MuPDF and Tesseract from inside WebAssembly is more work than from JavaScript |
-| Python in the browser through Pyodide | The POC's code, python-stdnum and Presidio's patterns as they are | A large runtime to download; a browser build of PyMuPDF that is not a standard package; models still run through Transformers.js |
+| Python in the browser through Pyodide | python-stdnum and Presidio's patterns as they are | A large runtime to download; a browser build of PyMuPDF that is not a standard package; models still run through Transformers.js |
 
-The contracts keep the choice reversible. Stages pass messages, so an engine that starts in one language can swap a single stage for a module built in another. Build step 1 is a short spike that settles D1 with measurements.
+The contracts keep the choice reversible. Stages pass messages, so an engine that starts in one language can swap a single stage for a module built in another.
 
 **The licence item.** MuPDF.js carries MuPDF's terms: AGPL, or a commercial licence from Artifex for proprietary and SaaS products ([MuPDF.js repository](https://github.com/ArtifexSoftware/mupdf.js)). A hosted app sends MuPDF.js to every visitor. On the usual reading the AGPL route then means publishing the source of the web app that uses it; confirm with counsel. There are two clean ways through; D2 chose the first, keeping the Accounts API and billing closed as separate programs:
 
 - **Open-source the app under AGPL.** This fits a privacy product, since anyone can audit the "nothing leaves" claim, which also answers D9. Revenue then rests on the hosted service, not on closed code.
 - **Buy the commercial licence** and keep the code closed. Pricing is by quote.
 
-Replacing the PDF engine is a third route we do not recommend: a first search turned up no permissive library with equivalent true-redaction support (a short spike would confirm), and the POC's 27 leak-vector tests would have to be re-earned.
+Replacing the PDF engine is a third route we do not recommend: a first search turned up no permissive library with equivalent true-redaction support (a short spike would confirm), and the PDF leak suite would have to pass again on the new engine.
 
 ## Data model and storage
 
-Each working set is one encrypted folder in the browser's origin-private file system. Global settings, rule packs and models sit beside the sets and hold no user data. All of it lives in one browser profile on one device.
+Each working set's records sit in IndexedDB, encrypted per record; its files sit in the origin-private file system, encrypted. Rule packs and models are cached by the service worker and hold no user data. The global policy holds the user's term lists, so it is encrypted like set data. All of it lives in one browser profile on one device.
 
 ```text
+IndexedDB, per browser profile
+  keys                   the wrapped data key, or the non-extractable key when no passphrase is set
+  policy                 global policy (thresholds, bands, term lists, appearance), encrypted
+  sets/<set id>          encrypted records: everything in the table below
 Origin-private file system, per browser profile
-  policy.json            global policy (the keys of the POC's config.yaml)
-  packs/                 rule packs, versioned, cached from our servers
-  models/                pinned model snapshots, cached from our servers
   sets/<set id>/
-    set.db               encrypted records: everything in the table below
     originals/           imported files, encrypted
+    text/                each document's extracted text model, encrypted
     outputs/             derived files and certificates, encrypted
+Service worker cache
+  app, rule packs, pinned models
 ```
 
 | Table | Holds | Notes |
 | --- | --- | --- |
-| `document` | File name, format, content hash, import time, status | Points at a file in `originals/` |
+| `document` | File name, format, content hash, import time, status | Points at its file in `originals/` and its text model in `text/` |
 | `entity` | Type, canonical value, action, surrogate (if pseudonymised) | The surrogate map is this table; there is no separate vault store |
 | `alias` | Entity id, normalised spelling | What the working-set matcher searches for |
 | `occurrence` | Document id, anchor, entity id, detectors, score, band, status | One row per finding; manual marks are occurrences with detector `user` |
@@ -402,63 +406,40 @@ A browser cannot reopen a file by its path later, so `originals/` holds encrypte
 - Safari deletes script-written data for a site the user has not interacted with in seven days of browser use, when tracking prevention is on.
 - So the browser is never the only copy of a vault. Working-set export and import, as one encrypted file, is an MVP feature. It is also how a set moves to another device.
 
-## Path from the POC
+## The POC and the order of work
 
-The POC is a reference, not a code base. What carries over is what it specifies and measures.
+Nothing from the earlier Python POC is used: not its code, `verify.py`, leak-vector list, fixtures, labels or measured figures. The product is specified and tested on its own terms. The PDF leak-vector list is written fresh from the PDF specification, the outside test checker is stand-alone, and the spikes compare candidates with each other on our own dataset.
 
-| POC asset | Role in the product |
-| --- | --- |
-| `LEAK_VECTORS.md`, 27 vectors | The PDF adapter's acceptance list, ported as browser tests |
-| Fixtures and the 90 fast tests | Conformance suite: the browser engine must produce the same findings and pass the same checks |
-| `detectors/regex_rules.py`, `config.example.yaml` | Source for the first rule pack and the default thresholds, moved to data |
-| `merge.py`, `pipeline.py` | The specification for merging, filtering and propagation |
-| `verify.py` | The specification for the certificate's checks |
-| Evaluation results | Baselines to compare the browser build against |
-
-Build order, each step shippable to ourselves:
-
-The [Implementation Plan](https://claude.ai/artifact/UjRsDYz5fMUCVJfThqguMG) replaces the order below. It builds manual redaction end to end first, runs the spikes and a dataset track beside the build, and scores every detection phase against that dataset. The list is kept for reference.
-
-1. Spike in TypeScript to confirm D1 and settle D10 (NER models) and D6 (OCR engine): redact and verify one POC fixture with MuPDF.js, run the candidate NER models in the browser, and get OCR boxes from each candidate OCR engine. Measure download size, memory and speed.
-2. Port the leak-vector tests and fixtures into a browser conformance suite.
-3. Build the app shell: the single-page UI, the worker engine behind the contracts, and encrypted storage.
-4. Add the PDF adapter, the review UI, and rule packs for the six launch countries (US, UK, Canada, Australia, New Zealand, Ireland), each with fixtures.
-5. Add the NER models.
-6. Add the text adapter, the pseudonymiser, the vault and restore. This completes the round-trip loop.
-7. Add the working-set matcher, stale-export tracking, and working-set export and import.
-8. Add OCR and the image adapter, with their own leak-vector list and fixtures.
-9. Add sign-in and the free plan. This completes the MVP.
-10. Write the DOCX leak-vector list and fixtures, then the DOCX adapter.
-11. Add Stripe billing and the paid plan.
-12. Generate further country packs (India first, from the POC) and secrets packs from Presidio and gitleaks.
+The order of work, the dataset track and the spikes are in the [Implementation Plan](Implementation-Plan.md).
 
 ## Risks and open decisions
 
 Nine decisions are open; the first two shape everything else and are worth settling before any build work.
 
-- [ ] **D10. NER models for each detection level.** Open until the spike. The spike compares candidate models, not only the POC's two: the OpenAI Privacy Filter, GLiNER2-PII, other GLiNER PII models, and DeBERTa- or BERT-based PII taggers with ONNX exports. Each is measured on recall for names and addresses on the launch-country test set (overall and per name-origin group), download size, memory, and speed with WebGPU and with WebAssembly. Each model's licence must allow commercial use. The results fill the Full and Standard slots.
+- [ ] **D10. NER models for each detection level.** Open until the spike. The spike compares candidate models: the OpenAI Privacy Filter, GLiNER2-PII, other GLiNER PII models, and DeBERTa- or BERT-based PII taggers with ONNX exports. Each is measured on recall for names and addresses on the launch-country test set (overall and per name-origin group), download size, memory, and speed with WebGPU and with WebAssembly. Each model's licence must allow commercial use. The results fill the Full and Standard slots.
 - [ ] **D6. OCR engine.** Open until the spike, like D10. The spike compares Tesseract.js, PaddleOCR PP-OCRv5 and docTR on real scans from target users. It measures text accuracy, how tightly the word boxes cover the ink, download size and speed. Tesseract.js is the fallback if no engine clearly wins.
 
 **Decided**
 
 - **D3. Redacted values in the registry:** stored normalised in the encrypted set store, so later documents match and spellings can be linked.
 - **D4. Originals:** each working set keeps encrypted copies in browser storage, so outputs rebuild when a decision spreads. The copies are part of set export and backup.
-- **Launch scope:** English, with country packs for the US, UK, Canada, Australia, New Zealand and Ireland in the MVP (build step 4). India comes later.
+- **Launch scope:** English, with country packs for the US, UK, Canada, Australia, New Zealand and Ireland in the MVP (Implementation Plan, phase 4). India comes later.
+- **PRD decisions (18 Nov 2026):** realistic surrogates (PSE-9) and restore into DOCX (PSE-14) are v1. MVP image formats are PNG, JPEG and WebP; TIFF joins if MuPDF.js decodes it; HEIC, GIF and BMP are v1. Telemetry starts on, and users can switch it off. Models and libraries may load from public hosts, pinned and hash-checked.
 - **D7. Free plan:** 10 documents and 20,000 characters of pasted text a month, each resetting monthly. One document before sign-up, counted in the browser.
 - **D8. Identity provider:** Auth0 through standard OpenID Connect, with no passwords (emailed code, Google, Microsoft, optional passkeys). With no password hashes to export, moving provider later is an export of emails and ids, plus passkey re-enrolment. Enterprise single sign-on comes with team plans.
 - **D2. PDF engine licence:** the browser app (UI and engine) is published under the AGPL. The Accounts API, billing and telemetry store are separate programs and stay closed. To be confirmed with counsel before launch.
 - **D9. Trust in served code:** MVP has public source, reproducible builds, a signed hash per release in a public log, and the release hash shown in the app. v1 adds a browser extension that checks served files against the log. An installable pinned build is not planned.
-- **D1. Implementation language:** TypeScript for the UI and the engine, calling the WebAssembly modules through their JavaScript APIs. The build step 1 spike confirms speed and memory; it no longer chooses the language.
+- **D1. Implementation language:** TypeScript for the UI and the engine, calling the WebAssembly modules through their JavaScript APIs. The spikes measure speed and memory; they do not choose the language.
 - **D5. Models in the browser:** chosen per device as Full, Standard or Basic detection (see Detection stack). The level is always shown to the user, who can choose a higher one. Which models fill the levels is still open (D10).
 
 | Technical risk | Effect | Mitigation |
 | --- | --- | --- |
 | Hosted code can change on any visit | The privacy claim rests on our release process | D9; no upload route; a strict Content Security Policy; a claim users can test offline |
-| MuPDF.js behaves differently from the POC's pinned PyMuPDF | Redaction or scrubbing gaps; the POC found MuPDF 1.28 shifting text after redactions | Port the 27 leak tests first (build step 2); pin the version |
+| MuPDF.js leaves content behind or moves text after redaction | Redaction or scrubbing gaps; shifted layout | Our PDF leak suite (Implementation Plan, phase 3); a glyph-position test from phase 1; MuPDF.js pinned to an exact version |
 | Models are heavy for a browser | Slow first load, memory limits, weak devices without WebGPU | Patterns work at once; quantised models cached after first load; a device check picks the detection level and the app shows it |
 | Large files in a browser tab | Memory pressure or a crashed tab on long PDFs | Page-at-a-time processing in workers; progress saved per page |
 | Browser storage is cleared or evicted | A lost vault makes its pseudonyms unrecoverable | Request persistent storage; backup prompt; working-set export and import |
-| DOCX leak surface is unproven | A missed carrier is a silent leak | Leak-vector list and fixtures come before the adapter (build step 10) |
+| DOCX leak surface is unproven | A missed carrier is a silent leak | Leak-vector list and fixtures come before the adapter (v1) |
 | OCR misses text in images | Undetected data stays visible | Image pages default to review; low-confidence regions flagged; manual box drawing |
 | Ported regexes behave differently in the new language | False matches or silent misses | Fixtures gate every rule |
 | Sign-in weakens the privacy claim | Users doubt that nothing leaves the device | A fixed, published list of fields in account and telemetry calls; a test fails on any other request |
@@ -468,7 +449,7 @@ Nine decisions are open; the first two shape everything else and are worth settl
 
 ## Sources
 
-External pages opened on 15 Nov 2026. POC figures come from the repository's `README.md`, `LEAK_VECTORS.md` and `tests/out/eval_full.md`.
+External pages opened on 15 Nov 2026.
 
 - [Presidio repository](https://github.com/microsoft/presidio) and [supported entities](https://presidio.dataprivacystack.org/supported_entities/)
 - [python-stdnum](https://arthurdejong.org/python-stdnum/)

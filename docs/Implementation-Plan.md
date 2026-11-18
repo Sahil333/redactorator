@@ -4,20 +4,20 @@ Nov 18, 2026 · @Sahil Chaddha
 
 ## Summary
 
-This plan turns the [PRD](https://claude.ai/artifact/5BCW7q4dr5jygrAu2ToSiK) and [HLD](https://claude.ai/artifact/BtxzLu9BUqFq3zkPNYxag7) into an order of work. It is ordered for the fastest feedback: the first thing built is a browser app in which a person marks pdf by hand and gets back a PDF with that text truly gone, tested end to end in a real browser. Detection comes later, one layer at a time, and each layer is scored against a dataset with ground truth.
+This plan turns the [PRD](PRD.md) and [HLD](HLD.md) into an order of work. It is ordered so the earliest phases give end-to-end feedback: the first thing built is a browser app in which a person marks text in a PDF by hand and gets back a PDF with that text removed, tested end to end in a real browser. Detection comes later, one layer at a time, and each layer is scored against a dataset with ground truth.
 
 Three tracks run side by side:
 
-- **Build track.** Nine phases to the MVP. Each phase ends with a browser test that runs in CI.
+- **Build track.** Nine phases to the MVP. Each phase ends with stated exit criteria, at least one of which is a browser test that runs locally.
 - **Dataset track.** One ground-truth format; synthetic documents made from existing labelled text datasets; 200 real-world documents labelled with the phase 1 tool.
 - **Spike track.** Measurements that settle D10 (NER models) and D6 (OCR engine) before the phases that need them.
 
-No durations are given: team size is not set yet. Each phase lists what done means instead.
+This plan is a bird's-eye view: it sets each phase's responsibilities, the order of work and the test that ends each phase. File names, types and library versions are chosen while a phase is built.
 
 **Principles**
 
 1. **A browser test first, then features.** Every phase starts by writing the end-to-end test it must pass.
-2. **Integration tests over unit tests.** Tests drive the real app in a real browser and check the output file with tools outside the app. Unit tests are added only where a bug shows they would help, or for pure logic such as checksums.
+2. **Integration and unit tests, run locally.** One command runs everything. Integration tests drive the real app in a real browser and check the output file with a checker outside the app; unit tests cover pure logic such as validators, checksums, the normaliser, the matcher and placeholder restore.
 3. **The output is judged by an outsider.** Every exported file is checked by an extractor the app does not use, so a bug in our engine cannot hide its own leak.
 4. **Measure before choosing.** Models and the OCR engine are chosen on the dataset, not on reputation.
 5. **Thin slices behind the HLD's contracts.** Each phase adds one adapter, detector or stage behind its contract, so later swaps stay cheap.
@@ -26,28 +26,30 @@ No durations are given: team size is not set yet. Each phase lists what done mea
 
 ![Implementation tracks · 9 build phases, 3 dataset steps, 3 spikes](images/plan-tracks.png)
 
-The build track runs in order. The dataset and spike tracks start in week one, beside phase 0. The synthetic documents feed both spikes, and the phase 1 tool is also the labelling tool for the real documents.
+The build track runs in order. The dataset track starts beside phase 0, and the two spikes start once the 500 synthetic PDFs exist. The MuPDF.js check, drawn on the spike track in the diagram, runs inside phase 1. The synthetic documents feed both spikes, and the phase 1 tool is also the labelling tool for the real documents.
 
-| Phase | Delivers | Done when (browser test in CI) | Waits for |
+| Phase | Delivers | Done when | Waits for |
 | --- | --- | --- | --- |
-| 0 Setup and CI | Repo, TypeScript app shell, engine worker, MuPDF.js loaded, Playwright in CI | A test opens a fixture PDF in the app and sees page 1 rendered | Nothing |
-| 1 Manual redaction | Mark text or draw a box, apply, download a cleaned PDF; label export | A marked word is gone from the downloaded file, checked outside the app | Phase 0 |
-| 2 Working sets | Encrypted store, entities, manual marks spread across a set, stale re-render, set export | A mark made in document A is redacted in document B | Phase 1 |
-| 3 PDF leak suite | The POC's 27 leak vectors ported; the certificate | Every leak fixture passes for manually marked values | Phase 2 |
-| 4 Rules and review | Regex and validator packs for six countries, term lists, review bands, approval-gated spread | Rule types reach their recall target on the synthetic set | Phase 3; synthetic set |
-| 5 Pseudonyms and restore | Text adapter, placeholders, vault, restore | Paste, pseudonymise, restore an AI-style reply exactly | Phase 4 |
-| 6 NER models | Models per detection level, device check, level banner | Name and address recall per level is scored and shown | Phase 5; D10 |
-| 7 OCR and images | Scanned PDFs, PNG and JPEG, pixel checks | Scanned leak fixtures pass; no ink left under any box | Phase 6; D6 |
+| 0 Setup | Repo, TypeScript app shell, engine worker, MuPDF.js loaded, Playwright and unit tests behind one local command | A test opens a fixture PDF in the app and sees page 1 rendered | Nothing |
+| 1 Manual redaction | Mark text or draw a box, apply, download a cleaned PDF; label export | All phase 1 tests pass locally; a person outside the team cleans a real PDF with the preview build (manual check) | Phase 0 |
+| 2 Working sets | Encrypted store, entities, manual marks spread across a set, stale re-render, set export | Phase 2 tests pass locally in Chromium and WebKit | Phase 1 |
+| 3 PDF leak suite | Our PDF leak-vector list and fixtures; the certificate | Every vector on our leak list passes for manually marked values | Phase 2 |
+| 4 Rules and review | Regex and validator packs for six countries, term lists, review bands, approval-gated spread | Each rule type's recall is measured and reported; the leak suite passes | Phase 3; synthetic set |
+| 5 Pseudonyms and restore | Text adapter, placeholders, vault, restore | Round trip on the synthetic text split and real AI replies with no wrong restores | Phase 4 |
+| 6 NER models | Models per detection level, device check, level banner | Recall per level measured and recorded; the banner shows on the three reference devices (run by hand) | Phase 5; D10; the 200 labelled real documents |
+| 7 OCR and images | Scanned PDFs, PNG, JPEG and WebP, pixel checks | Scanned and image leak fixtures pass; no ink under any box; recall on the scanned and image splits measured and reported | Phase 6; D6 |
 | 8 Accounts and quota | Auth0 sign-in, Accounts API, credits, offline batch, telemetry | Only allowed requests leave the browser; quota enforced | Phase 7 |
 
 ## Phases 0 and 1: the walking skeleton
 
 The skeleton is the whole product path with no detection: open, mark, apply, check, download. It goes first because it holds the riskiest part, true removal in the browser, and because every later phase plugs into it.
 
-**Phase 0: setup and CI**
+**Phase 0: setup**
 
 - One repository: `app/` (UI), `engine/` (the Web Worker), `tests/e2e/` (Playwright), `tests/oracle/` (the outside checker), `fixtures/`.
-- TypeScript, Vite for the build, MuPDF.js loaded in the worker, Playwright running Chromium in CI on every push. Preview builds go to a static host.
+- TypeScript, Vite for the build, MuPDF.js loaded in the worker, Playwright and a unit-test runner behind one local test command. Preview builds are deployed by hand to a static host.
+- MuPDF.js is pinned to an exact version; any version change re-runs the leak suite before it lands.
+- The engine's shared types live in one module: `DocumentModel`, `Finding`, `Decision`, `Edit` and the worker messages. Boxes use one convention everywhere: points in MuPDF's page space, origin top-left; phase 1's rotated-page test checks it. An `Edit` is either a text range or a free box with no text behind it.
 - **Done when** a Playwright test opens a fixture PDF in the app and sees page 1 rendered.
 
 **Phase 1: manual redaction end to end**
@@ -57,27 +59,28 @@ What the user can do:
 1. Open a PDF by picking or dropping it. The worker renders pages with MuPDF.js; nothing is stored or sent.
 2. Select words on a text layer built from MuPDF.js character boxes, or draw a box over any area, images included.
 3. See the marks in a list and remove any of them.
-4. Apply. The worker adds redaction annotations, applies them with text removal and image-pixel blanking, draws black boxes, clears metadata and rewrites the file in full.
+4. Apply. The worker adds redaction annotations, applies them with text removal and image-pixel blanking, draws boxes, clears metadata and rewrites the file in full.
 5. The worker re-reads the new file and checks that no text is left under any box, then offers the download.
-6. In labelling mode, the same screen exports the marks as ground truth in the dataset schema. This is the tool used to label the 200 real documents.
+6. In labelling mode, the same screen gives each mark a type and an optional link id, and exports the marks as ground truth in the dataset schema. This is the tool used to label the 200 real documents.
 
 Out of scope: detectors, working sets, storage (files stay in memory), accounts.
 
-**The outside checker.** Tests never trust the app's own check. A small command-line wrapper around the POC's `verify.py` (PyMuPDF and pdfminer.six) reads each downloaded file and searches for every marked value in the text layers, raw streams, metadata and annotations. The POC thus becomes the oracle for the new code from day one.
+**The outside checker.** Tests never trust the app's own check. A small stand-alone checker in `tests/oracle/`, built on pdfminer.six and a raw scan of every PDF object (neither shares code with MuPDF.js), reads each downloaded file and searches for every marked value in the text layers, raw streams, metadata and annotations. Nothing from the POC is used: no code, fixtures, leak lists or numbers.
 
 Phase 1 browser tests:
 
-| Test | Checks | POC leak vector |
+| Test | Checks | Carrier |
 | --- | --- | --- |
-| Mark one word, apply, download | The word is in no text layer or raw stream; the area renders black | 1 |
-| Box over part of an embedded image | The image's pixels under the box are blank in the file itself | 10 |
-| Rotated and cropped pages | The box lands where the text was; the text is gone | 9 |
-| Any export | No Info or XMP metadata; one revision | 11, 12, 23 |
-| Labelling mode | The exported JSON is valid and its boxes match the marks | none |
+| Mark one word, apply, download | The word is in no text layer or raw stream; the area renders as a box | Text layer, raw stream |
+| Box over part of an embedded image | The image's pixels under the box are blank in the file itself | Embedded image |
+| Rotated and cropped pages | The box lands where the text was; the text is gone | Page geometry |
+| Any export | No Info or XMP metadata; one revision | Metadata, revisions |
+| Text near a mark | Glyphs outside every box keep their positions, compared before and after apply | — |
+| Labelling mode | The exported JSON is valid and its boxes match the marks | — |
 
-**MuPDF.js parity, checked here.** The HLD lists two unknowns that would undermine the whole design: whether MuPDF.js exposes the image-pixel option, and whether it removes text as the POC's pinned PyMuPDF does. Phase 1's tests answer both on the POC's own fixtures. If the image-pixel option is missing, the fallback is to blank pixels by re-encoding the image, which becomes the first follow-up.
+**The MuPDF.js check.** Two unknowns: whether MuPDF.js exposes the image-pixel option, and whether its removal leaves nothing behind. Phase 1's tests answer the first and give a first answer to the second on their cases; the phase 3 leak suite settles it. If the image-pixel option is missing, phase 1b adds the fallback (decode the image, blank the pixels under each box, re-encode it) before phase 2 starts.
 
-**Done when** all five tests pass in CI, and a person outside the team cleans a real PDF with the preview build.
+**Done when** all six tests pass locally, and a person outside the team cleans a real PDF with the preview build (a manual check).
 
 ## Dataset track
 
@@ -89,6 +92,8 @@ The dataset is what every detection phase and both spikes are scored against. It
 - entities, each with a type from our list, its value, and a link id when two spellings are the same person or thing;
 - occurrences, each with page, character offsets in the extracted text, and boxes (PDF points, or pixels for images);
 - hidden occurrences (metadata, annotation, form field, hidden layer) with their location, for the leak suite.
+
+Entity types are the PRD's DET-1 list. Boxes are the authority (PDF points in the engine's box convention, or pixels from the top-left for images). Offsets index the text MuPDF.js extracts, so they line up with the app's findings; a tool using another extractor derives its offsets from the boxes. Each file carries a schema version.
 
 A validator checks every file. The phase 1 labelling mode writes the same schema.
 
@@ -106,11 +111,11 @@ Avoided: the ai4privacy datasets (earlier releases limit commercial use; the new
 How a text record becomes a PDF:
 
 1. Pick a template: letter, form with fields, invoice or table, two-column report, printed email. Vary fonts and sizes.
-2. Render with PyMuPDF and record every glyph's box as it is drawn, so each span's boxes are exact.
+2. Render with PyMuPDF, then extract each span's glyph boxes from the rendered page, so each span's boxes are exact.
 3. Make variants: born-digital; scanned (rasterised at 200 to 300 dpi, noise, slight skew, JPEG), with boxes carried through the same transforms; and hidden carriers (the value copied into metadata, an annotation, a form field or a hidden layer).
 4. Re-extract each file and check that every span's text sits in its boxes; drop any file that fails.
 
-The generator is a Python tool beside the POC. Tools need not share the product's language.
+The generator is a Python tool in `tools/dataset/`. Tools need not share the product's language.
 
 **Step 3: 200 real-world documents**
 
@@ -128,14 +133,13 @@ Proposed mix: 100 born-digital PDFs, 50 scanned PDFs, 20 images and 30 emails or
 
 Labelling:
 
-1. Pre-label with the POC (rules and both models).
-2. Correct each document in the phase 1 tool's labelling mode.
-3. A second person re-labels 20% blind; agreement is reported, and disagreements update the guideline.
-4. The guideline adapts TAB's published annotation guidelines to our entity types.
+1. Label each document by hand in the phase 1 tool's labelling mode. From phase 4, pre-label with the app's own rules first.
+2. A second person re-labels 20% blind; agreement is reported, and disagreements update the guideline.
+3. The guideline adapts TAB's published annotation guidelines to our entity types.
 
 These documents hold real personal data, even if public. They live in private storage, not in the AGPL repository. A manifest records each one's URL and licence, and they are used for testing only.
 
-**Splits.** A development split for tuning, and a held-out test split nobody tunes on. A small smoke subset runs on every pull request; the full set runs nightly.
+**Splits.** A development split for tuning and a held-out test split nobody tunes on, about 70/30. A smoke subset of about 50 development documents gives a quick score; the full set runs on demand.
 
 **Done when:** the schema and validator exist (needed by phase 1), 500 synthetic PDFs exist (needed by the spikes), and the 200 real documents are labelled (needed by phase 6).
 
@@ -149,14 +153,14 @@ The spikes settle HLD decisions D10 (NER models for each detection level) and D6
 2. an office laptop with integrated graphics;
 3. an older or low-memory machine without WebGPU.
 
-The POC's Python numbers on the same documents are the baseline.
+There is no outside baseline: candidates are compared with each other on the same documents.
 
 **NER spike (D10)**
 
 - **Candidates:** the OpenAI Privacy Filter, GLiNER2-PII, other GLiNER PII models, and BERT- or DeBERTa-based PII taggers with ONNX exports. A licence check comes first; a model whose licence blocks commercial use is dropped before any measuring.
 - **Measures:** recall and precision for names and addresses, overall and per name-origin group; download size; peak memory; cold start; time per page with WebGPU and with WebAssembly.
 - **Decision rule:** set a budget per detection level before measuring (download size and time per page). For each level, pick the model with the best recall within that level's budget, and set its thresholds per type.
-- **Done when** the Full and Standard slots are filled and D10 is recorded in the HLD. Must finish before phase 6.
+- **Done when** the Full and Standard detection levels (HLD, Detection stack) have their models and D10 is recorded in the HLD. Must finish before phase 6.
 
 **OCR spike (D6)**
 
@@ -169,43 +173,66 @@ The POC's Python numbers on the same documents are the baseline.
 
 Each phase keeps every earlier test green and adds its own.
 
-**Phase 2: working sets.** Encrypted store in origin-private storage with a Web Crypto key, entities and the registry, manual marks spread to every exact match in the set's documents, stale outputs rebuilt from the encrypted originals, set export and import, purge. A manual mark counts as approved, so it spreads at once; the approval gate for detections comes with phase 4. *Tests:* mark a value in document A, and document B comes out redacted; add document C later, and it comes out redacted too; export a set, clear storage, import it, and get the same results. *Done when* those pass in Chromium and WebKit.
+**Phase 2: working sets.** Encrypted store: set records in IndexedDB, encrypted per record with AES-GCM; originals and each document's extracted text model as encrypted files in the origin-private file system. One random data key, wrapped by a key derived from the vault passphrase, or kept non-extractable when no passphrase is set; set export re-encrypts under an export passphrase. Entities and the registry; manual marks spread to every match of the normalised value (HLD, Working sets, step 2) at word boundaries in the set's documents; a box with no text behind it stays in its own document; stale outputs rebuilt from the encrypted originals; set export and import; purge. Spreading runs in the worker against each document's stored text model, batched rather than per click, and at the latest when the user leaves the current document. Outputs stay lazy: a document is rebuilt only when it is viewed or exported. Opening or exporting any document first applies every pending spread. A manual mark counts as approved, so it spreads with no approval step; the approval gate for detections comes with phase 4. *Tests:* mark a value in document A, and document B comes out redacted; add document C later, and it comes out redacted too; mark a value in document A, then export document B without leaving A, and B comes out redacted; a value that differs only in spacing or number formatting is matched; a value inside a longer word is not; a box with no text stays in document A; the stored files hold no marked value as plaintext; purge leaves no records, files or key behind; export a set, clear storage, import it, and get the same results. *Done when* those pass locally in Chromium and WebKit.
 
-**Phase 3: PDF leak suite.** Port the POC's 27 leak vectors and their fixtures. Manual marks must now remove values from hidden text, off-page text, hidden layers, annotations, form fields, bookmarks, links, attachments, structure trees and metadata. Each export gets a certificate. *Tests:* one browser test per leak fixture, judged by the outside checker. *Done when* all 27 pass.
+**Phase 3: PDF leak suite.** The phase starts by writing our own PDF leak-vector list and its fixtures from the PDF specification's hidden carriers: hidden text, off-page text, hidden layers, annotations, form fields, bookmarks, links, attachments, scripts, thumbnails, structure trees, ActualText, metadata and old revisions. Manual marks must remove values from every carrier on the list. Marked values are also found inside hidden carriers after decoding their string encoding. The in-app verifier adds PDF.js as a second extractor. Each export gets a certificate. *Tests:* one browser test per leak fixture, judged by the outside checker. *Done when* every vector on the list passes.
 
-**Phase 4: rules and review.** Regex and validator packs for the US, UK, Canada, Australia, New Zealand and Ireland; term lists; custom patterns; repeats spread within a document. The review screen shows findings in their bands (auto, needs review) and lets the user approve or reject each. An approved finding spreads across the working set; a pending one stays in its own document. *Tests:* each pack is scored on the synthetic set in CI; a browser test approves and rejects findings, and checks that an approved finding spreads to document B while an unapproved one does not. *Done when* each rule type reaches the recall target set at the start of the phase, with no leak-suite regressions.
+**Phase 4: rules and review.** Regex and validator packs for the US, UK, Canada, Australia, New Zealand and Ireland; term lists; custom patterns; repeats spread within a document. The review screen shows findings in their bands (auto, needs review) and lets the user approve or reject each. An approved finding spreads across the working set; a pending one stays in its own document. The phase starts by listing, per country, the identifier types it covers and the source of each rule. Packs are compiled from YAML to JSON at build time. Custom patterns run in a worker that is stopped when it passes a time limit. *Tests:* each pack is scored on the synthetic set; a browser test approves and rejects findings, and checks that an approved finding spreads to document B while an unapproved one does not; a pattern that never finishes is stopped within the time limit. *Done when* each rule type's recall is measured and reported, with no leak-suite failures.
 
-**Phase 5: pseudonyms and restore.** Text adapter, placeholder surrogates, the vault and the restorer, with unknown placeholders flagged. *Tests:* paste text, pseudonymise, feed back an AI-style reply with changed case, brackets and an invented `PERSON_9`, and restore exactly. *Done when* the round trip passes on the synthetic text split with no wrong restores.
+**Phase 5: pseudonyms and restore.** Text adapter, placeholder surrogates, the vault and the restorer, with unknown placeholders flagged. *Tests:* paste text, pseudonymise, feed back an AI-style reply with changed case, brackets, quotes, markdown emphasis, a trailing possessive, a line break inside a placeholder and an invented `PERSON_9`, and restore exactly; `PERSON_1` is not matched inside `PERSON_10`; a small fixed set of real Claude and ChatGPT replies restores with no wrong restores. *Done when* the round trip passes on the synthetic text split and the real replies with no wrong restores.
 
-**Phase 6: NER models.** Models in the slots D10 chose, the device check, the level banner, the level recorded per document and on the certificate. *Tests:* recall per level on the real-document test split, reported nightly; a browser test forces each level and checks the banner. *Done when* every level's numbers are published and the banner shows on all three reference devices.
+**Phase 6: NER models.** Models in the slots D10 chose, the device check, the level banner, the level recorded per document and on the certificate. Models and libraries may load from their public hosts (for example the Hugging Face Hub or a CDN), each pinned to an exact revision; the app checks each downloaded file's hash before using it. The network-allowlist test lists those hosts and fails on any request to them that is not a plain download, and on any request to another host. D10's results (the model in each level, thresholds per type, the device-check limits) are recorded where the engine reads them. *Tests:* recall per level on the real-document test split, reported when run; a browser test forces each level and checks the banner. *Done when* each level's recall is measured and recorded and the banner shows on all three reference devices (run by hand).
 
-**Phase 7: OCR and images.** The OCR engine D6 chose; scanned PDFs, PNG and JPEG; the coordinate mapping from the HLD; pixel blanking with padding. *Tests:* scanned leak fixtures pass; a pixel check finds no ink left under any box. *Done when* the scanned and image splits meet their recall target with no leaks.
+**Phase 7: OCR and images.** The phase starts by writing the image leak-vector list (EXIF, XMP, embedded thumbnails, bytes after the image end marker) and its fixtures. The OCR engine D6 chose; scanned PDFs, PDFs mixing text pages and scans, PNG, JPEG and WebP (TIFF per the PRD decisions); the HLD's coordinate mapping, with pages rendered at 300 dpi, deskew before OCR and padded boxes; an existing invisible OCR layer merged with our own OCR. *Tests:* scanned and image leak fixtures pass; a pixel check finds no ink left under any padded box; a mixed PDF is handled page by page. *Done when* those pass and recall on the scanned and image splits is measured and reported.
 
-**Phase 8: accounts, quota and telemetry.** Auth0 sign-in with no passwords, the Accounts API, credits and the offline batch, the one-document trial, the published telemetry schema. *Tests:* a network test records every request during a full session and fails on any request outside the allowlist or any telemetry field outside the schema; a quota test runs out of credits and checks that existing data still opens. *Done when* those pass. This completes the MVP.
+**Phase 8: accounts, quota and telemetry.** Auth0 sign-in with no passwords, the Accounts API, credits and the offline batch, the one-document trial, the published telemetry schema. The phase starts by writing the telemetry schema (numbers, enums and ids only, no free text) and the network allowlist: our own hosts, plus the public download hosts from phase 6. *Tests:* a network test records every request during a full session and fails on any request outside the allowlist or any telemetry field outside the schema; a quota test runs out of credits and checks that existing data still opens. *Done when* those pass. This completes the MVP.
 
-**MVP gate.** Zero leaks across the leak suite and the dataset; recall per level published; pilot users from the lead persona finish an AI round trip unaided.
+**MVP gate.** Zero leaks across the leak suite and the dataset; recall per level published; pilot users from the PRD's lead user (the AI-assisted professional) finish an AI round trip unaided.
 
-**After the MVP (v1):** the DOCX leak-vector list and fixtures, then the DOCX adapter; Stripe billing and the paid plan; realistic fakes with the restore flags; the verifier browser extension; the India pack and a secrets pack.
+**After the MVP (v1):** the DOCX leak-vector list and fixtures, then the DOCX adapter and restore into DOCX; Stripe billing and the paid plan; realistic fakes with the restore flags; the verifier browser extension; the India pack and a secrets pack.
+
+## Requirement coverage
+
+P0 requirements and HLD controls the phases above do not name, and the phase that owns each:
+
+| Requirement | Phase |
+| --- | --- |
+| Content Security Policy; network-allowlist test; pipeline run with the network blocked | 0 |
+| RED-6 box colour or `[TYPE]` label; REV-6 preview; DOC-4 refuse encrypted or unknown files | 1 |
+| DOC-5 multi-file and folder import; REV-7 undo, redo and autosave; SET-1 manage sets; SET-3 entity view; vault lock | 2 |
+| AUD-1 run report; hidden-content options | 3 |
+| REV-5 never-hide list; REV-9 export blocked while findings need review; REV-10 search and mark; REV-11 keyboard review; threshold and strictness settings | 4 |
+| PSE-3 copy or download; PSE-10 restore into `.txt` and `.md` | 5 |
+| Detection-depth setting, as the level override | 6 |
+| DOC-4 for pages OCR cannot read | 7 |
+| Service worker and offline use; D9 release-hash items; ACC-5 plans page; ACC-6 account deletion | 8 |
+| WCAG 2.2 AA and keyboard operation | Every phase with UI |
+| Pseudonymised PDF output | Open: phase 5 or v1 (PRD owner) |
+
+**PRD decisions (18 Nov 2026)**
+
+- PSE-9 realistic surrogates and PSE-14 restore into DOCX are v1.
+- DOC-7 in the MVP covers PNG, JPEG and WebP; TIFF joins if phase 7 confirms MuPDF.js decodes it, otherwise v1; HEIC, GIF and BMP are v1.
+- Telemetry can be switched on and off by the user; it starts on.
 
 ## Testing strategy
 
-Integration tests come first because they find the bugs that matter here, leaks and broken flows, and because they survive refactoring. Unit tests are added later where they pay.
-
 | Layer | What it runs | Judged by | When |
 | --- | --- | --- | --- |
-| Browser flows | Playwright drives the real app through user steps on fixtures | Visible results and downloaded files | Every pull request |
-| Leak suite | One fixture per POC leak vector, then image and DOCX vectors | The outside checker (POC `verify.py`) | Every pull request |
-| Dataset scoring | The app's engine over the dataset splits | Recall and precision per type, per level, per name-origin group | Smoke subset per pull request; full set nightly |
-| Network allowlist | A full session with every request recorded | The allowlist and the telemetry schema | Every pull request from phase 8 |
-| Devices | The dataset run on the three reference devices | Speed and memory per level | Weekly from phase 6 |
-| Unit tests | Validators, checksums, matcher normalisation, key wrapping | Plain assertions | Added as needed |
+| Browser flows | Playwright drives the real app through user steps on fixtures | Visible results and downloaded files | Local test command |
+| Leak suite | One fixture per vector on our PDF list, then image vectors (DOCX in v1) | The outside checker | Local test command |
+| Dataset scoring | The app's engine over the dataset splits | Recall and precision per type, per level, per name-origin group | On demand |
+| Network allowlist | A full session with every request recorded | The allowlist and the telemetry schema | Local test command, from phase 0 |
+| Devices | The dataset run on the three reference devices | Speed and memory per level | On demand, from phase 6 |
+| Unit tests | Validators, checksums, the normaliser, the matcher, placeholder restore, key wrapping | Plain assertions | Local test command |
 
-Rules that keep this fast:
+**Test rules**
 
-- **Pull-request runs stay short.** Chromium only, the smoke subset of the dataset, the leak suite. WebKit and Firefox, the full dataset and the devices run nightly or weekly.
-- **A leak is never a flaky test.** Any leak failure blocks the merge and gets a fixture before it is fixed.
-- **Numbers go up, not sideways.** Dataset scores are stored per commit; a drop in recall on any type fails the nightly run.
-- **The engine runs headless too.** The same worker code runs in Playwright without the UI, so dataset scoring needs no clicking.
+- **One local command** runs the unit tests, browser flows, leak suite and network test.
+- **Leak failures are never skipped.** A leak gets a fixture before it is fixed.
+- **Nothing leaves the team without a green run.** No build goes to a user outside the team unless the local command passes.
+- **Scores inform, they do not block.** Dataset recall and precision are reported; a drop is investigated, never a reason a change cannot land.
+- **The engine runs headless too.** The same worker code runs without the UI, so dataset scoring needs no clicking.
 
 ## Checkpoints, risks and open questions
 
@@ -213,29 +240,37 @@ Rules that keep this fast:
 
 | Checkpoint | When | What we learn |
 | --- | --- | --- |
-| First browser test green | End of phase 1 | True removal works in a browser; MuPDF.js parity is answered |
+| First browser test green | End of phase 1 | True removal works in a browser for the phase 1 cases; whether MuPDF.js has the image-pixel option is known |
 | First outside user | End of phase 1 | Whether manual redaction alone is useful, from a person outside the team |
 | First dataset scores | Phase 4 | Where rules miss, by type and country |
 | Spike readouts | Before phases 6 and 7 | Which models and OCR engine, and what each device level can do |
-| AI round trip demo | End of phase 5 | The core promise, with the lead persona |
+| AI round trip demo | End of phase 5 | Whether pilot users finish paste, pseudonymise and restore unaided |
 | MVP gate | End of phase 8 | Zero leaks; pilot users finish unaided |
 
 **Risks**
 
 | Risk | Effect | Mitigation |
 | --- | --- | --- |
-| MuPDF.js lacks the image-pixel option | Scans under OCR text stay visible | Found in phase 1, not later; fallback is re-encoding the image |
-| Labelling 200 documents takes longer than planned | Phase 6 has no real test split | Start labelling as soon as phase 1 ships; pre-label with the POC; label in batches of 50 |
+| MuPDF.js lacks the image-pixel option | Pixels under boxes on embedded images and scans stay in the file | Found in phase 1; phase 1b re-encodes the image |
+| Labelling 200 documents takes longer than planned | Phase 6 has no real test split | Start labelling as soon as phase 1 ships; from phase 4, pre-label with the app's own rules; label in batches of 50 |
 | Real-document licences differ by country | Some sources are unusable | Check each source before collecting; the manifest records licences |
-| Synthetic data covers only US locales | Rules look better than they are elsewhere | Our generator fills the five other countries; real documents are spread across all six |
-| Models are too heavy for many devices | Most users get Basic detection | The spike's budgets per level; the banner tells them; manual review stays strong |
-| Browser differences (WebKit storage, WebGPU) | A flow works in one browser only | Nightly runs in WebKit and Firefox from phase 2 |
+| Synthetic data names the US as the only launch-country locale | Rules look better than they are elsewhere | Our generator fills the five other countries; real documents are spread across all six |
+| Models are too heavy for many devices | Most users get Basic detection | The spike's budgets per level; the banner tells them; manual marking and the working-set matcher work at every level |
+| Browser differences (WebKit storage, WebGPU) | A flow works in one browser only | The local suite is run in WebKit and Firefox before each phase is called done |
 
-**Open questions**
+**Decisions each phase waits for**
 
-- [ ] Team size and target dates, so phases can get durations.
-- [ ] Hosting for the static app, the Accounts API and the telemetry store. Not decided in the HLD; needed by phase 8, and a preview host by phase 0.
-- [ ] A new public repository for the AGPL app, with this POC repository kept private as the oracle and dataset tooling? Recommended.
-- [ ] Recall targets per entity type, to set at the start of phase 4.
-- [ ] The three reference devices: which machines, and who owns them.
+| Decision | Needed before | Proposed default |
+| --- | --- | --- |
+| UI framework, preview host | Phase 0 | — |
+| Storage engine and key setup | Phase 2 | As written in phase 2 |
+| Recall goals per entity type (reported, not a gate) | Phase 4 | 99% for structured identifiers (PRD success metrics) |
+| The three reference devices | Phase 6 | — |
+| Recall goals for the scanned and image splits (reported, not a gate) | Phase 7 | — |
+| Hosting for the Accounts API and telemetry store; whether the MVP needs metering before a paid plan exists | Phase 8 | — |
+
+**Other open questions**
+
+- [ ] Team size and target dates.
 - [ ] Who labels the real documents, and who does the 20% second pass.
+- [ ] One public AGPL app repository; real documents stay in private storage.
