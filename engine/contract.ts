@@ -12,6 +12,9 @@ export type PageIndex = Brand<number, "PageIndex">;
  */
 export type Points = Brand<number, "Points">;
 
+/** Numbers each file the UI opens, starting at 1. */
+export type FileNumber = Brand<number, "FileNumber">;
+
 export const isPageIndex = (value: unknown): value is PageIndex =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
 
@@ -31,8 +34,8 @@ export interface DocumentModel {
 // `file` numbers each file the UI opens; the worker echoes it in every reply so
 // the UI can drop a reply about a file the user has since replaced.
 export type EngineRequest =
-  | { readonly type: "open"; readonly file: number; readonly bytes: ArrayBuffer }
-  | { readonly type: "render"; readonly file: number; readonly page: PageIndex; readonly scale: number };
+  | { readonly type: "open"; readonly file: FileNumber; readonly bytes: ArrayBuffer }
+  | { readonly type: "render"; readonly file: FileNumber; readonly page: PageIndex; readonly scale: number };
 
 const engineErrorCodes = ["open-failed", "render-failed", "bad-message"] as const;
 
@@ -43,10 +46,10 @@ export interface EngineError {
 
 export type EngineMessage =
   | { readonly type: "ready" }
-  | { readonly type: "opened"; readonly file: number; readonly document: DocumentModel }
-  | { readonly type: "rendered"; readonly file: number; readonly page: PageIndex; readonly image: ImageData }
+  | { readonly type: "opened"; readonly file: FileNumber; readonly document: DocumentModel }
+  | { readonly type: "rendered"; readonly file: FileNumber; readonly page: PageIndex; readonly image: ImageData }
   // `file` is undefined only for a request the worker could not read.
-  | { readonly type: "error"; readonly file: number | undefined; readonly error: EngineError };
+  | { readonly type: "error"; readonly file: FileNumber | undefined; readonly error: EngineError };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -54,7 +57,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isPositiveNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
 
-const isFileNumber = (value: unknown): value is number =>
+export const isFileNumber = (value: unknown): value is FileNumber =>
   typeof value === "number" && Number.isInteger(value) && value > 0;
 
 export function parseEngineRequest(data: unknown): EngineRequest | undefined {

@@ -3,6 +3,13 @@ import { expect, type Page } from "@playwright/test";
 export const twoPagePdf = new URL("../../fixtures/two-pages.pdf", import.meta.url).pathname;
 export const noPagesPdf = new URL("../../fixtures/no-pages.pdf", import.meta.url).pathname;
 
+/** Serves `script` in place of the engine worker, to make the engine reply in ways the real one can't on demand. */
+export async function fakeEngine(page: Page, script: string): Promise<void> {
+  await page.route("**/assets/worker-*.js", (route) =>
+    route.fulfill({ contentType: "text/javascript", body: script }),
+  );
+}
+
 export async function openApp(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page.getByLabel("Open a PDF")).toBeEnabled();

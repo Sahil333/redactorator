@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   isAboutOlderFile,
+  isFileNumber,
   parseEngineMessage,
   type DocumentModel,
   type EngineRequest,
@@ -31,6 +32,9 @@ export function App() {
     const worker = new Worker(new URL("../engine/worker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
     const stop = (message: string) => {
+      // Fail closed: no later reply can redraw the page or re-enable the picker,
+      // and the worker's copy of the document is freed.
+      worker.terminate();
       setEngine("stopped");
       setError(message);
     };
@@ -84,10 +88,9 @@ export function App() {
     const picked = event.target.files?.[0];
     const worker = workerRef.current;
     if (picked === undefined || worker === undefined) return;
-    const file = ++latestFile.current;
-    setDocument(undefined);
-    setFirstPageImage(undefined);
-    setError(undefined);
+    const file = latestFile.current + 1;
+    if (!isFileNumber(file)) return;
+    latestFile.current = file;
     let bytes: ArrayBuffer;
     try {
       bytes = await picked.arrayBuffer();
@@ -97,6 +100,10 @@ export function App() {
     }
     // Only the latest pick may reach the worker, so its open document is always the one on screen.
     if (file !== latestFile.current) return;
+    // Clear the screen only now: until the worker gets this file it still holds the previous one.
+    setDocument(undefined);
+    setFirstPageImage(undefined);
+    setError(undefined);
     const request: EngineRequest = { type: "open", file, bytes };
     worker.postMessage(request, [bytes]);
   }

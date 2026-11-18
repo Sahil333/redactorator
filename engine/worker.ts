@@ -4,6 +4,7 @@ import {
   isPoints,
   parseEngineRequest,
   type EngineMessage,
+  type FileNumber,
   type PageIndex,
   type PageModel,
 } from "./contract";
@@ -29,11 +30,11 @@ function pageModel(document: mupdf.Document, index: number): PageModel {
   }
 }
 
-function openFailed(file: number, message: string): EngineMessage {
+function openFailed(file: FileNumber, message: string): EngineMessage {
   return { type: "error", file, error: { code: "open-failed", message } };
 }
 
-function open(file: number, bytes: ArrayBuffer): EngineMessage {
+function open(file: FileNumber, bytes: ArrayBuffer): EngineMessage {
   openDocument?.destroy();
   openDocument = undefined;
   let document: mupdf.Document | undefined;
@@ -57,11 +58,11 @@ function open(file: number, bytes: ArrayBuffer): EngineMessage {
   }
 }
 
-function renderFailed(file: number, message: string): void {
+function renderFailed(file: FileNumber, message: string): void {
   post({ type: "error", file, error: { code: "render-failed", message } });
 }
 
-function render(file: number, index: PageIndex, scale: number): void {
+function render(file: FileNumber, index: PageIndex, scale: number): void {
   const document = openDocument;
   let page: mupdf.Page | undefined;
   let pixmap: mupdf.Pixmap | undefined;
