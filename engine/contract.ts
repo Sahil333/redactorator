@@ -1,0 +1,110 @@
+// The engine's shared types and the messages between the UI and the engine worker.
+
+declare const brand: unique symbol;
+type Brand<T, Name extends string> = T & { readonly [brand]: Name };
+
+/** Zero-based page index. A page number shown to a user is this plus one. */
+export type PageIndex = Brand<number, "PageIndex">;
+
+/**
+ * A length in PDF points in MuPDF's page space: origin top-left, y grows down,
+ * page rotation and crop box already applied. Every box in the engine uses it.
+ */
+export type Points = Brand<number, "Points">;
+
+export const isPageIndex = (value: unknown): value is PageIndex =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+export const isPoints = (value: unknown): value is Points =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+export interface PageModel {
+  readonly index: PageIndex;
+  readonly width: Points;
+  readonly height: Points;
+}
+
+export interface DocumentModel {
+  readonly pages: readonly PageModel[];
+}
+
+export type EngineRequest =
+  | { readonly type: "open"; readonly bytes: ArrayBuffer }
+  | { readonly type: "render"; readonly page: PageIndex; readonly scale: number };
+
+export interface EngineError {
+  readonly code: "open-failed" | "render-failed" | "bad-message";
+  readonly message: string;
+}
+
+export type EngineMessage =
+  | { readonly type: "ready" }
+  | { readonly type: "opened"; readonly document: DocumentModel }
+  | { readonly type: "rendered"; readonly page: PageIndex; readonly image: ImageData }
+  | { readonly type: "error"; readonly error: EngineError };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isPositiveNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0;
+
+export function parseEngineRequest(data: unknown): EngineRequest | undefined {
+  if (!isRecord(data)) return undefined;
+  if (data.type === "open" && data.bytes instanceof ArrayBuffer) {
+    return { type: "open", bytes: data.bytes };
+  }
+  if (data.type === "render" && isPageIndex(data.page) && isPositiveNumber(data.scale)) {
+    return { type: "render", page: data.page, scale: data.scale };
+  }
+  return undefined;
+}
+
+function parsePageModel(value: unknown): PageModel | undefined {
+  if (!isRecord(value)) return undefined;
+  const { index, width, height } = value;
+  if (!isPageIndex(index) || !isPoints(width) || !isPoints(height)) return undefined;
+  return { index, width, height };
+}
+
+function parseDocumentModel(value: unknown): DocumentModel | undefined {
+  if (!isRecord(value) || !Array.isArray(value.pages)) return undefined;
+  const pages: PageModel[] = [];
+  for (const page of value.pages) {
+    const model = parsePageModel(page);
+    if (model === undefined) return undefined;
+    pages.push(model);
+  }
+  return { pages };
+}
+
+function parseEngineError(value: unknown): EngineError | undefined {
+  if (!isRecord(value) || typeof value.message !== "string") return undefined;
+  const { code, message } = value;
+  if (code === "open-failed" || code === "render-failed" || code === "bad-message") {
+    return { code, message };
+  }
+  return undefined;
+}
+
+export function parseEngineMessage(data: unknown): EngineMessage | undefined {
+  if (!isRecord(data)) return undefined;
+  switch (data.type) {
+    case "ready":
+      return { type: "ready" };
+    case "opened": {
+      const document = parseDocumentModel(data.document);
+      return document && { type: "opened", document };
+    }
+    case "rendered":
+      return isPageIndex(data.page) && data.image instanceof ImageData
+        ? { type: "rendered", page: data.page, image: data.image }
+        : undefined;
+    case "error": {
+      const error = parseEngineError(data.error);
+      return error && { type: "error", error };
+    }
+    default:
+      return undefined;
+  }
+}

@@ -1,0 +1,14 @@
+body {
+  margin: 0;
+  padding: 16px;
+  font-family: system-ui, sans-serif;
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+canvas {
+  display: block;
+  margin-top: 16px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+}
