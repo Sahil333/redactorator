@@ -117,6 +117,5 @@ export function parseEngineMessage(data: unknown): EngineMessage | undefined {
   }
 }
 
-/** True for a reply about a file the user has since replaced. */
 export const isAboutOlderFile = (message: EngineMessage, latestFile: number): boolean =>
   message.type !== "ready" && message.file !== undefined && message.file !== latestFile;
