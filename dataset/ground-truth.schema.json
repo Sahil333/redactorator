@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://redactorator.app/schema/ground-truth/1",
+  "title": "Redactorator ground truth, version 1",
+  "description": "The labelled personal data in one document. See dataset/README.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document", "entities", "occurrences", "hidden_occurrences"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "licence", "country", "format", "split", "sha256", "box_unit"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "licence": { "type": "string", "minLength": 1 },
+        "country": { "enum": ["US", "UK", "CA", "AU", "NZ", "IE"] },
+        "format": {
+          "oneOf": [
+            { "const": "born-digital-pdf", "title": "Born-digital PDF" },
+            { "const": "scanned-pdf", "title": "Scanned PDF" },
+            { "const": "image", "title": "Image" },
+            { "const": "text", "title": "Text" }
+          ]
+        },
+        "split": {
+          "oneOf": [
+            { "const": "development", "title": "Development" },
+            { "const": "test", "title": "Test" }
+          ]
+        },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "box_unit": { "enum": ["pt", "px", "none"] }
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": {
+            "anyOf": [{ "$ref": "#/$defs/entityType" }, { "type": "string", "pattern": "^custom:\\S.*$" }]
+          },
+          "value": { "type": "string", "minLength": 1 },
+          "link_id": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "occurrences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entity_id", "page", "boxes"],
+        "properties": {
+          "entity_id": { "type": "string" },
+          "page": { "type": "integer", "minimum": 0 },
+          "start": { "type": "integer", "minimum": 0 },
+          "end": { "type": "integer", "minimum": 1 },
+          "boxes": { "type": "array", "items": { "$ref": "#/$defs/box" } }
+        },
+        "dependentRequired": { "start": ["end"], "end": ["start"] }
+      }
+    },
+    "hidden_occurrences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entity_id", "carrier", "location"],
+        "properties": {
+          "entity_id": { "type": "string" },
+          "carrier": { "enum": ["metadata", "annotation", "form-field", "hidden-layer"] },
+          "location": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "entityType": {
+      "description": "DET-1's entity types, plus the three a drawn box needs. The app shows each title.",
+      "oneOf": [
+        { "const": "person", "title": "Person" },
+        { "const": "address", "title": "Address" },
+        { "const": "email", "title": "Email" },
+        { "const": "phone", "title": "Phone" },
+        { "const": "date-of-birth", "title": "Date of birth" },
+        { "const": "government-id", "title": "Government ID" },
+        { "const": "financial-account", "title": "Financial account" },
+        { "const": "payment-card", "title": "Payment card" },
+        { "const": "ip-address", "title": "IP address" },
+        { "const": "credential", "title": "Credential" },
+        { "const": "url", "title": "URL" },
+        { "const": "signature", "title": "Signature" },
+        { "const": "photo", "title": "Photo" },
+        { "const": "other", "title": "Other" }
+      ]
+    },
+    "box": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x0", "y0", "x1", "y1"],
+      "properties": {
+        "x0": { "type": "number" },
+        "y0": { "type": "number" },
+        "x1": { "type": "number" },
+        "y1": { "type": "number" }
+      }
+    }
+  }
+}

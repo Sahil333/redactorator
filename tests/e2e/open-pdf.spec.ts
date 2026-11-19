@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./coverage";
 import { inkedPixels, noPagesPdf, openApp, openPdf, twoPagePdf } from "./app";
 
 test("opening a PDF renders page 1", async ({ page }) => {
@@ -10,7 +11,7 @@ test("opening a PDF renders page 1", async ({ page }) => {
   await expect(firstPage).toBeVisible();
   // 612 x 792 pt (US Letter) shown at 96/72 CSS px per point.
   expect(await firstPage.boundingBox()).toMatchObject({ width: 816, height: 1056 });
-  await expect.poll(() => inkedPixels(page)).toBeGreaterThan(500);
+  await expect.poll(() => inkedPixels(page.getByRole("img", { name: "Page 1" }))).toBeGreaterThan(500);
 });
 
 test("a PDF with no pages shows an error", async ({ page }) => {

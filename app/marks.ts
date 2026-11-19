@@ -1,0 +1,69 @@
+import type { Box, Edit, PageIndex } from "../engine/contract";
+import { markTypeLabel, type MarkType } from "./markTypes";
+import type { Selection } from "./selection";
+
+export type Tool = "text" | "box";
+
+// A box smaller than this on either side is taken as a stray click, and the keyboard
+// cannot shrink one below it.
+export const MIN_BOX_POINTS = 3;
+
+/** The part of a text mark on one page: a range of that page's text, and one box per line. */
+export interface TextPiece {
+  readonly page: PageIndex;
+  readonly start: number;
+  readonly end: number;
+  readonly boxes: readonly Box[];
+}
+
+/** What a mark covers: text, in one piece per page it runs across, or a drawn box. */
+export type MarkTarget =
+  | { readonly kind: "text"; readonly text: string; readonly pieces: readonly [TextPiece, ...TextPiece[]] }
+  | { readonly kind: "box"; readonly page: PageIndex; readonly box: Box };
+
+export type TextTarget = Extract<MarkTarget, { kind: "text" }>;
+
+export interface Mark {
+  readonly id: number;
+  readonly type: MarkType;
+  readonly target: MarkTarget;
+  /** Labelling mode only: marks of the same person or thing share one. Empty for none. */
+  readonly linkId: string;
+}
+
+/** A mark the user has drawn but not yet given a type, and for text the selection it came from. */
+export interface Pending {
+  readonly target: MarkTarget;
+  readonly selection: Selection | undefined;
+}
+
+export const markPages = (target: MarkTarget): readonly PageIndex[] =>
+  target.kind === "box" ? [target.page] : target.pieces.map((piece) => piece.page);
+
+/** Where a mark is drawn on one page. */
+export function boxesOn(target: MarkTarget, page: PageIndex): readonly Box[] {
+  if (target.kind === "box") return target.page === page ? [target.box] : [];
+  return target.pieces.find((piece) => piece.page === page)?.boxes ?? [];
+}
+
+export const firstPage = (target: MarkTarget): PageIndex =>
+  target.kind === "box" ? target.page : target.pieces[0].page;
+
+/** "page 2", or "pages 2–3" for text that runs across pages. */
+export function pagesLabel(target: MarkTarget): string {
+  const first = firstPage(target) + 1;
+  const last = target.kind === "text" ? (target.pieces.at(-1)?.page ?? 0) + 1 : first;
+  return last === first ? `page ${first}` : `pages ${first}–${last}`;
+}
+
+/** The marked text, or "Box". Shown only in the marks list, never sent anywhere. */
+export const markName = (mark: Pick<Mark, "target">): string =>
+  mark.target.kind === "text" ? mark.target.text : "Box";
+
+/** The engine's edits for a mark: one per page it covers. */
+export function toEdits(mark: Mark): Edit[] {
+  const label = markTypeLabel(mark.type);
+  const { target } = mark;
+  if (target.kind === "box") return [{ kind: "box", page: target.page, box: target.box, label }];
+  return target.pieces.map(({ page, start, end }) => ({ kind: "text", page, start, end, label }));
+}
