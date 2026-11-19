@@ -1,0 +1,22 @@
+[project]
+name = "redactorator-oracle"
+version = "0"
+description = "The outside checker: judges the app's output PDFs with tools that share no code with MuPDF."
+requires-python = ">=3.12"
+dependencies = [
+  "pdfminer.six==20260107",
+  "pillow==13.0.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==9.2.0",
+  "pikepdf==10.18.2",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

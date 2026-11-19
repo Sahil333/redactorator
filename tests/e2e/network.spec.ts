@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./coverage";
 import { inkedPixels, openApp, openPdf, twoPagePdf } from "./app";
 
 // The same server under another origin: reachable, so only the policy can stop a request to it.
@@ -10,7 +11,7 @@ test("every request in a session goes to the app's own origin", async ({ page, c
 
   await openApp(page);
   await openPdf(page, twoPagePdf);
-  await expect.poll(() => inkedPixels(page)).toBeGreaterThan(0);
+  await expect.poll(() => inkedPixels(page.getByRole("img", { name: "Page 1" }))).toBeGreaterThan(0);
 
   const appOrigin = new URL(baseURL ?? "").origin;
   // The engine worker fetches the WebAssembly file, so seeing it shows worker traffic is recorded too.
@@ -25,7 +26,7 @@ test("a PDF opens and renders with the network off", async ({ page, context }) =
   await openPdf(page, twoPagePdf);
 
   await expect(page.getByRole("status")).toHaveText("Page 1 of 2");
-  await expect.poll(() => inkedPixels(page)).toBeGreaterThan(500);
+  await expect.poll(() => inkedPixels(page.getByRole("img", { name: "Page 1" }))).toBeGreaterThan(500);
 });
 
 test("the content security policy blocks requests to other origins from the page and the worker", async ({

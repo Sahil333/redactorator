@@ -1,0 +1,20 @@
+[project]
+name = "redactorator-dataset"
+version = "0"
+description = "Dataset tools: the ground-truth validator, and later the synthetic document generator."
+requires-python = ">=3.12"
+dependencies = [
+  "jsonschema==4.26.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==9.2.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

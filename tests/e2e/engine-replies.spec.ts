@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./coverage";
 import { fakeEngine, noPagesPdf, openApp, openPdf, twoPagePdf } from "./app";
 
 test("an engine that fails to start says so and disables the picker", async ({ page }) => {

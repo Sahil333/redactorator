@@ -1,7 +1,55 @@
 @import "tailwindcss";
 
+/* Warm paper: off-white surfaces, ink type, red for marks. Every text colour
+   here reaches WCAG AA (4.5:1) on paper, paper-raised and paper-sunk, and
+   field, the border of a text field, reaches 3:1 on all of them. */
+@theme {
+  --color-paper: #f7f3ea;
+  --color-paper-raised: #fffdf8;
+  --color-paper-sunk: #ebe4d6;
+  --color-rule: #dcd2bf;
+  --color-field: #857a69;
+  --color-ink: #1f1b16;
+  --color-ink-muted: #5b5347;
+  --color-accent: #2c5a85;
+  --color-accent-wash: #e3ebf2;
+  --color-mark: #b3261e;
+  --color-mark-wash: #b3261e29;
+  --color-pass: #2f6b3a;
+  --color-pass-wash: #e4efe2;
+  --color-fail-wash: #f6e1dd;
+
+  --font-serif: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
 @layer base {
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
   body {
-    @apply bg-zinc-100 p-4 font-sans text-zinc-900;
+    @apply bg-paper font-sans text-sm text-ink antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+}
+
+/* The appearance settings open under their button. Without anchor positioning the
+   popover keeps its default place, the middle of the window. */
+@supports (position-area: bottom) {
+  .appearance-anchor {
+    anchor-name: --appearance;
+  }
+
+  .appearance-popover {
+    position-anchor: --appearance;
+    position-area: bottom span-left;
+    inset: auto;
+    margin: 6px 0 0;
   }
 }
