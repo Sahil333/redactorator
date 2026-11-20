@@ -41,8 +41,15 @@ function Thumbnail({ image, onVisible }: { readonly image: ImageData | undefined
 }
 
 export function Thumbnails({ id, width, pages, images, currentPage, markedPages, onVisible }: ThumbnailsProps) {
+  const navRef = useRef<HTMLElement>(null);
+
+  // The list follows the pages: the current page's thumbnail scrolls into view when it changes.
+  useEffect(() => {
+    navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+  }, [currentPage]);
+
   return (
-    <nav id={id} aria-label="Pages" className="overflow-y-auto bg-paper py-4" style={{ width, paddingInline: PADDING_X }}>
+    <nav ref={navRef} id={id} aria-label="Pages" className="overflow-y-auto bg-paper py-4" style={{ width, paddingInline: PADDING_X }}>
       <ol className="flex flex-col gap-4">
         {pages.map((page) => {
           const pageNumber = page.index + 1;
