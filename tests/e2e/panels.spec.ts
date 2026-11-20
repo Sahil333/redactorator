@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { inkedPixels, janeRoe, markText, oneWordPdf, openApp, openPdf, twoPagePdf } from "./app";
+import { crossPagePdf, inkedPixels, janeRoe, markText, oneWordPdf, openApp, openPdf, twoPagePdf } from "./app";
 
 const thumbnail = (page: Page, pageNumber: number) =>
   page.getByRole("link", { name: `Page ${pageNumber}` }).locator("canvas");
@@ -72,6 +72,20 @@ test("the status and page list follow the page in view", async ({ page }) => {
 
   await expect(page.getByRole("status")).toHaveText("Page 2 of 2");
   await expect(page.getByRole("link", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+});
+
+test("the page list scrolls to keep the page in view on screen", async ({ page }) => {
+  // Short enough that page 3's thumbnail starts below the page list's fold.
+  await page.setViewportSize({ width: 1280, height: 400 });
+  await openApp(page);
+  await openPdf(page, crossPagePdf);
+  const third = page.getByRole("link", { name: "Page 3" });
+  await expect(third).not.toBeInViewport();
+
+  await page.locator("#page-3").scrollIntoViewIfNeeded();
+
+  await expect(third).toHaveAttribute("aria-current", "page");
+  await expect(third).toBeInViewport();
 });
 
 test("nothing spills out sideways with both panels at their narrowest", async ({ page }) => {
