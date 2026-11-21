@@ -204,6 +204,25 @@ TABLE = [("Engagement", ["Design and build"]),
          ("Monthly fee", ["Fifty thousand rupees each month"])]
 
 
+# long.pdf: nine pages with one line each, for tests that scroll through more pages than the
+# app keeps drawn at full detail.
+LONG_PAGES = 9
+
+
+def long_document() -> bytes:
+    first_content = 3 + LONG_PAGES + 1
+    page = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
+    kids = " ".join(f"{3 + n} 0 R" for n in range(LONG_PAGES))
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        f"<< /Type /Pages /Kids [{kids}] /Count {LONG_PAGES} >>".encode(),
+        *[(page % (3 + LONG_PAGES, first_content + n)).encode() for n in range(LONG_PAGES)],
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        *[stream("", line(72, 700, 12, f"Page {n + 1} of {LONG_PAGES}").encode()) for n in range(LONG_PAGES)],
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
 def table() -> bytes:
     text = line(64, 730, 12, "Terms of the engagement")
     for row, (left, right) in enumerate(TABLE):
@@ -229,6 +248,6 @@ def encrypted() -> bytes:
 if __name__ == "__main__":
     for name, build in [("one-word", one_word), ("image", image), ("rotated-cropped", rotated_cropped),
                         ("encrypted", encrypted), ("cross-page", cross_page), ("masked-image", masked_image),
-                        ("table", table)]:
+                        ("table", table), ("long", long_document)]:
         (FIXTURES / f"{name}.pdf").write_bytes(build())
         print(f"wrote fixtures/{name}.pdf")

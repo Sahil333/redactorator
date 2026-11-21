@@ -105,7 +105,7 @@ test("switching to Draw box drops a text selection", async ({ page }) => {
 test("the keyboard carries a selection onto the next page", async ({ page }) => {
   await openApp(page);
   await openPdf(page, crossPagePdf);
-  await expect(page.getByRole("img", { name: "Page 2" })).toBeAttached();
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
   const said = page.getByText(/^Selected:/);
 
   await tabTo(page, page.getByRole("application", { name: "Page 1, select text" }));

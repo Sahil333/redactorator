@@ -1,42 +1,56 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { Mark, Pending } from "./marks";
-import { builtInMarkTypes, type MarkType, type MarkTypeOption } from "./markTypes";
+import { builtInMarkTypes, customMarkType, type MarkType, type MarkTypeOption } from "./markTypes";
 
 export type Marks = ReturnType<typeof useMarks>;
 
 /**
- * The marks on the open document, the new mark waiting for its type, and the types on offer.
- * `onChange` runs before any change that alters what an apply would write.
+ * How a change to the marks is kept. An `edit` alters what an apply would write and can be
+ * undone; a `label` is labelling data only.
  */
-export function useMarks(onChange: () => void) {
-  const nextId = useRef(1);
-  const [marks, setMarks] = useState<readonly Mark[]>([]);
+export type MarksChange = (update: (current: readonly Mark[]) => readonly Mark[], kind: "edit" | "label") => void;
+
+const nextId = (marks: readonly Mark[]) => Math.max(0, ...marks.map((mark) => mark.id)) + 1;
+
+/**
+ * The open document's marks, the new mark waiting for its type, and the types on offer.
+ * The marks themselves belong to the project; this hook changes them through `change`.
+ */
+export function useMarks(
+  /** Names the open document: a new one starts with no pending mark or highlight. */
+  documentKey: string | undefined,
+  marks: readonly Mark[],
+  change: MarksChange,
+  customTypes: readonly string[],
+  onCustomType: (name: string) => void,
+) {
   const [pending, setPending] = useState<Pending | undefined>(undefined);
   const [highlighted, setHighlighted] = useState<Mark["id"] | undefined>(undefined);
-  const [customTypes, setCustomTypes] = useState<readonly MarkTypeOption[]>([]);
   const [lastType, setLastType] = useState<MarkType>("person");
-  const typeOptions = [...builtInMarkTypes, ...customTypes];
+  const [shownKey, setShownKey] = useState(documentKey);
+  if (shownKey !== documentKey) {
+    setShownKey(documentKey);
+    setPending(undefined);
+    setHighlighted(undefined);
+  }
+  const typeOptions = [...builtInMarkTypes, ...customTypes.map(customMarkType)];
 
   function rememberType(type: MarkTypeOption) {
     setLastType(type.id);
-    if (!typeOptions.some((option) => option.id === type.id)) setCustomTypes((current) => [...current, type]);
-  }
-
-  function change(update: (current: readonly Mark[]) => readonly Mark[]) {
-    onChange();
-    setMarks(update);
+    if (!typeOptions.some((option) => option.id === type.id)) onCustomType(type.label);
   }
 
   function add(type: MarkTypeOption) {
     if (pending === undefined) return;
     rememberType(type);
-    setMarks((current) => [...current, { id: nextId.current++, type: type.id, linkId: "", ...pending }]);
+    const { target } = pending;
+    change((current) => [...current, { id: nextId(current), type: type.id, linkId: "", target }], "edit");
     setPending(undefined);
   }
 
   function retype(mark: Mark, type: MarkTypeOption) {
     rememberType(type);
-    change((current) => current.map((each) => (each === mark ? { ...each, type: type.id } : each)));
+    change((current) => current.map((each) => (each.id === mark.id ? { ...each, type: type.id } : each)), "edit");
   }
 
   return {
@@ -45,18 +59,13 @@ export function useMarks(onChange: () => void) {
     highlighted,
     typeOptions,
     lastType,
-    clear: () => {
-      setMarks([]);
-      setPending(undefined);
-    },
     propose: setPending,
     cancel: () => setPending(undefined),
     add,
     retype,
-    remove: (removed: Mark) => change((current) => current.filter((mark) => mark !== removed)),
-    // A link id is labelling data only: it changes nothing an apply writes.
+    remove: (removed: Mark) => change((current) => current.filter((mark) => mark.id !== removed.id), "edit"),
     link: (mark: Mark, linkId: string) =>
-      setMarks((current) => current.map((each) => (each === mark ? { ...each, linkId } : each))),
+      change((current) => current.map((each) => (each.id === mark.id ? { ...each, linkId } : each)), "label"),
     highlight: setHighlighted,
   };
 }

@@ -52,7 +52,7 @@ export function LabelExport({ last, onExport, onClose }: LabelExportProps) {
       className="m-auto w-96 rounded-lg border border-rule bg-paper-raised p-5 text-ink shadow-[0_8px_32px_rgb(31_27_22/0.24)] backdrop:bg-ink/30"
     >
       <form onSubmit={onSubmit} className="flex flex-col gap-3">
-        <h2 id="label-export-title" className="font-serif text-lg">
+        <h2 id="label-export-title" className="font-display font-semibold text-lg">
           Export labels
         </h2>
         <p className="text-ink-muted">Saves this document's marks as a ground-truth file.</p>

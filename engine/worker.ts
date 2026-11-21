@@ -11,6 +11,7 @@ import {
   type EngineError,
   type EngineMessage,
   type FileNumber,
+  type InspectionNumber,
   type PageChar,
   type PageIndex,
   type PageModel,
@@ -72,9 +73,8 @@ function closeAll(): void {
   opened = undefined;
 }
 
-function open(file: FileNumber, bytes: ArrayBuffer): void {
-  closeAll();
-  const copy = new Uint8Array(bytes.slice(0));
+/** Opens a PDF the engine can work on, or says why it can't. */
+function load(bytes: ArrayBuffer): { readonly document: mupdf.PDFDocument; readonly model: DocumentModel } | EngineError {
   let document: mupdf.Document | undefined;
   try {
     document = mupdf.Document.openDocument(bytes, "application/pdf");
@@ -82,22 +82,41 @@ function open(file: FileNumber, bytes: ArrayBuffer): void {
     // DOC-4: an encrypted file is refused, never processed in part.
     if (document.needsPassword() || !document.getTrailer().get("Encrypt").isNull()) {
       document.destroy();
-      fail(file, "encrypted", "This PDF is encrypted. Remove its password in the app that made it, then open it again.");
-      return;
+      return { code: "encrypted", message: "This PDF is encrypted. Remove its password in the app that made it, then open it again." };
     }
     const model = documentModel(document);
     if (model === undefined) {
       document.destroy();
-      fail(file, "open-failed", "This PDF has no pages. Choose another file.");
-      return;
+      return { code: "open-failed", message: "This PDF has no pages. Choose another file." };
     }
-    opened = { file, bytes: copy, original: document, output: undefined };
-    post({ type: "opened", file, document: model });
+    return { document, model };
   } catch {
     // A file that opens but fails later is still held in WebAssembly memory until destroyed.
     document?.destroy();
-    fail(file, "open-failed", "This file could not be opened as a PDF. Check that it is a PDF and try again.");
+    return { code: "open-failed", message: "This file could not be opened as a PDF. Check that it is a PDF and try again." };
   }
+}
+
+function inspect(inspection: InspectionNumber, bytes: ArrayBuffer): void {
+  const loaded = load(bytes);
+  if ("code" in loaded) {
+    post({ type: "refused", inspection, error: loaded });
+    return;
+  }
+  loaded.document.destroy();
+  post({ type: "inspected", inspection, pages: loaded.model.pages.length });
+}
+
+function open(file: FileNumber, bytes: ArrayBuffer): void {
+  closeAll();
+  const copy = new Uint8Array(bytes.slice(0));
+  const loaded = load(bytes);
+  if ("code" in loaded) {
+    fail(file, loaded.code, loaded.message);
+    return;
+  }
+  opened = { file, bytes: copy, original: loaded.document, output: undefined };
+  post({ type: "opened", file, document: loaded.model });
 }
 
 function current(file: FileNumber): Opened | undefined {
@@ -584,6 +603,9 @@ addEventListener("message", (event: MessageEvent<unknown>) => {
     return;
   }
   switch (request.type) {
+    case "inspect":
+      inspect(request.inspection, request.bytes);
+      break;
     case "open":
       open(request.file, request.bytes);
       break;

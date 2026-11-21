@@ -39,7 +39,7 @@ export function AppearanceSettings({ appearance, onAppearance }: AppearanceSetti
         aria-labelledby={titleId}
         className="appearance-popover w-72 rounded-md border border-rule bg-paper-raised p-4 text-ink shadow-[0_4px_16px_rgb(31_27_22/0.16)]"
       >
-        <h2 id={titleId} className="mb-2 font-serif text-base">
+        <h2 id={titleId} className="mb-2 font-display font-semibold text-base">
           Appearance
         </h2>
         <div role="radiogroup" aria-label="Box colour" className="flex flex-wrap items-center gap-2">

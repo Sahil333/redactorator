@@ -178,7 +178,7 @@ rules:
 
 ## Pseudonymisation and the vault
 
-A surrogate is assigned once per entity per working set and stored in the working set's encrypted store in the browser; restoring is a lookup in the other direction.
+A surrogate is assigned once per entity per working set and stored in the working set's store on the user's device; restoring is a lookup in the other direction.
 
 **Making surrogates**
 
@@ -200,32 +200,34 @@ A surrogate is assigned once per entity per working set and stored in the workin
 
 **The vault**
 
-- The vault is the surrogate-to-original columns of the working set's entity registry, not a separate store. Each working set's records (entities, surrogates, decisions and policy) are kept in IndexedDB, encrypted per record with AES-GCM; its originals and each document's extracted text model are encrypted files in the origin-private file system (see Data model and storage).
-- One random data key, generated with Web Crypto, encrypts the set. It is wrapped by a key derived from the vault passphrase (PBKDF2), or, when no passphrase is set, kept as a non-extractable key in IndexedDB. Without a passphrase, encryption protects against other sites and casual inspection of the disk, not against someone using the unlocked browser profile.
-- Purging a working set deletes its records, its files and its wrapped key. Exporting a set writes one encrypted file, re-encrypted under a key derived from an export passphrase that is shared out of band.
-- Browser storage can be cleared by the user or evicted by the browser, and a lost vault cannot be rebuilt. The app asks for persistent storage and prompts for a vault backup after pseudonymising.
+- The vault is the surrogate-to-original columns of the working set's entity registry, not a separate store. The registry is a JSON file in the working set's folder (see Data model and storage).
+- v1 does not encrypt it, and has no vault passphrase (decided 21 Nov 2026). A forgotten passphrase would lose every set with no way back, and the folder sits with the user's other files, or in browser storage private to our site.
+- Purging a working set deletes its folder. Exporting a set is copying that folder.
+- Browser storage can be cleared by the user or evicted by the browser, and a lost vault cannot be rebuilt. The sets can live in a folder on the user's disk instead; until one is picked the app asks for persistent storage, and prompts for a vault backup after pseudonymising.
 
-**What is stored for redacted entities** is decided (D3). Carrying a redaction to the next document needs something to match on, so the normalised value is kept in the encrypted registry with no surrogate, because the originals sit in the same encrypted store anyway. The stricter alternative, a keyed hash only, was rejected: it limits matching to exact repeats and rules out linking spellings.
+**What is stored for redacted entities** is decided (D3). Carrying a redaction to the next document needs something to match on, so the normalised value is kept in the registry with no surrogate, because the originals sit in the same store anyway. The stricter alternative, a keyed hash only, was rejected: it limits matching to exact repeats and rules out linking spellings.
 
 ## Working sets
 
 Consistency across documents comes from one mechanism: decisions attach to entities, not to places in files, and every document is rendered from the same entity registry.
 
-**Example: a manual redaction spreads to the whole set.** No detector flagged "Project Falcon". The user selects it in the third contract and marks it redacted. From then on it is redacted in every document of that working set: the ones already imported and any imported later. The review list shows each place it was found. A detection spreads the same way once the user approves it; until then it stays in its own document.
+**Example: a manual redaction spreads to the whole set.** No detector flagged "Project Falcon". The user selects it in the third contract, marks it redacted and approves the contract. From then on it is redacted in every document of that working set: the ones already imported and any imported later. The review list shows each place it was found. A detection spreads the same way once the user approves it and its document; until then it stays in its own document.
 
 1. **Import.** The reader produces the document model. Detectors run, including the working-set matcher, which finds every known spelling of approved entities.
 2. **Link.** The resolver ties each finding to an entity by normalised value (case, spacing and number formatting ignored), matched at word boundaries. An unknown value becomes a new entity with the policy's default action, pending until the user approves it.
-3. **Decide.** The user approves a detection, changes an action on an entity, or marks text by hand in any document, or the policy sets it. The change is one row in the registry. Approving a detection or marking text by hand makes the entity approved, and the working-set matcher searches every document already in the set for its other occurrences. The search runs in the worker against each document's stored text model, so no file is parsed again. It is batched rather than run per click, and runs at the latest when the user leaves the current document. Opening or exporting any document first applies every pending spread.
-4. **Render.** Any document with an occurrence of that entity is now stale. Its output is rebuilt from the original when it is next viewed or exported.
+3. **Decide.** The user approves a detection, changes an action on an entity, or marks text by hand in any document, or the policy sets it. The change is one row in the registry, and its document goes to In review. Each document is Not started, In review or Approved.
+4. **Spread on approval.** When the user approves a document, after a heads-up naming the documents it will change, its decisions (marks, values it stopped hiding, approved detections) become the set's, and the working-set matcher searches every other document for their occurrences. Nothing spreads before approval. The search runs in the worker against each document's stored text model, so no file is parsed again. A document the spread changes goes back to In review, and opening it offers a review of only what the spread brought in.
+5. **Render.** Any document with an occurrence of that entity is now stale ("Changed since download"). Its output is rebuilt from the original when it is next viewed or saved.
 
 Because outputs are derived (principle 4), "redacted in one document means redacted in all" needs no code that patches outputs: the registry changed, the matcher found the occurrences, and the outputs follow.
 
-Two limits to be honest about:
+Limits to be honest about:
 
 - **Linking spellings** ("J. Roe" to "Jane Roe") is rule-based in v1: shared surname plus matching initial is suggested, and the user confirms. Automatic linking of normalised matches is in the MVP.
 - **Only approved entities spread across documents.** A detection the user has not approved stays in the document where it was found. It is redacted there by default, failing toward privacy, but touches no other document. Within that document, only values that are validated or found by two detectors spread to repeats, so "Bill" does not redact every "bill".
-- **Approval spreads it to the whole set.** Approving a detection and marking text by hand both count as approval. The value then spreads to every normalised match at word boundaries in the set, even when it is short. The review list shows each match, so a wrong hit can be undone.
-- **A box with no text behind it** (drawn over a signature or a photo) applies only to that document, because there is nothing to match in the others.
+- **Approving the document spreads it to the whole set.** Its values then spread to every normalised match at word boundaries in the set, even when short. The review list shows each match, so a wrong hit can be undone.
+- **A box over an image** (a logo, a pasted signature) is kept as drawn, measured in the image's own frame. On approval it spreads to the same image, or a near-identical copy found by a visual fingerprint, in other documents, covering the same part of the image at whatever size or rotation it is drawn there.
+- **Other boxes stay in their document:** vector drawings, whether inline in a page's content (where the same logo can be drawn with different commands) or stored once as a reusable object (MuPDF.js does not report where it is placed, and a box over part of a drawing leaves the drawing in the file, so spreading would copy that leak), and scanned pages, where a logo is part of the page picture, need visual search (Implementation Plan, phase 7). A box with nothing behind it applies only to its own document.
 
 ## Irreversibility and verification
 
@@ -254,8 +256,8 @@ The browser loads the app from our servers, then does all document work itself. 
 
 - The app is a single-page web app on our origin. A service worker caches the app, models and packs, so later visits start fast and work offline.
 - The engine runs in Web Workers, off the UI thread. The heavy parts (PDF, OCR, models) are WebAssembly modules, and models use WebGPU where the device has it.
-- Files are opened with the file picker or by drag and drop and are read inside the page. Outputs are saved back as downloads.
-- Working sets persist in the browser's origin-private storage, encrypted (see Data model and storage).
+- Files are opened with the file picker or by drag and drop and are read inside the page. Cleaned outputs are saved back as ordinary downloads; the working set keeps no copy.
+- Working sets persist as files: in a folder on the user's disk, or in the browser's origin-private storage until one is picked (see Data model and storage). v1 supports Chrome only.
 
 **What keeps data in**
 
@@ -344,8 +346,8 @@ The language is TypeScript (D1, decided); the table below records the options th
 | NER models | [Transformers.js](https://huggingface.co/docs/transformers.js/index) on ONNX Runtime; WebGPU with a WebAssembly fallback | Runs models in the browser with no server; quantised weights cut the download | Which models fit a browser (D5) |
 | DOCX | A zip library and the browser's XML parser | A DOCX is a zip of XML parts | Leak-vector list comes first |
 | Images | Canvas | Built in | That re-encoding drops metadata, per format |
-| Storage | IndexedDB for encrypted records; origin-private file system for encrypted files | Built in and private to our origin | Eviction rules, under Data model and storage |
-| Encryption | Web Crypto: AES-GCM with non-extractable keys | Built in; no custom cryptography |  |
+| Storage | JSON files and originals behind one storage interface: the File System Access API for a folder on the user's disk, the origin-private file system until one is picked; both are directory handles in Chrome, so one backend serves both | No database engine to ship; the user can browse their own folder; another backend fits the same interface | Eviction rules, under Data model and storage |
+| Encryption | None at rest in v1 | Decided 21 Nov 2026 |  |
 | UI | A mainstream single-page framework with TypeScript | Easy to hire for | The team's choice |
 | Sign-in | A bought identity provider that speaks OpenID Connect | No password storage or home-made auth | Vendor (D8) |
 | Billing | Stripe Billing: hosted Checkout, customer portal, webhooks | Card data never reaches us; the least code |  |
@@ -371,21 +373,21 @@ Replacing the PDF engine is a third route we do not recommend: a first search tu
 
 ## Data model and storage
 
-Each working set's records sit in IndexedDB, encrypted per record; its files sit in the origin-private file system, encrypted. Rule packs and models are cached by the service worker and hold no user data. The global policy holds the user's term lists, so it is encrypted like set data. All of it lives in one browser profile on one device.
+Each working set is a folder: its originals under their own names, and its records as JSON files in a hidden `.redactorator/` folder. The folder lives on the user's disk, through the File System Access API, or in the origin-private file system until the user picks one. v1 supports Chrome only; Safari and Firefox, which cannot save into a picked folder, would each need a backend of their own behind the same interface. Nothing is encrypted in v1. Rule packs and models are cached by the service worker and hold no user data. The app reaches storage through one interface (read, write, list and delete files), so a later backend, such as a cloud store, changes no app code.
 
 ```text
-IndexedDB, per browser profile
-  keys                   the wrapped data key, or the non-extractable key when no passphrase is set
-  policy                 global policy (thresholds, bands, term lists, appearance), encrypted
-  sets/<set id>          encrypted records: everything in the table below
-Origin-private file system, per browser profile
-  sets/<set id>/
-    originals/           imported files, encrypted
-    text/                each document's extracted text model, encrypted
-    outputs/             derived files and certificates, encrypted
+Folder the user picked, or the origin-private file system
+  .redactorator/settings.json   global policy (thresholds, bands, term lists, custom patterns, appearance)
+  <working set name>/
+    <original>.pdf              imported files, under their own names
+    .redactorator/
+      project.json              entities, aliases, document states, every document's occurrences, the set's policy, exports
+      text/<document id>.json   each document's extracted text model
 Service worker cache
   app, rule packs, pinned models
 ```
+
+A set is read into memory when it opens. `project.json` is one file so that an approval, which changes many documents, is saved whole; Chrome swaps a written file in only when the write completes. Dot folders are hidden on macOS and Linux; Windows shows them, since a web page cannot set Windows' hidden attribute.
 
 | Table | Holds | Notes |
 | --- | --- | --- |
@@ -394,17 +396,17 @@ Service worker cache
 | `alias` | Entity id, normalised spelling | What the working-set matcher searches for |
 | `occurrence` | Document id, anchor, entity id, detectors, score, band, status | One row per finding; manual marks are occurrences with detector `user` |
 | `policy` | The set's overrides as one JSON document | Merged over the global policy at run time |
-| `export` | Document id, output hash, certificate, policy hash, stale flag | Lets SET-6 detect outdated exports |
+| `export` | Document id, output hash, certificate, policy hash, stale flag | Lets SET-6 detect outdated downloads; the output itself is not kept |
 | `audit` | Time, actor (user or policy), action, entity id | No raw values |
 
-A browser cannot reopen a file by its path later, so `originals/` holds encrypted copies (D4, decided). Asking the user to pick the file again for every re-export was rejected.
+A browser cannot reopen a file by its path later, so the working set's folder holds copies of the originals (D4, decided). Asking the user to pick the file again for every re-export was rejected.
 
 **Storage limits that shape the design** ([MDN: storage quotas and eviction](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)):
 
 - Quota is large: about 60% of the disk per origin in Chrome and Safari, and the smaller of 10% of the disk or 10 GiB in Firefox by default.
 - Storage is best-effort unless the browser grants persistence through `navigator.storage.persist()`. Chrome and Safari decide that without asking the user.
 - Safari deletes script-written data for a site the user has not interacted with in seven days of browser use, when tracking prevention is on.
-- So the browser is never the only copy of a vault. Working-set export and import, as one encrypted file, is an MVP feature. It is also how a set moves to another device.
+- So the browser is never the only copy of a vault. The working sets can live in a folder on the user's disk, out of reach of eviction. A set moves to another device as a copy of its folder, imported on the other side.
 
 ## The POC and the order of work
 
@@ -421,8 +423,8 @@ Nine decisions are open; the first two shape everything else and are worth settl
 
 **Decided**
 
-- **D3. Redacted values in the registry:** stored normalised in the encrypted set store, so later documents match and spellings can be linked.
-- **D4. Originals:** each working set keeps encrypted copies in browser storage, so outputs rebuild when a decision spreads. The copies are part of set export and backup.
+- **D3. Redacted values in the registry:** stored normalised in the set's store, so later documents match and spellings can be linked.
+- **D4. Originals:** each working set keeps copies in its folder, so outputs rebuild when a decision spreads. The copies are part of set export and backup.
 - **Launch scope:** English, with country packs for the US, UK, Canada, Australia, New Zealand and Ireland in the MVP (Implementation Plan, phase 4). India comes later.
 - **PRD decisions (18 Nov 2026):** realistic surrogates (PSE-9) and restore into DOCX (PSE-14) are v1. MVP image formats are PNG, JPEG and WebP; TIFF joins if MuPDF.js decodes it; HEIC, GIF and BMP are v1. Telemetry starts on, and users can switch it off. Models and libraries may load from public hosts, pinned and hash-checked.
 - **D7. Free plan:** 10 documents and 20,000 characters of pasted text a month, each resetting monthly. One document before sign-up, counted in the browser.
@@ -430,11 +432,13 @@ Nine decisions are open; the first two shape everything else and are worth settl
 - **D2. PDF engine licence:** the browser app (UI and engine) is published under the AGPL. The Accounts API, billing and telemetry store are separate programs and stay closed. To be confirmed with counsel before launch.
 - **D9. Trust in served code:** MVP has public source, reproducible builds, a signed hash per release in a public log, and the release hash shown in the app. v1 adds a browser extension that checks served files against the log. An installable pinned build is not planned.
 - **D1. Implementation language:** TypeScript for the UI and the engine, calling the WebAssembly modules through their JavaScript APIs. The spikes measure speed and memory; they do not choose the language.
+- **D11. Working-set storage (21 Nov 2026):** JSON files and originals in a folder per set, behind one storage interface; a folder on the user's disk, the origin-private file system until one is picked; Chrome only in v1; no database engine; no encryption at rest and no vault passphrase in v1. Shown in the app as projects. Decisions spread when a document is approved.
 - **D5. Models in the browser:** chosen per device as Full, Standard or Basic detection (see Detection stack). The level is always shown to the user, who can choose a higher one. Which models fill the levels is still open (D10).
 
 | Technical risk | Effect | Mitigation |
 | --- | --- | --- |
 | Hosted code can change on any visit | The privacy claim rests on our release process | D9; no upload route; a strict Content Security Policy; a claim users can test offline |
+| A vector drawing only partly under a box stays in the file | MuPDF removes a path only when the box covers all of it (`REDACT_LINE_ART_REMOVE_IF_COVERED`, used since phase 1), so a box over most of a vector logo hides it on screen while its drawing commands remain under the box | A leak fixture in phase 3; then cut paths at the box edge, or remove every path the box touches and check what else that removes |
 | MuPDF.js leaves content behind or moves text after redaction | Redaction or scrubbing gaps; shifted layout | Our PDF leak suite (Implementation Plan, phase 3); a glyph-position test from phase 1; MuPDF.js pinned to an exact version |
 | Models are heavy for a browser | Slow first load, memory limits, weak devices without WebGPU | Patterns work at once; quantised models cached after first load; a device check picks the detection level and the app shows it |
 | Large files in a browser tab | Memory pressure or a crashed tab on long PDFs | Page-at-a-time processing in workers; progress saved per page |

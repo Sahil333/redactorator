@@ -35,8 +35,7 @@ async function exportTruth(page: Page): Promise<{ readonly path: string; readonl
 }
 
 test("labelling mode exports ground truth that the dataset validator accepts", async ({ page }) => {
-  await page.goto("/?label");
-  await expect(page.getByLabel("Open a PDF")).toBeEnabled();
+  await openApp(page, "/?label");
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
   await page.getByRole("textbox", { name: "Link id for Jane Roe on page 1" }).fill("p1");
@@ -70,8 +69,7 @@ test("normal mode has no labelling controls", async ({ page }) => {
 });
 
 test("offsets follow reading order: a running header drawn last comes first, and columns stay whole", async ({ page }) => {
-  await page.goto("/?label");
-  await expect(page.getByLabel("Open a PDF")).toBeEnabled();
+  await openApp(page, "/?label");
   await openPdf(page, crossPagePdf);
   await markText(page, 2, [72.0, 79.1, 97.3, 95.6], "Person");
   await markText(page, 2, [320.0, 139.1, 348.0, 155.6], "Other");
@@ -89,8 +87,7 @@ test("offsets follow reading order: a running header drawn last comes first, and
 });
 
 test("a mark across pages exports as one entity with an occurrence on each page", async ({ page }) => {
-  await page.goto("/?label");
-  await expect(page.getByLabel("Open a PDF")).toBeEnabled();
+  await openApp(page, "/?label");
   await openPdf(page, crossPagePdf);
   await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
   await dragAcrossPages(page, [1, 237, 107], [2, 96, 87]);
