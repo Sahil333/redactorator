@@ -15,7 +15,9 @@ runs entirely in the browser.
 
 - AGENTS.md and the typescript-rules skill win over anything here.
 - Some examples read localStorage or sessionStorage. They illustrate the pattern
-  only; this app keeps user data only in the encrypted store.
+  only; this app keeps user data only in its project store (`Store` in
+  `app/storage.ts`, not encrypted in v1). Other browser storage may hold view
+  state, such as which document ids are open, never anything from a document.
 - Where a rule mentions Next.js, follow its plain React or Vite variant.
 - Don't add a dependency to follow a rule; ask the owner first.
 
