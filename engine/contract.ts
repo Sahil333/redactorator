@@ -15,6 +15,9 @@ export type Points = Brand<number, "Points">;
 /** Numbers each file the UI opens, starting at 1. */
 export type FileNumber = Brand<number, "FileNumber">;
 
+/** Numbers each file the UI asks the engine to inspect before adding it, starting at 1. */
+export type InspectionNumber = Brand<number, "InspectionNumber">;
+
 export const isPageIndex = (value: unknown): value is PageIndex =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
 
@@ -71,7 +74,9 @@ export type Source = "original" | "output";
 
 // `file` numbers each file the UI opens; the worker echoes it in every reply so
 // the UI can drop a reply about a file the user has since replaced.
+// An inspection opens a file only to say whether it can be added, and keeps nothing.
 export type EngineRequest =
+  | { readonly type: "inspect"; readonly inspection: InspectionNumber; readonly bytes: ArrayBuffer }
   | { readonly type: "open"; readonly file: FileNumber; readonly bytes: ArrayBuffer }
   | {
       readonly type: "render";
@@ -105,6 +110,8 @@ export interface EngineError {
 
 export type EngineMessage =
   | { readonly type: "ready" }
+  | { readonly type: "inspected"; readonly inspection: InspectionNumber; readonly pages: number }
+  | { readonly type: "refused"; readonly inspection: InspectionNumber; readonly error: EngineError }
   | { readonly type: "opened"; readonly file: FileNumber; readonly document: DocumentModel }
   | {
       readonly type: "rendered";
@@ -119,23 +126,26 @@ export type EngineMessage =
   // `file` is undefined only for a request the worker could not read.
   | { readonly type: "error"; readonly file: FileNumber | undefined; readonly error: EngineError };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
 const isPositiveNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
 
-const isOffset = (value: unknown): value is number =>
+export const isOffset = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
 
 export const isFileNumber = (value: unknown): value is FileNumber =>
+  typeof value === "number" && Number.isInteger(value) && value > 0;
+
+export const isInspectionNumber = (value: unknown): value is InspectionNumber =>
   typeof value === "number" && Number.isInteger(value) && value > 0;
 
 const isSource = (value: unknown): value is Source => value === "original" || value === "output";
 
 const isColour = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
 
-function parseBox(value: unknown): Box | undefined {
+export function parseBox(value: unknown): Box | undefined {
   if (!isRecord(value)) return undefined;
   const { x0, y0, x1, y1 } = value;
   if (!isPoints(x0) || !isPoints(y0) || !isPoints(x1) || !isPoints(y1) || x0 > x1 || y0 > y1) return undefined;
@@ -152,12 +162,12 @@ function parseEdit(value: unknown): Edit | undefined {
   return box && { kind: "box", page, box, label };
 }
 
-function parseAppearance(value: unknown): Appearance | undefined {
+export function parseAppearance(value: unknown): Appearance | undefined {
   if (!isRecord(value) || !isColour(value.colour) || typeof value.label !== "boolean") return undefined;
   return { colour: value.colour, label: value.label };
 }
 
-function parseAll<T>(values: unknown, parse: (value: unknown) => T | undefined): T[] | undefined {
+export function parseAll<T>(values: unknown, parse: (value: unknown) => T | undefined): T[] | undefined {
   if (!Array.isArray(values)) return undefined;
   const parsed: T[] = [];
   for (const value of values) {
@@ -168,7 +178,12 @@ function parseAll<T>(values: unknown, parse: (value: unknown) => T | undefined):
   return parsed;
 }
 
+function parseInspectRequest({ inspection, bytes }: Record<string, unknown>): EngineRequest | undefined {
+  return isInspectionNumber(inspection) && bytes instanceof ArrayBuffer ? { type: "inspect", inspection, bytes } : undefined;
+}
+
 export function parseEngineRequest(data: unknown): EngineRequest | undefined {
+  if (isRecord(data) && data.type === "inspect") return parseInspectRequest(data);
   if (!isRecord(data) || !isFileNumber(data.file)) return undefined;
   const { file } = data;
   switch (data.type) {
@@ -242,10 +257,20 @@ function parseFileMessage(data: Record<string, unknown>, file: FileNumber): Engi
   }
 }
 
+/** An answer to an inspection: `inspected` or `refused`. */
+function parseInspectionMessage(data: Record<string, unknown>): EngineMessage | undefined {
+  const { inspection, pages } = data;
+  if (!isInspectionNumber(inspection)) return undefined;
+  if (data.type === "inspected") return isOffset(pages) && pages > 0 ? { type: "inspected", inspection, pages } : undefined;
+  const error = parseEngineError(data.error);
+  return error && { type: "refused", inspection, error };
+}
+
 export function parseEngineMessage(data: unknown): EngineMessage | undefined {
   if (!isRecord(data)) return undefined;
   const { file } = data;
   if (data.type === "ready") return { type: "ready" };
+  if (data.type === "inspected" || data.type === "refused") return parseInspectionMessage(data);
   if (data.type === "error") {
     const error = parseEngineError(data.error);
     return error && (file === undefined || isFileNumber(file)) ? { type: "error", file, error } : undefined;
@@ -254,4 +279,4 @@ export function parseEngineMessage(data: unknown): EngineMessage | undefined {
 }
 
 export const isAboutOlderFile = (message: EngineMessage, latestFile: number): boolean =>
-  message.type !== "ready" && message.file !== undefined && message.file !== latestFile;
+  "file" in message && message.file !== undefined && message.file !== latestFile;

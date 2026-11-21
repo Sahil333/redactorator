@@ -19,8 +19,10 @@
   --color-pass-wash: #e4efe2;
   --color-fail-wash: #f6e1dd;
 
-  --font-serif: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Atkinson Hyperlegible Next, bundled with the app: look-alike letters and digits
+     (I l 1, O 0) stay easy to tell apart when checking names and numbers. */
+  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: var(--font-sans);
 }
 
 @layer base {
@@ -51,5 +53,14 @@
     position-area: bottom span-left;
     inset: auto;
     margin: 6px 0 0;
+  }
+}
+
+/* A row's menu opens under its ⋯ button, the popover's implicit anchor. */
+@supports (position-area: bottom) {
+  .row-menu {
+    position-area: bottom span-left;
+    inset: auto;
+    margin: 4px 0 0;
   }
 }

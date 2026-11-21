@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 import { createInstrumenter } from "istanbul-lib-instrument";
 import { defineConfig, type Plugin } from "vite";
 
-// Scripts, workers and connections come only from our own origin; WebAssembly
+// Scripts, workers, fonts and connections come only from our own origin; WebAssembly
 // needs 'wasm-unsafe-eval'. Sent as a header so the engine worker gets it too:
 // a worker does not inherit a <meta> policy from the page.
 const contentSecurityPolicy = [
@@ -14,6 +14,7 @@ const contentSecurityPolicy = [
   "worker-src 'self'",
   "connect-src 'self'",
   "img-src 'self'",
+  "font-src 'self'",
   "style-src 'self'",
   "base-uri 'none'",
   "form-action 'none'",

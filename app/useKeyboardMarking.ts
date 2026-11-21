@@ -2,18 +2,17 @@ import { useState, type FocusEvent, type KeyboardEvent, type RefObject } from "r
 import { pointBox, type Box, type PageModel } from "../engine/contract";
 import { boxStep, newBox } from "./keyboardMarking";
 import { MIN_BOX_POINTS, type MarkTarget, type Tool } from "./marks";
-import { CSS_PIXELS_PER_POINT } from "./useEngine";
 import type { TextSelecting } from "./useTextSelection";
 
-/** The part of `frame` on screen, in points. */
-function inView(frame: HTMLElement | null): Box | undefined {
+/** The part of `frame`, which shows `page`, on screen, in points. */
+function inView(frame: HTMLElement | null, page: PageModel): Box | undefined {
   const bounds = frame?.getBoundingClientRect();
   if (bounds === undefined) return undefined;
   const x0 = Math.max(0, -bounds.left);
   const y0 = Math.max(0, -bounds.top);
   const x1 = Math.max(x0, Math.min(bounds.width, window.innerWidth - bounds.left));
   const y1 = Math.max(y0, Math.min(bounds.height, window.innerHeight - bounds.top));
-  const k = CSS_PIXELS_PER_POINT;
+  const k = bounds.width / page.width;
   return pointBox(x0 / k, y0 / k, x1 / k, y1 / k);
 }
 
@@ -36,7 +35,7 @@ export function useKeyboardMarking({ page, tool, frameRef, onMark, text }: Keybo
   function onBoxKey(event: KeyboardEvent): boolean {
     if (event.key === "Enter") {
       if (draft === undefined) {
-        const view = inView(frameRef.current);
+        const view = inView(frameRef.current, page);
         setDraft(view && newBox(page, view));
       } else {
         onMark({ kind: "box", page: page.index, box: draft });
@@ -57,7 +56,7 @@ export function useKeyboardMarking({ page, tool, frameRef, onMark, text }: Keybo
 
   function onKeyDown(event: KeyboardEvent) {
     if (tool === undefined) return;
-    const handled = tool === "text" ? text.onKey(event, inView(frameRef.current)) : onBoxKey(event);
+    const handled = tool === "text" ? text.onKey(event, inView(frameRef.current, page)) : onBoxKey(event);
     if (handled) {
       event.preventDefault();
       setKeyboard(true);

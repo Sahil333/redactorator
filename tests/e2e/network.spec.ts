@@ -48,3 +48,19 @@ test("the content security policy blocks requests to other origins from the page
   expect(engine).toBeDefined();
   expect(await engine?.evaluate(fetchOtherOrigin, otherOrigin)).toBe("blocked");
 });
+
+test("the app's typeface is bundled with it and loads from its own origin", async ({ page }) => {
+  const fonts: string[] = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "font") fonts.push(request.url());
+  });
+  await openApp(page);
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => [...document.fonts].some((font) => font.family.includes("Atkinson Hyperlegible Next") && font.status === "loaded")),
+    )
+    .toBe(true);
+  expect(fonts.length).toBeGreaterThan(0);
+  expect(fonts.every((url) => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
+});

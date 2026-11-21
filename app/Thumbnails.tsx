@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { PageIndex, PageModel } from "../engine/contract";
-import { pageFrameId } from "./pageGeometry";
+import { PageLink } from "./PageLink";
 import type { PanelWidth } from "./Splitter";
 import { useWhenVisible } from "./useWhenVisible";
 
@@ -22,7 +22,7 @@ interface ThumbnailsProps {
 
 function Thumbnail({ image, onVisible }: { readonly image: ImageData | undefined; readonly onVisible: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  useWhenVisible(canvasRef, image === undefined, onVisible);
+  useWhenVisible(canvasRef, image === undefined ? "image" : undefined, onVisible);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -49,15 +49,15 @@ export function Thumbnails({ id, width, pages, images, currentPage, markedPages,
   }, [currentPage]);
 
   return (
-    <nav ref={navRef} id={id} aria-label="Pages" className="overflow-y-auto bg-paper py-4" style={{ width, paddingInline: PADDING_X }}>
+    <nav ref={navRef} id={id} aria-label="Pages" className="shrink-0 overflow-y-auto bg-paper py-4" style={{ width, paddingInline: PADDING_X }}>
       <ol className="flex flex-col gap-4">
         {pages.map((page) => {
           const pageNumber = page.index + 1;
           const current = page.index === currentPage;
           return (
             <li key={page.index}>
-              <a
-                href={`#${pageFrameId(page.index)}`}
+              <PageLink
+                page={page.index}
                 aria-label={`Page ${pageNumber}${markedPages.has(page.index) ? ", has marks" : ""}`}
                 aria-current={current ? "page" : undefined}
                 className="group flex flex-col items-center gap-1.5 text-xs text-ink-muted"
@@ -72,7 +72,7 @@ export function Thumbnails({ id, width, pages, images, currentPage, markedPages,
                   {markedPages.has(page.index) && <span className="size-1.5 rounded-full bg-mark" />}
                   {pageNumber}
                 </span>
-              </a>
+              </PageLink>
             </li>
           );
         })}

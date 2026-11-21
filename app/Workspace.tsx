@@ -5,11 +5,13 @@ import { baseName, download } from "./download";
 import { DropZone } from "./DropZone";
 import { markPages, type Tool } from "./marks";
 import { MarksPanel, marksPanelWidth } from "./MarksPanel";
-import { pageFrameId } from "./pageGeometry";
+import { pageFrameId, PageScale } from "./pageGeometry";
 import { PageList } from "./PageList";
 import { Splitter } from "./Splitter";
 import { Thumbnails, thumbnailsWidth } from "./Thumbnails";
 import type { Engine } from "./useEngine";
+import { useZoom } from "./useZoom";
+import { ZoomControls } from "./ZoomControls";
 import type { Marks } from "./useMarks";
 
 const THUMBNAILS_ID = "thumbnails";
@@ -31,7 +33,9 @@ interface WorkspaceProps {
   readonly labelling: boolean;
   readonly currentPage: PageIndex | undefined;
   readonly onCurrentPage: (page: PageIndex | undefined) => void;
-  readonly onFile: (file: File) => void;
+  readonly onFiles: (files: readonly File[]) => void;
+  /** Whether the page thumbnails are shown. */
+  readonly showPages: boolean;
   readonly widths: PanelWidths;
   readonly onWidths: (widths: PanelWidths) => void;
   readonly downloadRef: RefObject<HTMLButtonElement | null>;
@@ -53,58 +57,69 @@ export function Workspace(props: WorkspaceProps) {
   const source = output === undefined ? "original" : "output";
   const editing = output === undefined && engine.state === "ready";
   const shownMarks = output === undefined ? marks.marks : [];
+  const zoom = useZoom(pages);
   return (
-    <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto_auto]">
-      <Thumbnails
-        id={THUMBNAILS_ID}
-        width={widths.pages}
-        pages={pages}
-        images={engine.images[source]}
-        currentPage={props.currentPage ?? pages[0].index}
-        markedPages={new Set(shownMarks.flatMap((mark) => markPages(mark.target)))}
-        onVisible={(page) => engine.show(source, page)}
-      />
-      <Splitter
-        label="Resize the page list"
-        panel={THUMBNAILS_ID}
-        width={widths.pages}
-        limits={thumbnailsWidth}
-        grows={1}
-        onResize={(width) => onWidths({ ...widths, pages: width })}
-      />
-      <DropZone
-        error={engine.error}
-        onFile={props.onFile}
-        onScroll={(event) => props.onCurrentPage(pageInMiddle(event.currentTarget, pages))}
-      >
-        {output !== undefined && opened !== undefined && (
-          <CheckedBanner
-            markCount={marks.marks.length}
-            downloadRef={props.downloadRef}
-            onBack={props.onBack}
-            onDownload={() =>
-              download(new Blob([output.bytes], { type: "application/pdf" }), `${baseName(opened.name)}-redacted.pdf`)
-            }
+    <div className="flex min-h-0 min-w-0 flex-1">
+      {props.showPages && (
+        <>
+          <Thumbnails
+            id={THUMBNAILS_ID}
+            width={widths.pages}
+            pages={pages}
+            images={engine.images[source]}
+            currentPage={props.currentPage ?? pages[0].index}
+            markedPages={new Set(shownMarks.flatMap((mark) => markPages(mark.target)))}
+            onVisible={(page) => engine.show(source, page)}
           />
-        )}
-        <PageList
-          key={source}
-          pages={pages}
-          images={engine.images[source]}
-          texts={engine.texts}
-          marks={shownMarks}
-          pending={marks.pending}
-          highlighted={marks.highlighted}
-          tool={editing ? props.tool : undefined}
-          typeOptions={marks.typeOptions}
-          lastType={marks.lastType}
-          onVisible={(page) => engine.show(source, page)}
-          onMark={marks.propose}
-          onPick={marks.add}
-          onCancel={marks.cancel}
-          onHighlight={marks.highlight}
-        />
-      </DropZone>
+          <Splitter
+            label="Resize the page list"
+            panel={THUMBNAILS_ID}
+            width={widths.pages}
+            limits={thumbnailsWidth}
+            grows={1}
+            onResize={(width) => onWidths({ ...widths, pages: width })}
+          />
+        </>
+      )}
+      <div className="relative flex min-w-0 flex-1">
+        <DropZone
+          ref={zoom.ref}
+          error={engine.error}
+          onFiles={props.onFiles}
+          onScroll={(event) => props.onCurrentPage(pageInMiddle(event.currentTarget, pages))}
+        >
+          {output !== undefined && opened !== undefined && (
+            <CheckedBanner
+              markCount={marks.marks.length}
+              downloadRef={props.downloadRef}
+              onBack={props.onBack}
+              onDownload={() =>
+                download(new Blob([output.bytes], { type: "application/pdf" }), `${baseName(opened.name)}-redacted.pdf`)
+              }
+            />
+          )}
+          <PageScale value={zoom.scale}>
+            <PageList
+              key={source}
+              pages={pages}
+              images={engine.images[source]}
+              texts={engine.texts}
+              marks={shownMarks}
+              pending={marks.pending}
+              highlighted={marks.highlighted}
+              tool={editing ? props.tool : undefined}
+              typeOptions={marks.typeOptions}
+              lastType={marks.lastType}
+              onVisible={(page, detail) => engine.show(source, page, detail)}
+              onMark={marks.propose}
+              onPick={marks.add}
+              onCancel={marks.cancel}
+              onHighlight={marks.highlight}
+            />
+          </PageScale>
+        </DropZone>
+        <ZoomControls zoom={zoom} />
+      </div>
       <Splitter
         label="Resize the marks panel"
         panel={MARKS_PANEL_ID}

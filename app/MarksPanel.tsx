@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { firstPage, markName, pagesLabel, type Mark } from "./marks";
 import { markTypeLabel, type MarkTypeOption } from "./markTypes";
-import { pageFrameId } from "./pageGeometry";
+import { PageLink } from "./PageLink";
 import type { PanelWidth } from "./Splitter";
 import { TypePicker } from "./TypePicker";
 
@@ -58,9 +58,9 @@ export function MarksPanel({
     remove(mark);
   }
   return (
-    <aside id={id} aria-label="Marks" className="flex min-h-0 flex-col bg-paper-raised" style={{ width }}>
+    <aside id={id} aria-label="Marks" className="flex min-h-0 shrink-0 flex-col bg-paper-raised" style={{ width }}>
       <div className="flex items-baseline justify-between px-4 pt-4 pb-2">
-        <h2 ref={headingRef} tabIndex={-1} className="font-serif text-lg">
+        <h2 ref={headingRef} tabIndex={-1} className="font-display font-semibold text-lg">
           Marks
         </h2>
         <span className="text-xs text-ink-muted">{marks.length === 1 ? "1 mark" : `${marks.length} marks`}</span>
@@ -86,9 +86,9 @@ export function MarksPanel({
                 className={`relative flex items-center gap-2 border-b border-rule px-4 py-2 ${mark.id === highlighted ? "bg-mark-wash" : ""}`}
               >
                 <div className="min-w-0 flex-1">
-                  <a href={`#${pageFrameId(firstPage(mark.target))}`} className="block min-h-6 truncate leading-6 hover:underline">
+                  <PageLink page={firstPage(mark.target)} className="block min-h-6 truncate leading-6 hover:underline">
                     {markName(mark)}
-                  </a>
+                  </PageLink>
                   <button
                     type="button"
                     aria-label={`Change type of ${where}`}

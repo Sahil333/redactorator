@@ -12,6 +12,7 @@ export const encryptedPdf = new URL("../../fixtures/encrypted.pdf", import.meta.
 export const crossPagePdf = new URL("../../fixtures/cross-page.pdf", import.meta.url).pathname;
 export const tablePdf = new URL("../../fixtures/table.pdf", import.meta.url).pathname;
 export const maskedImagePdf = new URL("../../fixtures/masked-image.pdf", import.meta.url).pathname;
+export const longPdf = new URL("../../fixtures/long.pdf", import.meta.url).pathname;
 
 /** A rectangle in the app's box convention: PDF points, origin top-left. See tests/oracle/README.md. */
 export type PointBox = readonly [x0: number, y0: number, x1: number, y1: number];
@@ -19,8 +20,6 @@ export type PointBox = readonly [x0: number, y0: number, x1: number, y1: number]
 // Words of one-word.pdf, from tests/oracle/README.md, in the app's box convention.
 export const janeRoe: PointBox = [101.3, 99.1, 152.7, 115.6];
 export const dear: PointBox = [72, 99.1, 98, 115.6];
-
-const CSS_PIXELS_PER_POINT = 96 / 72;
 
 /** Serves `script` in place of the engine worker, to make the engine reply in ways the real one can't on demand. */
 export async function fakeEngine(page: Page, script: string): Promise<void> {
@@ -37,13 +36,40 @@ export async function wrapEngine(page: Page, prelude: string): Promise<void> {
   });
 }
 
-export async function openApp(page: Page): Promise<void> {
-  await page.goto("/");
-  await expect(page.getByLabel("Open a PDF")).toBeEnabled();
+/** Loads the app at `path` (such as "/?label") and waits until a PDF can be chosen on the home screen. */
+export async function openApp(page: Page, path = "/"): Promise<void> {
+  await page.goto(path);
+  await expect(page.getByLabel("Choose PDFs")).toBeEnabled();
 }
 
-export async function openPdf(page: Page, path: string): Promise<void> {
-  await page.getByLabel("Open a PDF").setInputFiles(path);
+/** Chooses PDFs on the empty home screen, which makes them a new project. */
+export async function openPdf(page: Page, ...paths: readonly string[]): Promise<void> {
+  await page.getByLabel("Choose PDFs").setInputFiles([...paths]);
+}
+
+/** Shows the page thumbnails, which the workbench hides at first. */
+export async function showPageList(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Pages", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Pages" })).toBeVisible();
+}
+
+/** Adds PDFs to the open project. */
+export async function addDocuments(page: Page, ...paths: readonly string[]): Promise<void> {
+  await page.getByLabel("Add documents").setInputFiles([...paths]);
+}
+
+/** Waits until every change to the open project is stored. */
+export async function saved(page: Page): Promise<void> {
+  await expect(page.getByRole("banner").getByText(/^(Saving…|Saved)$/)).toHaveText("Saved");
+}
+
+/** The names of the entries at the top of the browser's private storage, where projects live. */
+export async function storedNames(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const names: string[] = [];
+    for await (const name of (await navigator.storage.getDirectory()).keys()) names.push(name);
+    return names.sort();
+  });
 }
 
 /** Counts the dark pixels drawn on a canvas: a page or a thumbnail. */
@@ -64,19 +90,31 @@ export async function inkedPixels(canvas: Locator): Promise<number> {
 
 type Point = readonly [x: number, y: number];
 
+/** CSS pixels per point that page `pageNumber` is shown at: pages zoom, and shrink to fit a narrow pane. */
+async function pageScale(page: Page, pageNumber: number): Promise<number> {
+  const frame = page.locator(`#page-${pageNumber}`);
+  await expect(frame.getByRole("img")).toBeVisible();
+  return frame.evaluate((element) => {
+    if (!(element instanceof HTMLElement)) throw new Error("The page frame is not an element");
+    return element.getBoundingClientRect().width / Number(element.dataset.pointsWide);
+  });
+}
+
 /** Scrolls the pages so the middle of `points` (on one page, in points) is mid-view, and returns them on screen. */
 async function onScreen(page: Page, pageNumber: number, points: readonly Point[]): Promise<[number, number][]> {
   const frame = page.locator(`#page-${pageNumber}`);
-  const middle = (points.reduce((sum, [, y]) => sum + y, 0) / points.length) * CSS_PIXELS_PER_POINT;
-  await frame.evaluate((element, offset) => {
+  const k = await pageScale(page, pageNumber);
+  const mean = (axis: 0 | 1) => (points.reduce((sum, point) => sum + point[axis], 0) / points.length) * k;
+  await frame.evaluate((element, { x, y }) => {
     const pane = element.closest("main");
     if (pane === null) throw new Error("The page is not in the pages pane");
     const view = pane.getBoundingClientRect();
-    pane.scrollBy(0, element.getBoundingClientRect().top + offset - (view.top + view.height / 2));
-  }, middle);
+    const at = element.getBoundingClientRect();
+    pane.scrollBy(at.left + x - (view.left + view.width / 2), at.top + y - (view.top + view.height / 2));
+  }, { x: mean(0), y: mean(1) });
   const bounds = await frame.boundingBox();
   if (bounds === null) throw new Error(`Page ${pageNumber} is not on screen`);
-  return points.map(([x, y]) => [bounds.x + x * CSS_PIXELS_PER_POINT, bounds.y + y * CSS_PIXELS_PER_POINT]);
+  return points.map(([x, y]) => [bounds.x + x * k, bounds.y + y * k]);
 }
 
 export async function toScreen(page: Page, pageNumber: number, x: number, y: number): Promise<[number, number]> {
@@ -106,7 +144,8 @@ export async function dragAcrossPages(page: Page, [fromPage, fx, fy]: PagePoint,
   const pane = await page.locator("main").boundingBox();
   if (start === undefined || pane === null) throw new Error("The pages are not on screen");
   const target = page.locator(`#page-${toPage}`);
-  const targetY = async () => ((await target.boundingBox())?.y ?? Infinity) + ty * CSS_PIXELS_PER_POINT;
+  const k = await pageScale(page, fromPage);
+  const targetY = async () => ((await target.boundingBox())?.y ?? Infinity) + ty * k;
   await page.mouse.move(...start);
   await page.mouse.down();
   await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height - 10, { steps: 5 });
@@ -122,13 +161,15 @@ export async function dragAcrossPages(page: Page, [fromPage, fx, fy]: PagePoint,
   }).toBe(true);
   const bounds = await target.boundingBox();
   if (bounds === null) throw new Error(`Page ${toPage} is not on screen`);
-  await page.mouse.move(bounds.x + tx * CSS_PIXELS_PER_POINT, bounds.y + ty * CSS_PIXELS_PER_POINT, { steps: 5 });
+  await page.mouse.move(bounds.x + tx * k, bounds.y + ty * k, { steps: 5 });
   await page.mouse.up();
 }
 
 /** Drags across the text inside `box` with the Select text tool, along its longer side. */
 export async function selectText(page: Page, pageNumber: number, [x0, y0, x1, y1]: PointBox): Promise<void> {
   await page.getByRole("button", { name: "Select text" }).click();
+  // A page is drawn once it nears the screen, so go to it as a user would.
+  await page.locator(`#page-${pageNumber}`).scrollIntoViewIfNeeded();
   await expect(page.getByRole("img", { name: `Page ${pageNumber}` })).toBeVisible();
   const [midX, midY] = [(x0 + x1) / 2, (y0 + y1) / 2];
   const along = x1 - x0 >= y1 - y0;
@@ -148,6 +189,7 @@ export async function markText(page: Page, pageNumber: number, box: PointBox, ty
 /** Draws `box` with the Draw box tool, then picks `type`. */
 export async function drawBox(page: Page, pageNumber: number, [x0, y0, x1, y1]: PointBox, type: string): Promise<void> {
   await page.getByRole("button", { name: "Draw box" }).click();
+  await page.locator(`#page-${pageNumber}`).scrollIntoViewIfNeeded();
   await expect(page.getByRole("img", { name: `Page ${pageNumber}` })).toBeVisible();
   await drag(page, pageNumber, [x0, y0], [x1, y1]);
   await pickType(page, type);

@@ -4,7 +4,7 @@ import { markPages, type Mark, type MarkTarget, type Pending, type Tool } from "
 import type { MarkType, MarkTypeOption } from "./markTypes";
 import { PageView } from "./PageView";
 import { PICKER_WIDTH, TypePicker } from "./TypePicker";
-import { CSS_PIXELS_PER_POINT } from "./useEngine";
+import type { RenderDetail } from "./useEngine";
 import { useTextSelection } from "./useTextSelection";
 
 interface PageListProps {
@@ -18,24 +18,26 @@ interface PageListProps {
   readonly tool: Tool | undefined;
   readonly typeOptions: readonly MarkTypeOption[];
   readonly lastType: MarkType;
-  readonly onVisible: (page: PageIndex) => void;
+  readonly onVisible: (page: PageIndex, detail: RenderDetail) => void;
   readonly onMark: (pending: Pending) => void;
   readonly onPick: (type: MarkTypeOption) => void;
   readonly onCancel: () => void;
   readonly onHighlight: (mark: Mark["id"] | undefined) => void;
 }
 
-// The type picker keeps this many points clear of the page's right edge.
-const PICKER_MARGIN = 10;
-const PICKER_POINTS = PICKER_WIDTH / CSS_PIXELS_PER_POINT + PICKER_MARGIN;
+/** The space around the pages, in CSS pixels. Fitting a page to the pane leaves it free. */
+export const PAGE_LIST_PADDING = 24;
+
+// The type picker keeps this many CSS pixels clear of the page's right edge.
+const PICKER_MARGIN = 13;
 
 function PickerAt({ page, box, ...picker }: { readonly page: PageModel; readonly box: Box } & Parameters<typeof TypePicker>[0]) {
   return (
     <div
-      className="absolute z-10"
+      className="absolute z-10 mt-1.5"
       style={{
-        left: `${Math.min(box.x0, page.width - PICKER_POINTS) * CSS_PIXELS_PER_POINT}px`,
-        top: `${(box.y1 + 4) * CSS_PIXELS_PER_POINT}px`,
+        left: `max(0px, min(${(box.x0 / page.width) * 100}%, 100% - ${PICKER_WIDTH + PICKER_MARGIN}px))`,
+        top: `${(box.y1 / page.height) * 100}%`,
       }}
     >
       <TypePicker {...picker} />
@@ -54,11 +56,11 @@ function lastBox(target: MarkTarget): { readonly page: PageIndex; readonly box: 
 /** Every page of the document, the marks on them, and the type picker for a new mark. */
 export function PageList(props: PageListProps) {
   const { pages, images, texts, marks, pending, highlighted, tool, typeOptions, lastType } = props;
-  const selecting = useTextSelection({ pages, tool, texts, onMark: props.onMark, onNeedText: props.onVisible });
+  const selecting = useTextSelection({ pages, tool, texts, onMark: props.onMark, onNeedText: (page) => props.onVisible(page, 1) });
   const end = pending && lastBox(pending.target);
 
   return (
-    <div className="flex flex-col items-center-safe gap-6 p-6">
+    <div className="flex flex-col items-center-safe gap-6" style={{ padding: PAGE_LIST_PADDING }}>
       {pages.map((page) => (
         <PageView
           key={page.index}
@@ -69,7 +71,7 @@ export function PageList(props: PageListProps) {
           highlighted={highlighted}
           tool={tool}
           text={selecting.onPage(page.index)}
-          onVisible={() => props.onVisible(page.index)}
+          onVisible={(detail) => props.onVisible(page.index, detail)}
           onMark={(target) => props.onMark({ target, selection: undefined })}
           onHighlight={props.onHighlight}
         >

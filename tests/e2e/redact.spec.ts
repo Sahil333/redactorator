@@ -49,11 +49,12 @@ test("the preview shows the cleaned output before download", async ({ page }) =>
   await page.getByRole("button", { name: "Apply and check" }).click();
 
   await expect(page.getByText("Checked:")).toBeVisible();
+  // The page image is drawn at its printed size (96/72 CSS pixels a point) at the screen's pixel ratio.
   const centre = await page.getByRole("img", { name: "Page 1" }).evaluate((canvas, { x, y }) => {
     if (!(canvas instanceof HTMLCanvasElement)) throw new Error("Page 1 is not a canvas");
-    const scale = canvas.width / canvas.getBoundingClientRect().width;
+    const scale = devicePixelRatio * (96 / 72);
     return [...(canvas.getContext("2d")?.getImageData(x * scale, y * scale, 1, 1).data ?? [])];
-  }, { x: ((janeRoe[0] + janeRoe[2]) / 2) * (96 / 72), y: ((janeRoe[1] + janeRoe[3]) / 2) * (96 / 72) });
+  }, { x: (janeRoe[0] + janeRoe[2]) / 2, y: (janeRoe[1] + janeRoe[3]) / 2 });
   expect(centre.slice(0, 3)).toEqual([0, 0, 0]);
 
   await page.getByRole("button", { name: "Back to editing" }).click();
@@ -191,8 +192,8 @@ test("an encrypted PDF is refused with a reason", async ({ page }) => {
   await openApp(page);
   await openPdf(page, encryptedPdf);
 
-  await expect(page.getByRole("alert")).toHaveText(
-    "This PDF is encrypted. Remove its password in the app that made it, then open it again.",
+  await expect(page.getByRole("region", { name: "1 file not added" }).getByRole("listitem")).toHaveText(
+    "encrypted.pdf: This PDF is encrypted. Remove its password in the app that made it, then open it again.",
   );
   await expect(page.getByRole("img", { name: "Page 1" })).toHaveCount(0);
 });

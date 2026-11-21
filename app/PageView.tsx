@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { use, useEffect, useId, useRef, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import type { Box, PageModel } from "../engine/contract";
 import { boxesOn, type Mark, type MarkTarget, type Pending, type Tool } from "./marks";
 import { markTypeLabel } from "./markTypes";
-import { pageFrameId } from "./pageGeometry";
-import { CSS_PIXELS_PER_POINT } from "./useEngine";
+import { pageFrameId, PageScale } from "./pageGeometry";
+import { CSS_PIXELS_PER_POINT, type RenderDetail } from "./useEngine";
 import { useKeyboardMarking } from "./useKeyboardMarking";
 import { usePointerMarking } from "./usePointerMarking";
 import type { TextSelecting } from "./useTextSelection";
@@ -21,20 +21,20 @@ interface PageViewProps {
   readonly tool: Tool | undefined;
   /** This page's part in the document's text selection. */
   readonly text: TextSelecting;
-  readonly onVisible: () => void;
+  /** The page is near the screen and its image is missing, or too coarse for the scale it is shown at. */
+  readonly onVisible: (detail: RenderDetail) => void;
   /** A box drawn on this page. */
   readonly onMark: (target: MarkTarget) => void;
   readonly onHighlight: (mark: Mark["id"] | undefined) => void;
   readonly children?: ReactNode;
 }
 
-const px = (points: number) => `${points * CSS_PIXELS_PER_POINT}px`;
-
-const boxStyle = (box: Box) => ({
-  left: px(box.x0),
-  top: px(box.y0),
-  width: px(box.x1 - box.x0),
-  height: px(box.y1 - box.y0),
+// Boxes are placed as shares of the page, so they follow it at whatever scale it is shown.
+const boxStyle = (page: PageModel, box: Box) => ({
+  left: `${(box.x0 / page.width) * 100}%`,
+  top: `${(box.y0 / page.height) * 100}%`,
+  width: `${((box.x1 - box.x0) / page.width) * 100}%`,
+  height: `${((box.y1 - box.y0) / page.height) * 100}%`,
 });
 
 const tools: Record<Tool, { readonly label: string; readonly cursor: string; readonly hint: string }> = {
@@ -68,13 +68,13 @@ function PageImage({ image, label }: { readonly image: ImageData; readonly label
 }
 
 /** Keeps `box` in view: where a keyboard selection or box is moving. */
-function InView({ box }: { readonly box: Box }) {
+function InView({ page, box }: { readonly page: PageModel; readonly box: Box }) {
   const ref = useRef<HTMLDivElement>(null);
   const { x0, y0, x1, y1 } = box;
   useEffect(() => {
     ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [x0, y0, x1, y1]);
-  return <div ref={ref} className="absolute" style={boxStyle(box)} />;
+  return <div ref={ref} className="absolute" style={boxStyle(page, box)} />;
 }
 
 interface MarkLayerProps {
@@ -92,7 +92,7 @@ function MarkLayer({ page, marks, pending, highlighted, selection, focusBox }: M
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
       {marks.flatMap((mark) =>
         boxesOn(mark.target, page.index).map((box, index) => (
-          <div key={`${mark.id}-${index}`} className={markStyle(mark.target, mark.id === highlighted)} style={boxStyle(box)}>
+          <div key={`${mark.id}-${index}`} className={markStyle(mark.target, mark.id === highlighted)} style={boxStyle(page, box)}>
             {index === 0 && (
               <span className="absolute bottom-full -left-[1.5px] mb-px max-w-40 truncate rounded-t-sm bg-mark px-1 py-px text-[10px] leading-3 font-medium text-white">
                 {markTypeLabel(mark.type)}
@@ -103,12 +103,12 @@ function MarkLayer({ page, marks, pending, highlighted, selection, focusBox }: M
       )}
       {pending &&
         boxesOn(pending.target, page.index).map((box, index) => (
-          <div key={`pending-${index}`} className={markStyle(pending.target, false)} style={boxStyle(box)} />
+          <div key={`pending-${index}`} className={markStyle(pending.target, false)} style={boxStyle(page, box)} />
         ))}
       {selection.map((box, index) => (
-        <div key={index} className="absolute border border-accent bg-accent/20" style={boxStyle(box)} />
+        <div key={index} className="absolute border border-accent bg-accent/20" style={boxStyle(page, box)} />
       ))}
-      {focusBox && <InView box={focusBox} />}
+      {focusBox && <InView page={page} box={focusBox} />}
     </div>
   );
 }
@@ -135,6 +135,23 @@ const surfaceHandlers = (tool: Tool, text: TextSelecting, pointer: PointerHandle
   },
 });
 
+/**
+ * Asks for the page's image once it nears the screen, and again, drawn twice as finely, once the
+ * page is zoomed past its printed size, so it stays sharp.
+ */
+function useSharpImage(
+  frameRef: RefObject<HTMLElement | null>,
+  page: PageModel,
+  image: ImageData | undefined,
+  scale: number,
+  onVisible: (detail: RenderDetail) => void,
+) {
+  const detail: RenderDetail = scale > CSS_PIXELS_PER_POINT ? 2 : 1;
+  const needed = page.width * CSS_PIXELS_PER_POINT * devicePixelRatio * detail;
+  const coarse = image === undefined || image.width < needed * 0.98;
+  useWhenVisible(frameRef, coarse ? `${detail}:${image?.width ?? 0}` : undefined, () => onVisible(detail));
+}
+
 export function PageView({
   page,
   image,
@@ -149,18 +166,21 @@ export function PageView({
   children,
 }: PageViewProps) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const scale = use(PageScale);
   const hintId = useId();
   const pageNumber = page.index + 1;
   const pointer = usePointerMarking({ page, tool, marks, highlighted, onMark, onHighlight });
   const keys = useKeyboardMarking({ page, tool, frameRef, onMark, text });
-  useWhenVisible(frameRef, image === undefined, onVisible);
+  useSharpImage(frameRef, page, image, scale, onVisible);
 
   return (
     <div
       ref={frameRef}
       id={pageFrameId(page.index)}
+      // The page's width in points, so tests can turn points into places on screen at any zoom.
+      data-points-wide={page.width}
       className="relative shrink-0 bg-white shadow-[0_1px_3px_rgb(31_27_22/0.18)]"
-      style={{ width: px(page.width), height: px(page.height) }}
+      style={{ width: `${page.width * scale}px`, height: `${page.height * scale}px` }}
     >
       {image !== undefined && <PageImage image={image} label={`Page ${pageNumber}`} />}
       <MarkLayer
