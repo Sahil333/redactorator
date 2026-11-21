@@ -58,12 +58,12 @@ Eight terms carry the whole product. Both documents use them the same way.
 
 | Term | Meaning |
 | --- | --- |
-| Working set | A named group of related documents that share one entity list, one vault and one policy. A legal matter, a client, a study. |
+| Working set | A named group of related documents that share one entity list, one vault and one policy. A legal matter, a client, a study. The app calls it a **project**. |
 | Entity | One real-world thing with a type: a person, an address, an account number. It owns every spelling it appears under ("Jane Roe", "J. Roe", "Ms Roe"). |
 | Finding | One place an entity appears in one document, with the detector that found it and a confidence score. |
 | Action | What happens to an entity: **Redact** (remove for good), **Pseudonymise** (swap for a stand-in, reversible) or **Keep**. |
 | Surrogate | The stand-in value. Either a typed placeholder such as `PERSON_1` or a realistic fake such as "Maria Keller". |
-| Vault | The local, encrypted map from surrogate to original for one working set. Delete it and the pseudonyms become permanent. |
+| Vault | The local map from surrogate to original for one working set, stored with the set on the user's device (not encrypted in v1). Delete it and the pseudonyms become permanent. |
 | Policy | The rules that pick a default action: entity types, thresholds, custom patterns, always-hide and never-hide lists. Set globally, overridden per working set. |
 | Certificate | A machine-readable record per output file showing which checks proved the removed values are gone. It never contains the values. |
 
@@ -120,7 +120,7 @@ Requirements are grouped by area and tagged P0 (MVP), P1 (v1) or P2 (later). IDs
 | REV-4 | "Apply to all occurrences" across the document and the working set, on by default | P0 |
 | REV-5 | Rejecting a finding can add the value to the never-hide list, for this working set or globally | P0 |
 | REV-6 | Preview the output before export | P0 |
-| REV-7 | Undo and redo; every decision is saved as it is made | P0 |
+| REV-7 | Undo and redo within a document's edits; approving a document cannot be undone. Every decision is saved as it is made | P0 |
 | REV-8 | Auto mode: run a trusted policy with no review and get a report of what was changed | P2 |
 | REV-9 | Export is blocked while needs-review findings are unresolved, unless the policy says to treat them as accepted | P0 |
 | REV-10 | Search by text or regex and mark every match | P0 |
@@ -149,7 +149,7 @@ Requirements are grouped by area and tagged P0 (MVP), P1 (v1) or P2 (later). IDs
 | PSE-4 | Restore: paste any text that contains surrogates and get it back with the real values | P0 |
 | PSE-5 | Restore survives what AI models do to tokens: changed case, possessives, added punctuation, markdown formatting, line wraps | P0 |
 | PSE-6 | Restore reports surrogates it did not recognise and never guesses | P1 |
-| PSE-7 | The vault stays in the browser, encrypted. Deleting it is offered as a deliberate, irreversible action | P0 |
+| PSE-7 | The vault stays on the user's device, with its working set. Deleting it is offered as a deliberate, irreversible action | P0 |
 | PSE-8 | Different spellings of one entity link to one surrogate; the user can merge and split entities | P1 |
 | PSE-9 | Realistic surrogates generator (fake names, addresses, numbers of the right shape) as an option per type | P1 |
 | PSE-10 | Restore into files: `.txt` and `.md` returned by an AI tool | P0 |
@@ -163,13 +163,13 @@ Requirements are grouped by area and tagged P0 (MVP), P1 (v1) or P2 (later). IDs
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | SET-1 | Create, rename, duplicate, archive and delete working sets | P0 |
-| SET-2 | An approved decision (a detection the user approved, or text they marked by hand) applies to every document in the set, including documents added later. Detections not yet approved stay in their own document | P0 |
+| SET-2 | Each document is Not started, In review or Approved. Approving a document applies its decisions (text marked by hand, a box over an image, and from phase 4 the detections approved in it) to every document in the set, including documents added later, after a heads-up naming the documents it changes. Until then they stay in their own document. A spread sends an approved document back to In review, where the user can review only what the spread changed | P0 |
 | SET-3 | An entity view lists each entity with its type, action, surrogate and where it occurs | P0 |
 | SET-4 | Working sets are isolated: no entity, surrogate or decision crosses from one to another | P0 |
 | SET-5 | Purge: delete a set with its stored documents, vault and entity list in one action | P0 |
-| SET-6 | When a new decision changes a document that was already exported, the export is marked stale and can be re-run | P1 |
+| SET-6 | When a new decision changes a document that was already exported, it shows "Changed since download" and can be downloaded again. Cleaned files are ordinary browser downloads; the set keeps no copy | P0 |
 | SET-7 | Export and import a set's policy without its data | P1 |
-| SET-8 | Export and import a whole working set as one encrypted file, for backup and for moving to another browser or device | P0 |
+| SET-8 | Back up a whole working set, and move it to another browser or device, by copying its folder; import copies a picked set folder in | P0 |
 
 ### Records
 
@@ -211,7 +211,7 @@ Settings resolve in one order: built-in default, then global, then working set, 
 | Redaction appearance | A configurable coloured box or type label | Yes | Override | P0 |
 | Hidden content | Remove all comments and annotations, or only those with findings; keep or drop accessibility tags | Yes | Override | P0 |
 | Detection level | Full, Standard or Basic (DET-12). The app picks one from the device; the user can choose a higher one | Yes | Override | P0 |
-| Vault lock | Passphrase and auto-lock timeout | Yes | No | P0 |
+| Storage location | A folder on this computer, or the browser's own storage until one is picked | Yes | No | P0 |
 | Surrogate style | Placeholder or realistic, per type | Yes | Override | P1 |
 | Region and language | Country packs, phone regions, OCR languages | Yes | Override | P1 |
 | Presets | Ready-made policies such as "Share with AI", "Legal disclosure", "HIPAA Safe Harbor" | Yes | Pick one | P1 |
@@ -231,11 +231,11 @@ Privacy and irreversibility are hard gates: a release that fails either does not
 | Telemetry | On by default; users can switch it off or on in settings. It carries only operational data under a published schema, never document content. |
 | Irreversibility | A redacted value cannot be recovered from the output by text extraction, copy and paste, metadata, revision history or raw file inspection. Verified per file. |
 | Honest limits | The certificate proves detected values are gone. It does not prove nothing was missed, and the UI says so. |
-| Data at rest | Vault and working-set data are encrypted on disk. Logs and reports hold no raw values. |
+| Data at rest | Not encrypted in v1. Working-set data, vault included, lives in a folder the user picked, as private as their other files, or in the browser's storage, private to our site. Logs and reports hold no raw values. |
 | Safety | Originals are never modified. Decisions autosave. A crash loses no work. |
 | Performance | First pattern-based findings within seconds of import. Full ML pass at 2 seconds per page or better on a recent laptop; the in-browser figure is still to be measured. The UI stays responsive while documents process. |
 | Footprint | Models must be small enough to download and run in a browser. Which models fill each detection level is an open HLD decision (D10). The Basic level must work without any model. |
-| Platforms | Current desktop Chrome, Edge, Firefox and Safari. Nothing to install. |
+| Platforms | Current desktop Chrome in v1. Nothing to install. Safari and Firefox come later, through a storage backend of their own, since they cannot save into a folder the user picks. |
 | Accessibility | UI meets WCAG 2.2 AA and is fully keyboard-operable. PDF accessibility tags can be kept on request. |
 | Licensing | Every bundled component permits the way we distribute. The PDF engine's AGPL licence is met by publishing the browser app's source; the server side stays closed. |
 
@@ -272,10 +272,10 @@ The largest product risk is over-trust: a user reads "redacted" as "nothing was 
 | AI models alter surrogates | A changed token cannot be restored | Tokens designed to survive; tolerant matching; a report of anything unrecognised |
 | Pseudonyms in PDFs and images | A stand-in rarely fits the space and font of the original | Placeholders fitted into the redaction box; set the expectation that layout is approximate |
 | First-load weight | Models and WebAssembly modules make the first visit a large download, and weak devices run them slowly | The Basic detection level works without models; staged, cached downloads; browser-sized models |
-| The working set is itself sensitive | It remembers values in order to stay consistent across documents | Encryption at rest, purge, optional retention limit |
+| The working set is itself sensitive | It remembers values in order to stay consistent across documents, and v1 stores it unencrypted | Kept in a folder the user chose or in storage private to our site; purge; optional retention limit |
 | PDF engine licence | MuPDF is AGPL or commercial | Decide before the app is public (HLD D2) |
 | Trust in a hosted app | The browser runs whatever code our site serves, so "nothing leaves" rests on our release process | No upload route, a claim users can test offline, public source, reproducible builds with signed release hashes shown in the app, and a verifier extension in v1 (HLD D9) |
-| Browser storage can be lost | Clearing site data, or a browser's own clean-up, deletes the vault, and its pseudonyms can then never be restored | Backup prompt after pseudonymising; working-set export and import (SET-8) |
+| Browser storage can be lost | Clearing site data, or a browser's own clean-up (Safari's after seven days without a visit), deletes the vault, and its pseudonyms can then never be restored | A folder on the user's disk; persistent storage requested again and again until one is picked; backup prompt after pseudonymising; working-set export and import (SET-8) |
 
 **Open questions for partner review**
 
@@ -285,9 +285,9 @@ The largest product risk is over-trust: a user reads "redacted" as "nothing was 
 
 - **Lead user:** the AI-assisted professional (lawyer, accountant, consultant, HR). The disclosure officer follows.
 - **Default surrogate style:** placeholders (`PERSON_1`). Realistic fakes, from v1, are an option per working set.
-- **Redacted values:** the working set stores them, encrypted, so later documents match and spellings can be linked.
-- **Originals:** a working set keeps its own encrypted copy of each original, included in set export and backup.
-- **Teams:** v1 is single-user. Colleagues share a working set through its encrypted export (SET-8); shared vaults and team plans stay P2.
+- **Redacted values:** the working set stores them so later documents match and spellings can be linked.
+- **Originals:** a working set keeps its own copy of each original, included in set export and backup.
+- **Teams:** v1 is single-user. Colleagues share a working set by copying its folder (SET-8); shared vaults and team plans stay P2.
 - **Launch scope:** English, with identifier packs for the US, UK, Canada, Australia, New Zealand and Ireland. India is not at launch; it follows in v1 (DET-11).
 - **Free plan:** 10 documents and 20,000 characters of pasted text a month, each resetting monthly; restoring never counts. One document before sign-up.
 - **Sign-in:** Auth0, with no passwords. Enterprise single sign-on comes with team plans.
@@ -298,4 +298,5 @@ The largest product risk is over-trust: a user reads "redacted" as "nothing was 
 - **Model and library hosting:** models and libraries may load from their public hosts (for example the Hugging Face Hub or a CDN), each pinned to an exact revision and hash-checked. The promise is that no document is uploaded without the user's consent; downloads carry no document content.
 - **Telemetry:** on by default; users can switch it off or on in settings (ACC-11).
 - **Priorities changed on 18 Nov 2026:** realistic surrogates (PSE-9) and restore into DOCX (PSE-14) are v1. MVP images are PNG, JPEG and WebP; TIFF joins if the PDF engine decodes it; HEIC, GIF and BMP are v1 (DOC-9).
+- **Working sets (21 Nov 2026):** the app calls a working set a project, and every document lives in one. Data is stored as files behind one storage interface: a folder on the user's disk, or the browser's storage until one is picked; backends for other browsers or a cloud may follow. v1 supports Chrome only. No encryption at rest and no vault passphrase in v1, because a forgotten passphrase would lose every project with no way back. Decisions spread only when a document is approved (SET-2).
 - **The earlier POC:** nothing from it is used, to avoid bias: not its code, tests, fixtures or measured figures. The product is specified and tested on its own terms.
