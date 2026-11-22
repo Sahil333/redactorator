@@ -2,18 +2,23 @@
 // app's `settings.json`. All are read from storage the user's browser keeps across app
 // versions, so each carries a version and is checked whole when read.
 import {
+  isFingerprint,
   isOffset,
+  isPositiveNumber,
   isPageIndex,
   isRecord,
   isText,
   parseAll,
   parseAppearance,
   parseBox,
+  parsePlacedImage,
   pointBox,
   type Appearance,
   type PageChar,
   type PageText,
+  type PlacedImage,
 } from "../engine/contract";
+import type { ImageAnchor } from "./images";
 import type { Mark, MarkTarget, TextPiece } from "./marks";
 import type { MarkType } from "./markTypes";
 
@@ -54,15 +59,20 @@ export interface ProjectDocument {
   readonly shown: readonly string[];
 }
 
-/** A value hidden in every document of the project, set when a document that marks it is approved. */
+/**
+ * A value, or a part of an image, hidden in every document of the project; set when a document
+ * that marks it is approved.
+ */
 export interface HiddenValue {
-  /** Its normalised form (engine/match.ts), which every spelling of it shares. */
+  /** A value's normalised form (engine/match.ts), which every spelling of it shares, or an image part's key (app/images.ts). */
   readonly key: string;
   /** As it was marked, to show. */
   readonly text: string;
   readonly type: MarkType;
   /** The document whose approval set it. */
   readonly from: DocumentId;
+  /** For a part of an image: the image and the part. */
+  readonly image?: ImageAnchor;
 }
 
 export interface Project {
@@ -84,11 +94,14 @@ export const defaultSettings: Settings = { appearance: { colour: "#000000", labe
 
 const PROJECT_FORMAT = "redactorator-project";
 const TEXT_FORMAT = "redactorator-text";
+const IMAGES_FORMAT = "redactorator-images";
 const SETTINGS_FORMAT = "redactorator-settings";
 // Raise a version only with a migration from every earlier one in the parser below.
-// Version 1 (phase 2 slice 1) had no review states and no hidden values.
-const PROJECT_VERSION = 2;
+// Version 1 (phase 2 slice 1) had no review states and no hidden values; version 2 (slice 2) no
+// image anchors, so its boxes are anchored when their document is next approved.
+const PROJECT_VERSION = 3;
 const TEXT_VERSION = 1;
+const IMAGES_VERSION = 1;
 const SETTINGS_VERSION = 1;
 
 /** Why a stored file could not be used. Shown to the user. */
@@ -103,11 +116,35 @@ function parsePiece(value: unknown): TextPiece | undefined {
   return boxes && value.start < value.end ? { page: value.page, start: value.start, end: value.end, boxes } : undefined;
 }
 
+const isUnit = (value: unknown): value is number => typeof value === "number" && value >= 0 && value <= 1;
+
+function parseFrame(value: unknown): ImageAnchor["frame"] | undefined {
+  const units = parseAll(value, (n) => (isUnit(n) ? n : undefined));
+  if (units?.length !== 4) return undefined;
+  const [x0 = 0, y0 = 0, x1 = 0, y1 = 0] = units;
+  return x0 <= x1 && y0 <= y1 ? [x0, y0, x1, y1] : undefined;
+}
+
+function parseAnchor(value: unknown): ImageAnchor | undefined {
+  if (!isRecord(value) || !isFingerprint(value.fingerprint)) return undefined;
+  const { aspect } = value;
+  const frame = parseFrame(value.frame);
+  return frame && isPositiveNumber(aspect) ? { fingerprint: value.fingerprint, aspect, frame } : undefined;
+}
+
+/** An optional image anchor: absent, or one that parses. */
+function optionalAnchor(value: unknown): { image?: ImageAnchor } | undefined {
+  if (value === undefined) return {};
+  const image = parseAnchor(value);
+  return image && { image };
+}
+
 function parseTarget(value: unknown): MarkTarget | undefined {
   if (!isRecord(value)) return undefined;
   if (value.kind === "box") {
     const box = parseBox(value.box);
-    return box && isPageIndex(value.page) ? { kind: "box", page: value.page, box } : undefined;
+    const anchor = optionalAnchor(value.image);
+    return box && anchor && isPageIndex(value.page) ? { kind: "box", page: value.page, box, ...anchor } : undefined;
   }
   const [first, ...rest] = parseAll(value.pieces, parsePiece) ?? [];
   return value.kind === "text" && isText(value.text) && first ? { kind: "text", text: value.text, pieces: [first, ...rest] } : undefined;
@@ -143,7 +180,8 @@ function parseDocument(value: unknown, version: number): ProjectDocument | undef
 function parseHiddenValue(value: unknown): HiddenValue | undefined {
   if (!isRecord(value)) return undefined;
   const { key, text, type, from } = value;
-  return isText(key) && key !== "" && isText(text) && isText(type) && isDocumentId(from) ? { key, text, type, from } : undefined;
+  const anchor = optionalAnchor(value.image);
+  return anchor && isText(key) && key !== "" && isText(text) && isText(type) && isDocumentId(from) ? { key, text, type, from, ...anchor } : undefined;
 }
 
 /** The record inside a stored file of `format`, and its version, once that is one this app reads. */
@@ -217,6 +255,15 @@ export function parseTexts(text: string, pages: number): PageText[] | StoredFile
   if (typeof stored === "string") return stored;
   const texts = parseAll(stored.data.pages, parseStoredPage);
   return texts && texts.length === pages ? texts : "damaged";
+}
+
+export const imagesJson = (images: readonly PlacedImage[]): string => JSON.stringify({ format: IMAGES_FORMAT, version: IMAGES_VERSION, images });
+
+export function parseImages(text: string, pages: number): PlacedImage[] | StoredFileProblem {
+  const stored = versioned(text, IMAGES_FORMAT, IMAGES_VERSION);
+  if (typeof stored === "string") return stored;
+  const images = parseAll(stored.data.images, parsePlacedImage);
+  return images && images.every((image) => image.page < pages) ? images : "damaged";
 }
 
 export function parseSettings(text: string): Settings | StoredFileProblem {

@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import type { PageIndex, PageModel } from "../engine/contract";
+import type { PageIndex, PageModel, PlacedImage } from "../engine/contract";
 import { CheckedBanner } from "./CheckedBanner";
 import { baseName, savePdf } from "./download";
 import { DropZone } from "./DropZone";
@@ -54,6 +54,8 @@ interface WorkspaceProps {
   readonly pages: readonly [PageModel, ...PageModel[]];
   readonly marks: Marks;
   readonly review: Review;
+  /** The document's images a box can spread over; undefined until they are read. */
+  readonly images: readonly PlacedImage[] | undefined;
   readonly tool: Tool;
   readonly labelling: boolean;
   readonly currentPage: PageIndex | undefined;
@@ -171,6 +173,7 @@ export function Workspace(props: WorkspaceProps) {
         marks={marks.marks}
         hidden={review.hidden}
         reach={review.reach}
+        images={props.images}
         typeOptions={marks.typeOptions}
         highlighted={marks.highlighted}
         onHighlight={marks.highlight}

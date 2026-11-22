@@ -42,7 +42,7 @@ export async function prepareFiles(
     }
     const inspection = await inspect(bytes.slice(0));
     if ("error" in inspection) refused.push({ file: file.name, reason: inspection.error.message });
-    else added.push({ id: newDocumentId(), file: file.name, bytes, sha256: await sha256(bytes), texts: inspection.texts });
+    else added.push({ id: newDocumentId(), file: file.name, bytes, sha256: await sha256(bytes), reading: inspection });
   }
   return { added, refused };
 }

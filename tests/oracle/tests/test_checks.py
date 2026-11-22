@@ -74,3 +74,22 @@ def test_pixels_judges_the_soft_mask_on_its_own():
     assert checks.pixels(fx.masked_image(), fx.masked_image(cleaned=True), fx.IMAGE_BLANKED, mask=True) == []
     assert checks.pixels(fx.masked_image(), fx.masked_image(), fx.IMAGE_BLANKED, mask=True)[0].startswith(
         "the image under the box still has")
+
+
+# Where logo-b.pdf draws each image, in user space.
+LOGO_HALF = (100, 550, 244, 646)
+LOGO_TURNED = (304, 550, 400, 694)
+LOGO_OTHER = (420, 300, 564, 396)
+
+
+def test_pixels_judges_the_image_drawn_at_a_place_turned_or_not():
+    # Turned, the logo's left 90% runs up the page, so a reading that ignored the turn fails.
+    left_90 = {LOGO_HALF: (100, 550, 229.6, 646), LOGO_TURNED: (304, 550, 400, 679.6)}
+    for at, region in left_90.items():
+        assert checks.pixels(fx.logo_b(), fx.logo_b(cleaned=True), region, at=at) == []
+        assert checks.pixels(fx.logo_b(), fx.logo_b(), region, at=at)[0].startswith("the image under the box still has")
+
+
+def test_unchanged_needs_every_pixel_as_it_was():
+    assert checks.unchanged(fx.logo_b(), fx.logo_b(cleaned=True), LOGO_OTHER) == []
+    assert checks.unchanged(fx.logo_b(), fx.logo_b(cleaned=True), LOGO_HALF)[0].endswith("changed")

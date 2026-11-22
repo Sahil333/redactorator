@@ -10,7 +10,7 @@ import re
 from collections.abc import Iterator
 
 from pdfminer.high_level import extract_pages, extract_text
-from pdfminer.layout import LTChar, LTComponent, LTCurve, LTImage, LTLayoutContainer, LTPage
+from pdfminer.layout import LTChar, LTComponent, LTCurve, LTFigure, LTImage, LTLayoutContainer, LTPage
 from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdfparser import PDFParser
 from pdfminer.pdftypes import resolve1
@@ -128,12 +128,23 @@ def colour_mode(space: object) -> str:
     return {3: "RGB", 1: "L"}[components]
 
 
-def image_of(pdf: bytes, mask: bool = False) -> tuple[Box, Image.Image]:
-    """The page's one image and where it is drawn, or with `mask` its soft mask (SMask)."""
-    found = [item for page in pages(pdf) for item in walk(page) if isinstance(item, LTImage)]
+Matrix = tuple[float, float, float, float, float, float]
+
+
+def placed_images(pdf: bytes) -> list[tuple[Matrix, LTImage]]:
+    """Every image drawn in the file, each with the matrix that places its unit square on the page."""
+    return [(item.matrix, child) for page in pages(pdf) for item in walk(page)
+            if isinstance(item, LTFigure) for child in item if isinstance(child, LTImage)]
+
+
+def image_of(pdf: bytes, mask: bool = False, at: Box | None = None) -> tuple[Matrix, Image.Image]:
+    """The image drawn over `at`, or the file's one image, and its matrix; with `mask`, its soft mask (SMask)."""
+    found = placed_images(pdf)
+    if at is not None:
+        found = [(matrix, item) for matrix, item in found if all(abs(a - b) <= TOLERANCE for a, b in zip(item.bbox, at))]
     if len(found) != 1:
         raise LookupError(f"expected one image, found {len(found)}")
-    item = found[0]
+    matrix, item = found[0]
     stream = resolve1(item.stream.attrs["SMask"]) if mask else item.stream
     attrs = stream.attrs
     size = (resolve1(attrs["Width"]), resolve1(attrs["Height"]))
@@ -141,36 +152,61 @@ def image_of(pdf: bytes, mask: bool = False) -> tuple[Box, Image.Image]:
     if any(name.name == "DCTDecode" for name, _ in filters):
         picture = Image.open(io.BytesIO(stream.get_rawdata()))
     else:
-        mode = colour_mode(attrs["ColorSpace"])
+        # A stencil mask (ImageMask) has no colour space: one bit a pixel, where to paint.
+        mode = "1" if resolve1(attrs.get("ImageMask", False)) else colour_mode(attrs["ColorSpace"])
         # One bit a pixel, rows padded to a byte, as Pillow's "1" mode packs them.
         if mode == "L" and resolve1(attrs.get("BitsPerComponent", 8)) == 1:
             mode = "1"
         picture = Image.frombytes(mode, size, stream.get_data())
-    return item.bbox, picture.convert("RGB")
+    return matrix, picture.convert("RGB")
 
 
-def pixels(source: bytes, output: bytes, region: Box, mask: bool = False) -> list[str]:
+def pixel_box(matrix: Matrix, x: int, y: int, size: tuple[int, int]) -> Box:
+    """Where pixel (x, y) lands on the page. An image's first row is at the top of its unit square."""
+    a, b, c, d, e, f = matrix
+    width, height = size
+    corners = [(u / width, 1 - v / height) for u in (x, x + 1) for v in (y, y + 1)]
+    xs = [a * u + c * v + e for u, v in corners]
+    ys = [b * u + d * v + f for u, v in corners]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def differs(before: tuple[int, ...], after: tuple[int, ...]) -> bool:
+    return max(abs(a - b) for a, b in zip(before, after)) > 8
+
+
+def pixels(source: bytes, output: bytes, region: Box, mask: bool = False, at: Box | None = None) -> list[str]:
     """Pixels wholly inside `region` are one colour; pixels wholly outside it are unchanged.
 
-    With `mask`, the image's soft mask is judged instead: a shape can live in the mask alone."""
-    bbox, before = image_of(source, mask)
-    _, after = image_of(output, mask)
+    With `mask`, the image's soft mask is judged instead: a shape can live in the mask alone.
+    With `at`, the image drawn over that box is judged, where a file draws several."""
+    matrix, before = image_of(source, mask, at)
+    _, after = image_of(output, mask, at)
     if after.size != before.size:
         after = after.resize(before.size)
     width, height = before.size
-    sx, sy = (bbox[2] - bbox[0]) / width, (bbox[3] - bbox[1]) / height
     inside, changed = set(), 0
     for y in range(height):
         for x in range(width):
-            pixel = (bbox[0] + x * sx, bbox[3] - (y + 1) * sy, bbox[0] + (x + 1) * sx, bbox[3] - y * sy)
+            pixel = pixel_box(matrix, x, y, before.size)
             if contains(region, pixel):
                 inside.add(after.getpixel((x, y)))
-            elif not overlaps(region, pixel):
-                if max(abs(a - b) for a, b in zip(before.getpixel((x, y)), after.getpixel((x, y)))) > 8:
-                    changed += 1
+            elif not overlaps(region, pixel) and differs(before.getpixel((x, y)), after.getpixel((x, y))):
+                changed += 1
     reasons = []
     if len(inside) != 1:
         reasons.append(f"the image under the box still has {len(inside)} colours")
     if changed:
         reasons.append(f"{changed} image pixels outside the box changed")
     return reasons
+
+
+def unchanged(source: bytes, output: bytes, at: Box) -> list[str]:
+    """The image drawn over `at` looks as it did."""
+    _, before = image_of(source, at=at)
+    _, after = image_of(output, at=at)
+    if after.size != before.size:
+        return [f"the image at {at} changed size"]
+    width, height = before.size
+    changed = sum(differs(before.getpixel((x, y)), after.getpixel((x, y))) for y in range(height) for x in range(width))
+    return [f"{changed} pixels of the image at {at} changed"] if changed else []

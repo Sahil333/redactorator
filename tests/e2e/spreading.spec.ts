@@ -5,6 +5,7 @@ import {
   applyAndDownload,
   dear,
   downloadButton,
+  drawBox,
   dropFiles,
   encryptedPdf,
   janeRoe,
@@ -23,12 +24,27 @@ import { judge } from "./oracle";
 const letterA = new URL("../../fixtures/letter-a.pdf", import.meta.url).pathname;
 const letterB = new URL("../../fixtures/letter-b.pdf", import.meta.url).pathname;
 const lineFeedGlyph = new URL("../../fixtures/line-feed-glyph.pdf", import.meta.url).pathname;
+const logoA = new URL("../../fixtures/logo-a.pdf", import.meta.url).pathname;
+const logoB = new URL("../../fixtures/logo-b.pdf", import.meta.url).pathname;
+const unmatchableImages = new URL("../../fixtures/unmatchable-images.pdf", import.meta.url).pathname;
+const signatures = new URL("../../fixtures/signatures.pdf", import.meta.url).pathname;
 
 // Words of letter-a.pdf and letter-b.pdf, from tests/oracle/README.md, in the app's box convention.
 const aJaneRoe: PointBox = [72, 79.1, 123.4, 95.6];
 const aAccount: PointBox = [72, 99.1, 128.7, 115.6];
 const aRoe: PointBox = [72, 119.1, 94.0, 135.6];
 const bStatement: PointBox = [72, 79.1, 126.7, 95.6];
+// A box over the left 90% of logo-a.pdf's logo (x 100–388, y 100–292), spilling past its other edges.
+const mostOfLogo: PointBox = [90, 90, 359.2, 302];
+// "Reference 4471" in logo-a.pdf, under no image.
+const reference: PointBox = [96, 328, 200, 346];
+// Across logo-a.pdf's logo's lower right corner, less than half of it on the logo.
+const offLogo: PointBox = [330, 250, 530, 350];
+// Where logo-b.pdf draws each image, in user space (tests/oracle/README.md).
+const logoHalf = [100, 550, 244, 646] as const;
+const logoTurned = [304, 550, 400, 694] as const;
+const logoResaved = [100, 250, 388, 442] as const;
+const otherImage = [420, 300, 564, 396] as const;
 // "Jane Roe" and the line-feed glyph after it in line-feed-glyph.pdf.
 const janeRoeAndLineFeed: PointBox = [101.3, 79.1, 156.0, 95.6];
 
@@ -57,7 +73,7 @@ async function holdReplies(page: Page, type: "matched" | "inspected"): Promise<(
   return () => page.evaluate(() => new BroadcastChannel("held-replies").postMessage("release"));
 }
 
-/** Rewrites the stored project as slice 1 kept it: version 1, no review fields, no stored text; and deletes `gone` from its folder. */
+/** Rewrites the stored project as slice 1 kept it: version 1, no review fields, no stored text or images; and deletes `gone` from its folder. */
 async function storeAsVersion1(page: Page, folder: string, gone: readonly string[] = []): Promise<void> {
   await saved(page);
   await page.evaluate(
@@ -67,11 +83,12 @@ async function storeAsVersion1(page: Page, folder: string, gone: readonly string
       const records = await project.getDirectoryHandle(".redactorator");
       const file = await records.getFileHandle("project.json");
       const added = new Set(["hidden", "review", "download", "shown", "isNew"]);
-      const text = (await (await file.getFile()).text()).replace('"version":2', '"version":1');
+      const text = (await (await file.getFile()).text()).replace('"version":3', '"version":1');
       const writable = await file.createWritable();
       await writable.write(JSON.stringify(JSON.parse(text), (key, value: unknown) => (added.has(key) ? undefined : value)));
       await writable.close();
       await records.removeEntry("text", { recursive: true });
+      await records.removeEntry("images", { recursive: true });
       for (const name of gone) await project.removeEntry(name);
     },
     { folder, gone },
@@ -197,6 +214,87 @@ test("Don't hide here keeps a value in one document only", async ({ page }) => {
   await markText(page, 1, bStatement, "Other");
   const output = await applyAndDownload(page);
   await judge(letterB, output, [{ check: "present", text: "JANE ROE" }, { check: "present", text: "Jane Roe in person" }]);
+});
+
+test("a box over most of a logo hides the same part of every copy of it in another document, however it is drawn there", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, logoA, logoB);
+  await drawBox(page, 1, mostOfLogo, "Other");
+  await approve(page, /hides 3 places in logo-b\.pdf/);
+
+  // Reload: the parts of images spread are kept.
+  await saved(page);
+  await page.reload();
+  await show(page, "logo-b.pdf");
+  await expect(inExplorer(page, "logo-b.pdf")).toContainText("In review");
+  await expect(newMarks(page)).toContainText("3 new marks from logo-a.pdf");
+  const output = await applyAndDownload(page);
+  await judge(logoB, output, [
+    { check: "pixels", at: logoHalf, region: [100, 550, 229.6, 646] },
+    { check: "pixels", at: logoTurned, region: [304, 550, 400, 679.6] },
+    { check: "pixels", at: logoResaved, region: [100, 250, 359.2, 442] },
+    { check: "unchanged", at: otherImage },
+    { check: "present", text: "Acme Ltd invoice" },
+    { check: "metadata" },
+  ]);
+});
+
+test("a document added later gets the hidden parts of images", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, logoA);
+  await drawBox(page, 1, mostOfLogo, "Other");
+  await approve(page, undefined);
+
+  await addDocuments(page, logoB);
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/logo-b\.pdf/);
+  await expect(inExplorer(page, "logo-b.pdf")).toContainText("In review");
+  await expect(newMarks(page)).toContainText("3 new marks from logo-a.pdf");
+});
+
+test("Don't hide here keeps the copies of a logo in one document", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, logoA, logoB);
+  await drawBox(page, 1, mostOfLogo, "Other");
+  await approve(page, /hides 3 places in logo-b\.pdf/);
+
+  await show(page, "logo-b.pdf");
+  await page.getByRole("button", { name: "Don't hide Box on 3 places, page 1 here" }).click();
+  await expect(marks(page)).toHaveCount(0);
+});
+
+test("a box not mostly on an image, or on an image too big, small or plain to tell apart, stays in its document", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, logoA, logoB, unmatchableImages);
+  await drawBox(page, 1, reference, "Other");
+  await drawBox(page, 1, offLogo, "Other");
+  await expect(marks(page)).toHaveText([/Stays in this document/, /Stays in this document/]);
+  // Nothing spreads, so there is no heads-up.
+  await approve(page, undefined);
+  await expect(inExplorer(page, "logo-b.pdf")).toContainText("Not started");
+
+  // Page 2 draws the same three images; a scan's page is one image, and two scans of one form would look alike.
+  await show(page, "unmatchable-images.pdf");
+  await drawBox(page, 1, [150, 250, 350, 350], "Other");
+  await drawBox(page, 1, [100, 96, 196, 192], "Other");
+  await drawBox(page, 1, [300, 64, 428, 192], "Other");
+  await approve(page, undefined);
+  await expect(marks(page)).toHaveText([/page 1.*Stays/, /page 1.*Stays/, /page 1.*Stays/]);
+});
+
+test("a signature drawn as a stencil, and a logo shaped by its mask, spread to their copies", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, signatures);
+  // The left 90% of each on page 1, spilling past their other edges.
+  await drawBox(page, 1, [90, 154, 272.8, 302], "Other");
+  await drawBox(page, 1, [90, 454, 272.8, 602], "Other");
+  await approve(page, /It also hides 2 places more in this document/);
+
+  const output = await applyAndDownload(page);
+  await judge(signatures, output, [
+    { check: "pixels", at: [300, 600, 396, 664], region: [300, 600, 386.4, 664] },
+    { check: "pixels", at: [300, 300, 396, 364], region: [300, 300, 386.4, 364], mask: true },
+    { check: "metadata" },
+  ]);
 });
 
 test("removing a hidden value stops hiding it everywhere once its document is approved", async ({ page }) => {

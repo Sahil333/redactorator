@@ -272,6 +272,145 @@ def line_feed_glyph() -> bytes:
     return write_pdf(objects, "/Root 1 0 R")
 
 
+# logo-a.pdf and logo-b.pdf: one logo, drawn whole in A and copied about B, for spreading a box
+# over part of an image. B draws the same pixels at half size and again a quarter turned, a
+# copy re-saved as a JPEG, and a different image of the same size. It also draws the logo off the
+# page, where it shows nothing and so gets no box.
+LOGO_SIZE = (96, 64)
+LOGO_A = (100, 500, 388, 692)
+LOGO_B_HALF = "144 0 0 96 100 550"
+LOGO_B_TURNED = "0 144 -96 0 400 550"
+LOGO_B_RESAVED = (100, 250, 388, 442)
+LOGO_B_OTHER = (420, 300, 564, 396)
+
+
+# The left 90% of the logo, 86.4 of its 96 columns, as a box spread from A blanks it: every
+# column the box touches.
+LOGO_BLANKED_COLUMNS = 87
+
+
+def logo_pixels(other: bool = False, blank_left_columns: int = 0) -> bytes:
+    """Red rings and a bar on cream; with `other`, red diagonal stripes and a band instead."""
+    w, h = LOGO_SIZE
+
+    def red(x: int, y: int) -> bool:
+        if other:
+            return (x + y) % 16 < 8 or 20 < y < 30
+        return int(((x - 30) ** 2 + (y - 32) ** 2) ** 0.5 / 6) % 2 == 0 or (60 < x < 88 and 12 < y < 52)
+
+    def colour(x: int, y: int) -> tuple[int, int, int]:
+        if x < blank_left_columns:
+            return (0, 0, 0)
+        return (200, 30, 40) if red(x, y) else (240, 240, 230)
+
+    return bytes(value for y in range(h) for x in range(w) for value in colour(x, y))
+
+
+def logo_jpeg() -> bytes:
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    # Without chroma subsampling, so Pillow and MuPDF decode it to the same pixels.
+    Image.frombytes("RGB", LOGO_SIZE, logo_pixels()).save(out, "JPEG", quality=75, subsampling=0)
+    return out.getvalue()
+
+
+def image_stream(pixels: bytes, size: tuple[int, int] = LOGO_SIZE) -> bytes:
+    return stream(f"/Type /XObject /Subtype /Image /Width {size[0]} /Height {size[1]} "
+                  "/ColorSpace /DeviceRGB /BitsPerComponent 8", pixels, compress=True)
+
+
+def placed(rect: tuple[int, int, int, int]) -> str:
+    x0, y0, x1, y1 = rect
+    return f"{x1 - x0} 0 0 {y1 - y0} {x0} {y0}"
+
+
+def logo_a() -> bytes:
+    content = (line(100, 720, 14, "Acme Ltd") + f"q {placed(LOGO_A)} cm /Im1 Do Q\n"
+               + line(100, 450, 12, "Reference 4471"))
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()),
+                           "/Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >>")
+    objects.append(image_stream(logo_pixels()))
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+def logo_b(cleaned: bool = False) -> bytes:
+    """With `cleaned`, the shared logo's left 90% is blanked, as at both its places."""
+    content = (line(100, 720, 14, "Acme Ltd invoice") + f"q {LOGO_B_HALF} cm /Im1 Do Q\nq {LOGO_B_TURNED} cm /Im1 Do Q\n"
+               + f"q {placed(LOGO_B_RESAVED)} cm /Im2 Do Q\nq {placed(LOGO_B_OTHER)} cm /Im3 Do Q\n"
+               + "q 144 0 0 96 700 900 cm /Im1 Do Q\n")
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()),
+                           "/Font << /F1 4 0 R >> /XObject << /Im1 6 0 R /Im2 7 0 R /Im3 8 0 R >>")
+    w, h = LOGO_SIZE
+    objects += [image_stream(logo_pixels(blank_left_columns=LOGO_BLANKED_COLUMNS if cleaned else 0)),
+                stream(f"/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceRGB "
+                       "/BitsPerComponent 8 /Filter /DCTDecode", logo_jpeg()),
+                image_stream(logo_pixels(other=True))]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# signatures.pdf: a signature drawn as a stencil mask (ImageMask), as scanned signatures often
+# are, and a black logo whose shape lives in its soft mask; page 1 draws each whole, page 2 at
+# half size elsewhere.
+SIGNATURE_PAGE_1 = ("192 0 0 128 100 500", "192 0 0 128 100 200")
+SIGNATURE_PAGE_2 = ("96 0 0 64 300 600", "96 0 0 64 300 300")
+
+
+def signatures() -> bytes:
+    w, h = LOGO_SIZE
+    shape = logo_pixels()
+    inked = [shape[i * 3] == 200 for i in range(w * h)]
+    # One bit a pixel, rows padded to a byte; a 0 is painted.
+    stencil = bytes(sum((0 if inked[y * w + x + bit] else 1) << (7 - bit) for bit in range(8))
+                    for y in range(h) for x in range(0, w, 8))
+    page = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Sig 5 0 R /Logo 6 0 R >> >> /Contents %d 0 R >>"
+    draw = "q 0 0 0.6 rg {} cm /Sig Do Q\nq {} cm /Logo Do Q\n"
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        (page % 8).encode(),
+        (page % 9).encode(),
+        stream(f"/Type /XObject /Subtype /Image /Width {w} /Height {h} /ImageMask true /BitsPerComponent 1", stencil, compress=True),
+        stream(f"/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 7 0 R",
+               bytes(w * h * 3), compress=True),
+        stream(f"/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceGray /BitsPerComponent 8",
+               bytes(255 if ink else 0 for ink in inked), compress=True),
+        stream("", draw.format(*SIGNATURE_PAGE_1).encode()),
+        stream("", draw.format(*SIGNATURE_PAGE_2).encode()),
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# unmatchable-images.pdf: two pages drawing the same three images, none of which a box spreads
+# from: one over the whole page, as a scan does; a patterned one 24 pixels a side; and a plain one.
+SCAN_SIZE = (102, 132)
+TINY_SIZE = (24, 24)
+PLAIN_SIZE = (64, 64)
+
+
+def unmatchable_images() -> bytes:
+    w, h = SCAN_SIZE
+    scan = bytes(value for y in range(h) for x in range(w)
+                 for value in ((40, 40, 40) if 10 < x < 92 and y % 12 < 3 else (250, 250, 250)))
+    tiny = bytes(value for y in range(24) for x in range(24) for value in ((200, 30, 40) if (x + y) % 8 < 4 else (240, 240, 230)))
+    plain = bytes(value for _ in range(64 * 64) for value in (180, 180, 180))
+    page = ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            "/Resources << /XObject << /Scan 5 0 R /Tiny 6 0 R /Plain 7 0 R >> >> /Contents 8 0 R >>")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        page.encode(),
+        page.encode(),
+        image_stream(scan, SCAN_SIZE),
+        image_stream(tiny, TINY_SIZE),
+        image_stream(plain, PLAIN_SIZE),
+        stream("", b"q 612 0 0 792 0 0 cm /Scan Do Q\nq 96 0 0 96 100 600 cm /Tiny Do Q\nq 128 0 0 128 300 600 cm /Plain Do Q\n"),
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
 def encrypted() -> bytes:
     import io
 
@@ -290,6 +429,8 @@ if __name__ == "__main__":
                         ("encrypted", encrypted), ("cross-page", cross_page), ("masked-image", masked_image),
                         ("table", table), ("long", long_document),
                         ("letter-a", lambda: letter(LETTER_A)), ("letter-b", lambda: letter(LETTER_B)),
-                        ("line-feed-glyph", line_feed_glyph), ("tj-strings", tj_strings)]:
+                        ("line-feed-glyph", line_feed_glyph), ("tj-strings", tj_strings),
+                        ("logo-a", logo_a), ("logo-b", logo_b), ("unmatchable-images", unmatchable_images),
+                        ("signatures", signatures)]:
         (FIXTURES / f"{name}.pdf").write_bytes(build())
         print(f"wrote fixtures/{name}.pdf")

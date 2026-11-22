@@ -1,8 +1,10 @@
 // Projects in a store: each is a folder holding its originals under their own names and its
 // records in a hidden `.redactorator/` folder.
-import type { PageText } from "../engine/contract";
+import type { PageText, PlacedImage, Reading } from "../engine/contract";
 import {
   defaultSettings,
+  imagesJson,
+  parseImages,
   parseProject,
   parseSettings,
   parseTexts,
@@ -20,6 +22,7 @@ import type { Store } from "./storage";
 const RECORDS = ".redactorator";
 const PROJECT_FILE = `${RECORDS}/project.json`;
 const textFile = (folder: string, id: DocumentId) => `${folder}/${RECORDS}/text/${id}.json`;
+const imagesFile = (folder: string, id: DocumentId) => `${folder}/${RECORDS}/images/${id}.json`;
 const SETTINGS_FILE = `${RECORDS}/settings.json`;
 
 /** A project and the folder it lives in. */
@@ -40,8 +43,8 @@ export interface NewDocument {
   readonly file: string;
   readonly bytes: ArrayBuffer;
   readonly sha256: string;
-  /** The text of each page, which the project keeps so values can be found in it later. */
-  readonly texts: readonly [PageText, ...PageText[]];
+  /** Its pages' text and images, which the project keeps so values and images can be found in it later. */
+  readonly reading: Reading;
 }
 
 const sameName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
@@ -100,13 +103,14 @@ export async function writeOriginals(
   const started: string[] = [];
   const documents: ProjectDocument[] = [];
   try {
-    for (const { id, file, bytes, sha256, texts } of added) {
+    for (const { id, file, bytes, sha256, reading } of added) {
       const name = unique(safeName(file, "Document.pdf"), [...taken, RECORDS]);
       taken.push(name);
-      started.push(`${folder}/${name}`, textFile(folder, id));
+      started.push(`${folder}/${name}`, textFile(folder, id), imagesFile(folder, id));
       await store.write(`${folder}/${name}`, bytes);
-      await store.write(textFile(folder, id), textsJson(texts));
-      const document: ProjectDocument = { id, file: name, sha256, pages: texts.length, marks: [], review: "not-started", download: "none", shown: [] };
+      await store.write(textFile(folder, id), textsJson(reading.texts));
+      await store.write(imagesFile(folder, id), imagesJson(reading.images));
+      const document: ProjectDocument = { id, file: name, sha256, pages: reading.texts.length, marks: [], review: "not-started", download: "none", shown: [] };
       documents.push(document);
     }
   } catch (error) {
@@ -124,6 +128,15 @@ export async function readTexts(store: Store, folder: string, document: ProjectD
 
 export const saveTexts = (store: Store, folder: string, id: DocumentId, texts: readonly PageText[]): Promise<void> =>
   store.write(textFile(folder, id), textsJson(texts));
+
+/** A document's stored images, or why they can't be used; undefined when there are none, as for a project from before images were kept. */
+export async function readImages(store: Store, folder: string, document: ProjectDocument): Promise<PlacedImage[] | StoredFileProblem | undefined> {
+  const file = await store.read(imagesFile(folder, document.id));
+  return file === undefined ? undefined : parseImages(await file.text(), document.pages);
+}
+
+export const saveImages = (store: Store, folder: string, id: DocumentId, images: readonly PlacedImage[]): Promise<void> =>
+  store.write(imagesFile(folder, id), imagesJson(images));
 
 /** Runs `fill` on a new folder, and removes the folder again if it fails part way. */
 async function intoNewFolder<T>(store: Store, name: string, fill: (folder: string) => Promise<T>): Promise<T> {
@@ -151,8 +164,10 @@ export function duplicateProject(store: Store, { folder, project }: StoredProjec
   return intoNewFolder(store, name, async (copyFolder) => {
     for (const document of project.documents) {
       await store.write(`${copyFolder}/${document.file}`, await readOriginal(store, folder, document));
-      const texts = await store.read(textFile(folder, document.id));
-      if (texts !== undefined) await store.write(textFile(copyFolder, document.id), texts);
+      for (const record of [textFile, imagesFile]) {
+        const file = await store.read(record(folder, document.id));
+        if (file !== undefined) await store.write(record(copyFolder, document.id), file);
+      }
     }
     const copy = { folder: copyFolder, project: { ...project, id: crypto.randomUUID(), name, created: new Date().toISOString() } };
     await saveProject(store, copy);

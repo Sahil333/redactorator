@@ -28,7 +28,10 @@ def run(spec: dict) -> list[str]:
             case "positions":
                 reasons += checks.positions(source, output, check["words"])
             case "pixels":
-                reasons += checks.pixels(source, output, tuple(check["region"]), check.get("mask", False))
+                at = tuple(check["at"]) if "at" in check else None
+                reasons += checks.pixels(source, output, tuple(check["region"]), check.get("mask", False), at)
+            case "unchanged":
+                reasons += checks.unchanged(source, output, tuple(check["at"]))
             case unknown:
                 reasons.append(f"unknown check {unknown!r}")
     return reasons

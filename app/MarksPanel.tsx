@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import type { PlacedImage } from "../engine/contract";
+import { anchorOf } from "./images";
 import { firstPage, itemKey, markKey, markName, markPages, pagesLabel, type Mark } from "./marks";
 import { markTypeLabel, type MarkTypeOption } from "./markTypes";
 import { PageLink } from "./PageLink";
@@ -16,6 +18,8 @@ interface MarksPanelProps {
   /** The values hidden in the whole project, and how far each reaches. */
   readonly hidden: readonly HiddenValue[];
   readonly reach: ReadonlyMap<string, Reach>;
+  /** The document's images a box can spread over; undefined until they are read. */
+  readonly images: readonly PlacedImage[] | undefined;
   readonly typeOptions: readonly MarkTypeOption[];
   /** The mark under the pointer here or on its page. */
   readonly highlighted: Mark["id"] | undefined;
@@ -82,7 +86,7 @@ function ViewPicker({ view, onView, newCount }: { readonly view: View; readonly 
 /** The values hidden in every document of the project, and how far each reaches. */
 function ProjectList({ hidden, reach }: Pick<MarksPanelProps, "hidden" | "reach">) {
   if (hidden.length === 0) {
-    return <p className="px-4 text-ink-muted">Nothing is hidden across the project yet. Approving a document hides its marked text in every document.</p>;
+    return <p className="px-4 text-ink-muted">Nothing is hidden across the project yet. Approving a document hides its marked text, and its boxes over images, in every document.</p>;
   }
   return (
     <ul aria-label="Hidden in this project" className="min-h-0 flex-1 overflow-y-auto border-t border-rule">
@@ -104,12 +108,14 @@ function ProjectList({ hidden, reach }: Pick<MarksPanelProps, "hidden" | "reach"
 interface ItemRowProps extends Pick<MarksPanelProps, "typeOptions" | "onHighlight" | "onRetype" | "onLink"> {
   readonly item: Item;
   readonly highlighted: boolean;
+  /** Whether it is a box that no approval will spread, being mostly on no image. */
+  readonly stays: boolean;
   readonly onRemove: () => void;
   /** Given when its value is hidden across the project, so it can be kept visible here alone. */
   readonly onKeepHere: (() => void) | undefined;
 }
 
-function ItemRow({ item, highlighted, typeOptions, onHighlight, onRetype, onLink, onRemove, onKeepHere }: ItemRowProps) {
+function ItemRow({ item, highlighted, stays, typeOptions, onHighlight, onRetype, onLink, onRemove, onKeepHere }: ItemRowProps) {
   const [retyping, setRetyping] = useState(false);
   const [mark] = item;
   const where = `${markName(mark)} on ${placesLabel(item)}`;
@@ -147,6 +153,7 @@ function ItemRow({ item, highlighted, typeOptions, onHighlight, onRetype, onLink
         >
           {markTypeLabel(mark.type)} · {placesLabel(item)}
         </button>
+        {stays && <p className="text-xs text-ink-muted">Stays in this document</p>}
         {onKeepHere !== undefined && (
           <button
             type="button"
@@ -193,7 +200,12 @@ function ItemRow({ item, highlighted, typeOptions, onHighlight, onRetype, onLink
   );
 }
 
-export function MarksPanel({ id, width, marks, hidden, reach, highlighted, onRemove, onKeepHere, ...row }: MarksPanelProps) {
+/** Whether a mark is a box that approving won't spread: one not yet anchored, and mostly on no image. */
+function staysPut({ target }: Mark, images: readonly PlacedImage[] | undefined): boolean {
+  return target.kind === "box" && target.image === undefined && images !== undefined && anchorOf(target.page, target.box, images) === undefined;
+}
+
+export function MarksPanel({ id, width, marks, hidden, reach, images, highlighted, onRemove, onKeepHere, ...row }: MarksPanelProps) {
   const [view, setView] = useState<View>("document");
   const listRef = useRef<HTMLUListElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -236,6 +248,7 @@ export function MarksPanel({ id, width, marks, hidden, reach, highlighted, onRem
                 key={itemKey(mark)}
                 item={item}
                 highlighted={item.some((each) => each.id === highlighted)}
+                stays={staysPut(mark, images)}
                 {...row}
                 onRemove={() => {
                   focusAfterRemove.current = index;
