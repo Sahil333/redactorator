@@ -68,6 +68,32 @@ export interface PageText {
   readonly chars: readonly PageChar[];
 }
 
+/** [a, b, c, d, e, f]: takes (x, y) to (a x + c y + e, b x + d y + f). */
+export type Matrix = readonly [number, number, number, number, number, number];
+
+/**
+ * An image drawn on a page, which a box over it can spread from or to. Images too small, too
+ * plain, or filling most of their page to be told apart from others are not listed.
+ */
+export interface PlacedImage {
+  readonly page: PageIndex;
+  /** Places the image's unit square in page space (see `Points`), its first row of pixels at y = 0. */
+  readonly matrix: Matrix;
+  /** Its width over its height, in pixels. */
+  readonly aspect: number;
+  /**
+   * A difference hash of a 9 × 8 grey copy, 64 bits as 16 hex digits: whether each cell is
+   * darker than the next one along. Copies at any size, or saved again, share most bits.
+   */
+  readonly fingerprint: string;
+}
+
+/** What the engine reads from a document for the project to keep: each page's text and its images. */
+export interface Reading {
+  readonly texts: readonly [PageText, ...PageText[]];
+  readonly images: readonly PlacedImage[];
+}
+
 /** What the user marked: a range of a page's text, or a box with no text behind it. */
 export type Edit =
   | { readonly kind: "text"; readonly page: PageIndex; readonly start: number; readonly end: number; readonly label: string }
@@ -78,8 +104,8 @@ export type Source = "original" | "output";
 
 // `file` numbers each file the UI opens; the worker echoes it in every reply so
 // the UI can drop a reply about a file the user has since replaced.
-// An inspection opens a file only to say whether it can be added and to read its text, and
-// keeps nothing. A match searches documents' text for keys (engine/match.ts), each document
+// An inspection opens a file only to say whether it can be added and to read its text and
+// images, and keeps nothing. A match searches documents' text for keys (engine/match.ts), each document
 // given as each page's characters.
 export type EngineRequest =
   | { readonly type: "inspect"; readonly inspection: InspectionNumber; readonly bytes: ArrayBuffer }
@@ -128,7 +154,7 @@ export interface DocumentFound extends Found {
 
 export type EngineMessage =
   | { readonly type: "ready" }
-  | { readonly type: "inspected"; readonly inspection: InspectionNumber; readonly texts: readonly [PageText, ...PageText[]] }
+  | { readonly type: "inspected"; readonly inspection: InspectionNumber; readonly reading: Reading }
   | { readonly type: "matched"; readonly match: MatchNumber; readonly found: readonly DocumentFound[] }
   | { readonly type: "refused"; readonly inspection: InspectionNumber; readonly error: EngineError }
   | { readonly type: "opened"; readonly file: FileNumber; readonly document: DocumentModel }
@@ -148,7 +174,7 @@ export type EngineMessage =
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const isPositiveNumber = (value: unknown): value is number =>
+export const isPositiveNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
 
 export const isOffset = (value: unknown): value is number =>
@@ -263,6 +289,26 @@ function parsePageText(value: unknown): PageText | undefined {
   return chars && { chars };
 }
 
+const isMatrix = (value: unknown): value is Matrix =>
+  Array.isArray(value) && value.length === 6 && value.every((n) => typeof n === "number" && Number.isFinite(n));
+
+export const isFingerprint = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{16}$/.test(value);
+
+export function parsePlacedImage(value: unknown): PlacedImage | undefined {
+  if (!isRecord(value)) return undefined;
+  const { page, matrix, aspect, fingerprint } = value;
+  return isPageIndex(page) && isMatrix(matrix) && isPositiveNumber(aspect) && isFingerprint(fingerprint)
+    ? { page, matrix, aspect, fingerprint }
+    : undefined;
+}
+
+function parseReading(value: unknown): Reading | undefined {
+  if (!isRecord(value)) return undefined;
+  const [first, ...rest] = parseAll(value.texts, parsePageText) ?? [];
+  const images = parseAll(value.images, parsePlacedImage);
+  return first && images && { texts: [first, ...rest], images };
+}
+
 function parseFound(value: unknown): DocumentFound | undefined {
   if (!isRecord(value)) return undefined;
   const { document, key, page, start, end } = value;
@@ -308,8 +354,8 @@ function parseInspectionMessage(data: Record<string, unknown>): EngineMessage | 
   const { inspection } = data;
   if (!isInspectionNumber(inspection)) return undefined;
   if (data.type === "inspected") {
-    const [first, ...rest] = parseAll(data.texts, parsePageText) ?? [];
-    return first && { type: "inspected", inspection, texts: [first, ...rest] };
+    const reading = parseReading(data.reading);
+    return reading && { type: "inspected", inspection, reading };
   }
   const error = parseEngineError(data.error);
   return error && { type: "refused", inspection, error };

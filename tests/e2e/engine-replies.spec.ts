@@ -30,7 +30,7 @@ test("a reply about a document the user has since left is ignored", async ({ pag
     `postMessage({ type: "ready" });
     let first;
     addEventListener("message", ({ data }) => {
-      if (data.type === "inspect") { postMessage({ type: "inspected", inspection: data.inspection, texts: [{ chars: [] }] }); return; }
+      if (data.type === "inspect") { postMessage({ type: "inspected", inspection: data.inspection, reading: { texts: [{ chars: [] }], images: [] } }); return; }
       if (data.type !== "open") return;
       if (first === undefined) { first = data.file; return; }
       postMessage({ type: "opened", file: first, document: { pages: [{ index: 0, width: 612, height: 792 }] } });

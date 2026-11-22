@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { pointBox, type PageText } from "../engine/contract";
-import { parseProject, parseTexts, projectJson, textsJson, type Project } from "./project";
+import { isPageIndex, pointBox, type PageText, type PlacedImage } from "../engine/contract";
+import type { ImageAnchor } from "./images";
+import { imagesJson, parseImages, parseProject, parseTexts, projectJson, textsJson, type Project } from "./project";
 
 const box = pointBox(72, 99.123, 98.456, 115.6);
 if (box === undefined) throw new Error("No box");
+const firstPage = 0;
+if (!isPageIndex(firstPage)) throw new Error("No page");
 
 // A project as phase 2 slice 1 stored it: version 1, with no review states and no hidden values.
 const versionOne = JSON.stringify({
@@ -36,12 +39,21 @@ describe("parseProject", () => {
     if (typeof project === "string") throw new Error(project);
     const [first] = project.documents;
     if (first === undefined) throw new Error("No document");
-    const approved: Project = { ...project, hidden: [{ key: "jane roe", text: "Jane Roe", type: "person", from: first.id }] };
+    const image: ImageAnchor = { fingerprint: "0f0f0f0f0f0f0f0f", aspect: 1.5, frame: [0, 0, 0.9, 1] };
+    const anchored = first.marks.map((mark) => (mark.target.kind === "box" ? { ...mark, target: { ...mark.target, image } } : mark));
+    const approved: Project = {
+      ...project,
+      documents: [{ ...first, marks: anchored }, ...project.documents.slice(1)],
+      hidden: [
+        { key: "jane roe", text: "Jane Roe", type: "person", from: first.id },
+        { key: "Image 0f0f0f0f0f0f0f0f 0 0 0.9 1", text: "Box", type: "person", from: first.id, image },
+      ],
+    };
     expect(parseProject(projectJson(approved))).toEqual(approved);
   });
 
   test("leaves a newer version alone, and calls a broken one damaged", () => {
-    expect(parseProject(versionOne.replace('"version":1', '"version":3'))).toBe("newer");
+    expect(parseProject(versionOne.replace('"version":1', '"version":4'))).toBe("newer");
     expect(parseProject(versionOne.replace('"review"', '"x"').replace('"version":1', '"version":2'))).toBe("damaged");
   });
 });
@@ -54,5 +66,17 @@ describe("parseTexts", () => {
 
   test("calls a file damaged when its pages don't match the document's", () => {
     expect(parseTexts(textsJson([{ chars: [] }]), 2)).toBe("damaged");
+  });
+});
+
+describe("parseImages", () => {
+  const images: PlacedImage[] = [{ page: firstPage, matrix: [288, 0, 0, 192, 100, 100], aspect: 1.5, fingerprint: "0123456789abcdef" }];
+
+  test("reads back each image's page, place, shape and fingerprint", () => {
+    expect(parseImages(imagesJson(images), 1)).toEqual(images);
+  });
+
+  test("calls a file damaged when an image is on a page the document doesn't have", () => {
+    expect(parseImages(imagesJson(images), 0)).toBe("damaged");
   });
 });

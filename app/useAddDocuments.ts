@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
-import { findPlaces } from "./documentTexts";
+import { findPlaces } from "./documentReadings";
 import { prepareFiles, type Refusal } from "./importFiles";
 import type { ProjectDocument } from "./project";
 import { writeOriginals, type StoredProject } from "./projects";
-import { spreadToAdded } from "./spread";
+import { hiddenTextKeys, spreadToAdded } from "./spread";
 import type { Store } from "./storage";
 import type { Engine } from "./useEngine";
 
@@ -29,15 +29,15 @@ export function useAddDocuments(
     // Searched before anything is written, so no document joins without the project's hidden values.
     let places: Awaited<ReturnType<typeof findPlaces>>;
     try {
-      places = await findPlaces(engine, project.project.hidden.map((value) => value.key), prepared.added);
+      places = await findPlaces(engine, hiddenTextKeys(project.project), prepared.added.map(({ id, reading }) => ({ id, texts: reading.texts })));
     } catch {
       refuseAll(NOT_SEARCHED);
       return;
     }
     try {
       const documents = await writeOriginals(store, project, prepared.added);
-      const texts = new Map(prepared.added.map((each) => [each.id, each.texts]));
-      onAdded(spreadToAdded(project.project, documents, texts, places));
+      const readings = new Map(prepared.added.map((each) => [each.id, each.reading]));
+      onAdded(spreadToAdded(project.project, documents, readings, places));
     } catch {
       refuseAll(NOT_SAVED);
     }
