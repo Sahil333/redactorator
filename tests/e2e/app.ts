@@ -74,6 +74,7 @@ export async function storedNames(page: Page): Promise<string[]> {
   });
 }
 
+
 /** Counts the dark pixels drawn on a canvas: a page or a thumbnail. */
 export async function inkedPixels(canvas: Locator): Promise<number> {
   return canvas.evaluate((element) => {
@@ -302,4 +303,31 @@ export async function dropFiles(page: Page, target: Locator, paths: readonly str
   }, files);
   await target.dispatchEvent("dragover", { dataTransfer: transfer });
   await target.dispatchEvent("drop", { dataTransfer: transfer });
+}
+
+/** The names of the entries in the folder at `path` in the browser's private storage. */
+export async function storedNamesIn(page: Page, path: string): Promise<string[]> {
+  return page.evaluate(async (path) => {
+    let folder = await navigator.storage.getDirectory();
+    for (const name of path.split("/")) folder = await folder.getDirectoryHandle(name);
+    const names: string[] = [];
+    for await (const name of folder.keys()) names.push(name);
+    return names.sort();
+  }, path);
+}
+
+/**
+ * Stands in for Chrome's folder picker, which a test can't drive: from now on, and after a
+ * reload, it gives the folder at `path` in the browser's private storage, made if need be. Such a
+ * folder works as one on disk does.
+ */
+export async function standInForFolderPicker(page: Page, path: string): Promise<void> {
+  const install = (path: string) =>
+    Reflect.set(window, "showDirectoryPicker", async () => {
+      let folder = await navigator.storage.getDirectory();
+      for (const name of path.split("/")) folder = await folder.getDirectoryHandle(name, { create: true });
+      return folder;
+    });
+  await page.addInitScript(install, path);
+  if (page.url().startsWith("http")) await page.evaluate(install, path);
 }
