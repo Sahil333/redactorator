@@ -1,6 +1,6 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
 
 export const twoPagePdf = new URL("../../fixtures/two-pages.pdf", import.meta.url).pathname;
@@ -13,6 +13,7 @@ export const crossPagePdf = new URL("../../fixtures/cross-page.pdf", import.meta
 export const tablePdf = new URL("../../fixtures/table.pdf", import.meta.url).pathname;
 export const maskedImagePdf = new URL("../../fixtures/masked-image.pdf", import.meta.url).pathname;
 export const longPdf = new URL("../../fixtures/long.pdf", import.meta.url).pathname;
+export const tjStringsPdf = new URL("../../fixtures/tj-strings.pdf", import.meta.url).pathname;
 
 /** A rectangle in the app's box convention: PDF points, origin top-left. See tests/oracle/README.md. */
 export type PointBox = readonly [x0: number, y0: number, x1: number, y1: number];
@@ -214,6 +215,57 @@ export async function saveDownload(page: Page, start: () => Promise<void>): Prom
   return path;
 }
 
+/** How the stand-in for Chrome's save dialog ends the next save. */
+type SaveOutcome = "save" | "cancel" | "fail";
+
+/**
+ * Stands in for Chrome's save dialog, which a test can't drive. "save" keeps the file in the
+ * page for `saveFile`; "cancel" ends as a user's cancel does; "fail" fails the write. Like
+ * Chrome, it takes a moment to open and refuses a second dialog while one is open.
+ */
+export async function standInForSaveDialog(page: Page, outcome: SaveOutcome): Promise<void> {
+  await page.evaluate((outcome) => {
+    Reflect.deleteProperty(window, "savedFile");
+    let open = false;
+    Reflect.set(window, "showSaveFilePicker", async ({ suggestedName }: { readonly suggestedName: string }) => {
+      if (open) {
+        Reflect.set(window, "refusedDialogs", Number(Reflect.get(window, "refusedDialogs") ?? 0) + 1);
+        throw new DOMException("File picker already active.", "NotAllowedError");
+      }
+      open = true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      open = false;
+      if (outcome === "cancel") throw new DOMException("The user aborted a request.", "AbortError");
+      const parts: BlobPart[] = [];
+      return {
+        createWritable: async () => ({
+          write: async (data: BlobPart) => {
+            if (outcome === "fail") throw new DOMException("The disk is full.", "QuotaExceededError");
+            parts.push(data);
+          },
+          close: async () => Reflect.set(window, "savedFile", new File(parts, suggestedName)),
+          abort: async () => undefined,
+        }),
+      };
+    });
+  }, outcome);
+}
+
+/** Saves the file that `start` asks Chrome's save dialog for to a temporary file, and returns its path. */
+export async function saveFile(page: Page, start: () => Promise<void>): Promise<string> {
+  await standInForSaveDialog(page, "save");
+  await start();
+  await page.waitForFunction(() => Reflect.get(window, "savedFile") instanceof File);
+  const saved = await page.evaluate(async () => {
+    const file: unknown = Reflect.get(window, "savedFile");
+    return file instanceof File ? { name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())] } : undefined;
+  });
+  if (saved === undefined) throw new Error("Nothing was saved");
+  const path = join(await mkdtemp(join(tmpdir(), "download-")), saved.name);
+  await writeFile(path, Uint8Array.from(saved.bytes));
+  return path;
+}
+
 export async function pickType(page: Page, type: string): Promise<void> {
   const picker = page.getByRole("combobox", { name: "Type for this mark" });
   await picker.fill(type);
@@ -227,9 +279,26 @@ export async function printTypes(page: Page): Promise<void> {
   await page.getByLabel("Print the type in each box").check();
 }
 
-/** Applies the marks, waits for the check to pass, and saves the download to a temporary file. */
+/** The checked output's download button: a preview until the document is approved. */
+export const downloadButton = (page: Page): Locator => page.getByRole("button", { name: /^Download (preview|cleaned PDF)$/ });
+
+/** Applies the marks, waits for the check to pass, and saves the cleaned file to a temporary file. */
 export async function applyAndDownload(page: Page): Promise<string> {
   await page.getByRole("button", { name: "Apply and check" }).click();
   await expect(page.getByText("Checked:")).toBeVisible();
-  return saveDownload(page, () => page.getByRole("button", { name: "Download" }).click());
+  return saveFile(page, () => downloadButton(page).click());
+}
+
+/** Drops files on `target` as a person dragging them from their desktop would. */
+export async function dropFiles(page: Page, target: Locator, paths: readonly string[]): Promise<void> {
+  const files = await Promise.all(paths.map(async (path) => ({ name: basename(path), data: (await readFile(path)).toString("base64") })));
+  const transfer = await page.evaluateHandle((dropped) => {
+    const data = new DataTransfer();
+    for (const { name, data: base64 } of dropped) {
+      data.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name, { type: "application/pdf" }));
+    }
+    return data;
+  }, files);
+  await target.dispatchEvent("dragover", { dataTransfer: transfer });
+  await target.dispatchEvent("drop", { dataTransfer: transfer });
 }

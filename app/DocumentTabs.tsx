@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import type { DocumentId, ProjectDocument } from "./project";
 
 export const tabId = (id: DocumentId) => `tab-${id}`;
@@ -12,9 +12,17 @@ interface DocumentTabsProps {
   readonly onClose: (id: DocumentId) => void;
 }
 
-/** The open documents, one tab each. Left and Right move between tabs, Home and End to the ends. */
+/**
+ * The open documents, one tab each. Left and Right move between tabs, Home and End to the ends.
+ * Tabs that don't fit scroll sideways with no scrollbar, and the open document's tab scrolls into view.
+ */
 export function DocumentTabs({ documents, active, canSwitch, onSelect, onClose }: DocumentTabsProps) {
   const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (active === undefined) return;
+    listRef.current?.querySelector(`#${CSS.escape(tabId(active))}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
 
   function onKeyDown(event: KeyboardEvent, index: number) {
     const last = documents.length - 1;
@@ -28,7 +36,7 @@ export function DocumentTabs({ documents, active, canSwitch, onSelect, onClose }
   }
 
   return (
-    <div ref={listRef} role="tablist" aria-label="Open documents" className="flex shrink-0 overflow-x-auto border-b border-rule bg-paper-sunk">
+    <div ref={listRef} role="tablist" aria-label="Open documents" className="flex shrink-0 overflow-x-auto [scrollbar-width:none] border-b border-rule bg-paper-sunk">
       {documents.map((document, index) => {
         const selected = document.id === active;
         return (

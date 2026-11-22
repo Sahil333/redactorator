@@ -17,7 +17,9 @@ import {
   printTypes,
   wrapEngine,
   rotatedCroppedPdf,
+  tjStringsPdf,
   type PointBox,
+  downloadButton,
 } from "./app";
 import { judge } from "./oracle";
 
@@ -33,12 +35,26 @@ test("a marked word is removed from the file, boxed, and its neighbours stay put
 
   const output = await applyAndDownload(page);
 
-  expect(output).toMatch(/one-word-redacted\.pdf$/);
+  // Not yet approved, so the download is a preview.
+  expect(output).toMatch(/one-word-preview\.pdf$/);
   await judge(oneWordPdf, output, [
     { check: "absent", values: ["Jane Roe"] },
     { check: "covered", word: "Jane Roe" },
     { check: "positions", words: ["Jane Roe"] },
     { check: "metadata" },
+  ]);
+});
+
+test("a word in the middle of a TJ string is removed, and the rest of its line stays put", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, tjStringsPdf);
+  await markText(page, 1, janeRoe, "Person");
+
+  const output = await applyAndDownload(page);
+  await judge(tjStringsPdf, output, [
+    { check: "absent", values: ["Jane Roe"] },
+    { check: "covered", word: "Jane Roe" },
+    { check: "positions", words: ["Jane Roe"] },
   ]);
 });
 
@@ -209,7 +225,7 @@ test("changing a mark after apply drops the checked output", async ({ page }) =>
   await page.getByRole("button", { name: "Remove mark Dear on page 1" }).click();
 
   await expect(page.getByText("Checked:")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
+  await expect(downloadButton(page)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Apply and check" })).toBeEnabled();
 });
 
@@ -228,7 +244,7 @@ test("a text mark that runs past the page's text blocks the export", async ({ pa
   await page.getByRole("button", { name: "Apply and check" }).click();
 
   await expect(page.getByRole("alert")).toHaveText(/^A mark on page 1 does not match the page's text\. Nothing was exported\./);
-  await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
+  await expect(downloadButton(page)).toHaveCount(0);
 });
 
 test("changing a mark while apply runs drops the output that arrives after", async ({ page }) => {

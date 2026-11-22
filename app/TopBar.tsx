@@ -3,6 +3,7 @@ import type { Appearance } from "../engine/contract";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { PickFiles } from "./PickFiles";
 import type { Tool } from "./marks";
+import type { ReviewState } from "./project";
 import type { SaveState } from "./useProject";
 
 const tools: readonly { readonly id: Tool; readonly label: string }[] = [
@@ -21,6 +22,9 @@ export interface Editing {
   /** A new mark waits for its type, or the engine is at work: nothing can be applied or exported. */
   readonly busy: boolean;
   readonly onApply: () => void;
+  readonly review: ReviewState;
+  /** Approves the document, spreading its values to the project's other documents. */
+  readonly onApprove: () => void;
   /** Labelling mode only. */
   readonly onExportLabels: () => void;
 }
@@ -111,6 +115,18 @@ function EditingActions({ editing, labelling }: { readonly editing: Editing; rea
         </button>
       )}
       <AppearanceSettings appearance={editing.appearance} onAppearance={editing.onAppearance} />
+      {editing.review === "approved" ? (
+        <span className="rounded-md border border-pass/40 bg-pass-wash px-3 py-1.5 text-pass">Approved</span>
+      ) : (
+        <button
+          type="button"
+          disabled={editing.busy}
+          onClick={editing.onApprove}
+          className="rounded-md border border-ink px-3 py-1.5 hover:bg-paper-sunk disabled:opacity-40"
+        >
+          Approve
+        </button>
+      )}
       <button
         ref={editing.applyRef}
         type="button"

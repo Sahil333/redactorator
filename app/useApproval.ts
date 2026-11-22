@@ -1,0 +1,75 @@
+import { useRef, useState } from "react";
+import { documentTexts, findPlaces } from "./documentTexts";
+import type { DocumentId, Project } from "./project";
+import { approve, changed, keysToFind, type Approval } from "./spread";
+import type { Store } from "./storage";
+import type { Engine } from "./useEngine";
+import type { useProject } from "./useProject";
+
+const NOT_APPROVED = "The documents' text could not be read, so nothing was approved. Reload the page and approve again.";
+
+/** An approval worked out and waiting for the user to read the heads-up. */
+export interface PendingApproval extends Approval {
+  readonly document: DocumentId;
+  /** The project it was worked out from. */
+  readonly from: Project;
+}
+
+/**
+ * Approving a document: works out what spreads, then lands it, after a heads-up when it changes
+ * anything beyond the document's state.
+ */
+export function useApproval(store: Store, opened: ReturnType<typeof useProject>, engine: Engine) {
+  const [working, setWorking] = useState(false);
+  const [asking, setAsking] = useState<PendingApproval | undefined>(undefined);
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const underWay = useRef<Promise<void>>(Promise.resolve());
+
+  async function plan(id: DocumentId): Promise<PendingApproval | undefined> {
+    const project = opened.current();
+    const texts = await documentTexts(store, opened.folder, project.documents, engine);
+    const searched = project.documents.map((document) => ({ id: document.id, texts: texts.get(document.id) ?? [] }));
+    const places = await findPlaces(engine, keysToFind(project, id), searched);
+    const approval = approve(project, id, texts, places);
+    return approval && { ...approval, document: id, from: project };
+  }
+
+  async function start(id: DocumentId) {
+    setWorking(true);
+    setProblem(undefined);
+    try {
+      const pending = await plan(id);
+      if (pending === undefined) return;
+      // Landing it would drop what changed in the project while it was worked out.
+      if (opened.current() !== pending.from) {
+        await start(id);
+        return;
+      }
+      if (pending.changes.length > 0 || changed(pending.here)) setAsking(pending);
+      else opened.approve(pending);
+    } catch {
+      setProblem(NOT_APPROVED);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return {
+    working,
+    asking,
+    problem,
+    start: (id: DocumentId) => {
+      underWay.current = start(id);
+    },
+    confirm: () => {
+      setAsking(undefined);
+      if (asking === undefined) return;
+      // Nothing can change the project while the heads-up is open, but if it did, work it out again.
+      if (opened.current() === asking.from) opened.approve(asking);
+      else underWay.current = start(asking.document);
+    },
+    cancel: () => setAsking(undefined),
+    /** Resolves once no approval is being worked out, so leaving can't lose one that lands later. */
+    settled: () => underWay.current,
+  };
+}

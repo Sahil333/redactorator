@@ -102,6 +102,15 @@ def one_word(cleaned: bool = False) -> bytes:
                            len(objects) + 1, "/Root 1 0 R /Info 6 0 R")
 
 
+# tj-strings.pdf: one-word.pdf's lines, with the line holding "Jane Roe" drawn as a TJ array
+# whose first string runs on past the name, and a kerning number later in the line. Removing a
+# word from the middle of a TJ string must leave the rest of the line where it was.
+def tj_strings() -> bytes:
+    text = "".join(line(*spec) for spec in ONE_WORD_LINES)
+    text += f"BT /F1 12 Tf 72 680 Td [({''.join(ONE_WORD)[:-11]}) 20 ({''.join(ONE_WORD)[-11:]})] TJ ET\n"
+    return write_pdf(page_objects("/MediaBox [0 0 612 792]", stream("", text.encode(), compress=True)), "/Root 1 0 R")
+
+
 # image.pdf: a 64 x 48 RGB image drawn at user space [100 400 356 592], 4 points a pixel.
 IMAGE_SIZE = (64, 48)
 IMAGE_RECT = (100, 400, 356, 592)
@@ -232,6 +241,37 @@ def table() -> bytes:
     return write_pdf(page_objects("/MediaBox [0 0 612 792]", stream("", text.encode())), "/Root 1 0 R")
 
 
+# letter-a.pdf and letter-b.pdf: two letters in one project, naming the same person and account.
+# B writes them in other case, spacing, line breaks and number grouping, and has "Monroe", which
+# "Roe" must not match, and "91234 5678", which "1234 5678" must not match.
+LETTER_A = [(700, "Jane Roe wrote to us about the claim."), (680, "1234 5678 is the account she named."),
+            (660, "Roe signed the form in person."), (640, "We will reply within ten working days.")]
+LETTER_B = [(700, "Statement by JANE  ROE about the claim."),
+            (680, "Her account 1234-5678 was closed, and 1234.5678 too."),
+            (660, "She lives on Monroe Street."), (640, "The form was signed by Jane"), (626, "Roe in person."),
+            (600, "Ref 91234 5678 is not hers.")]
+
+
+def letter_text(lines: list[tuple[int, str]]) -> str:
+    return "".join(line(72, y, 12, words) for y, words in lines)
+
+
+def letter(lines: list[tuple[int, str]]) -> bytes:
+    return write_pdf(page_objects("/MediaBox [0 0 612 792]", stream("", letter_text(lines).encode())), "/Root 1 0 R")
+
+
+# line-feed-glyph.pdf: a font that names byte 10's glyph uni000A, so a line break is drawn as a
+# glyph with a box, as some typesetters do. It follows "Jane Roe" on one line.
+LINE_FEED = [(700, "Dear Jane Roe\\n thank you for writing to us."), (680, "We will reply within ten working days.")]
+
+
+def line_feed_glyph() -> bytes:
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", letter_text(LINE_FEED).encode()))
+    objects[3] = (b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding"
+                  b" << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [10 /uni000A] >> >>")
+    return write_pdf(objects, "/Root 1 0 R")
+
+
 def encrypted() -> bytes:
     import io
 
@@ -248,6 +288,8 @@ def encrypted() -> bytes:
 if __name__ == "__main__":
     for name, build in [("one-word", one_word), ("image", image), ("rotated-cropped", rotated_cropped),
                         ("encrypted", encrypted), ("cross-page", cross_page), ("masked-image", masked_image),
-                        ("table", table), ("long", long_document)]:
+                        ("table", table), ("long", long_document),
+                        ("letter-a", lambda: letter(LETTER_A)), ("letter-b", lambda: letter(LETTER_B)),
+                        ("line-feed-glyph", line_feed_glyph), ("tj-strings", tj_strings)]:
         (FIXTURES / f"{name}.pdf").write_bytes(build())
         print(f"wrote fixtures/{name}.pdf")

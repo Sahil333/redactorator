@@ -21,3 +21,10 @@ export function pointOnPage(page: PageModel, rect: DOMRect, x: number, y: number
   const scale = rect.width / page.width;
   return [clamp((x - rect.left) / scale, page.width), clamp((y - rect.top) / scale, page.height)];
 }
+
+/** Names the element that shows a mark's first box. */
+export const markElementId = (mark: number) => `mark-${mark}`;
+
+/** Brings a mark to the middle of the pages pane, so it is seen however long its page is. */
+export const showMark = (mark: number) =>
+  document.getElementById(markElementId(mark))?.scrollIntoView({ block: "center", inline: "nearest" });

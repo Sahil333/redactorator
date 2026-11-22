@@ -103,3 +103,22 @@ test("a mark across pages exports as one entity with an occurrence on each page"
     ],
   });
 });
+
+test("labels exported from a document include the marks other documents' approval spread to it", async ({ page }) => {
+  const letterA = new URL("../../fixtures/letter-a.pdf", import.meta.url).pathname;
+  const letterB = new URL("../../fixtures/letter-b.pdf", import.meta.url).pathname;
+  await openApp(page, "/?label");
+  await openPdf(page, letterA, letterB);
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/letter-a\.pdf/);
+  await markText(page, 1, [72, 79.1, 123.4, 95.6], "Person");
+  await page.getByRole("banner").getByRole("button", { name: "Approve", exact: true }).click();
+  await page.getByRole("dialog", { name: /^Approve/ }).getByRole("button", { name: "Approve" }).click();
+  await page.getByRole("navigation", { name: "Documents" }).getByRole("button", { name: /^letter-b\.pdf/ }).click();
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/letter-b\.pdf/);
+
+  const { truth } = await exportTruth(page);
+  expect(truth).toMatchObject({
+    entities: [{ type: "person", value: "JANE ROE" }, { type: "person", value: "Jane Roe" }],
+    occurrences: [{ entity_id: "e1", page: 0 }, { entity_id: "e2", page: 0 }],
+  });
+});

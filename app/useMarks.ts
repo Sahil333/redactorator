@@ -1,16 +1,14 @@
 import { useState } from "react";
-import type { Mark, Pending } from "./marks";
+import { itemKey, nextId, type Mark, type Pending } from "./marks";
+import type { ChangeKind } from "./useProject";
 import { builtInMarkTypes, customMarkType, type MarkType, type MarkTypeOption } from "./markTypes";
 
 export type Marks = ReturnType<typeof useMarks>;
 
-/**
- * How a change to the marks is kept. An `edit` alters what an apply would write and can be
- * undone; a `label` is labelling data only.
- */
-export type MarksChange = (update: (current: readonly Mark[]) => readonly Mark[], kind: "edit" | "label") => void;
+export type MarksChange = (update: (current: readonly Mark[]) => readonly Mark[], kind: ChangeKind) => void;
 
-const nextId = (marks: readonly Mark[]) => Math.max(0, ...marks.map((mark) => mark.id)) + 1;
+const onItem = (mark: Mark, change: (each: Mark) => Mark) => (current: readonly Mark[]) =>
+  current.map((each) => (itemKey(each) === itemKey(mark) ? change(each) : each));
 
 /**
  * The open document's marks, the new mark waiting for its type, and the types on offer.
@@ -44,13 +42,16 @@ export function useMarks(
     if (pending === undefined) return;
     rememberType(type);
     const { target } = pending;
-    change((current) => [...current, { id: nextId(current), type: type.id, linkId: "", target }], "edit");
+    change((current) => [...current, { id: nextId(current), type: type.id, linkId: "", target, isNew: false }], "edit");
     setPending(undefined);
+    // Highlighted, a new mark shows its type until the pointer or the marks panel moves on.
+    setHighlighted(nextId(marks));
   }
 
+  // A value has one type, so retyping a mark retypes its item.
   function retype(mark: Mark, type: MarkTypeOption) {
     rememberType(type);
-    change((current) => current.map((each) => (each.id === mark.id ? { ...each, type: type.id } : each)), "edit");
+    change(onItem(mark, (each) => ({ ...each, type: type.id })), "edit");
   }
 
   return {
@@ -63,9 +64,9 @@ export function useMarks(
     cancel: () => setPending(undefined),
     add,
     retype,
-    remove: (removed: Mark) => change((current) => current.filter((mark) => mark.id !== removed.id), "edit"),
-    link: (mark: Mark, linkId: string) =>
-      change((current) => current.map((each) => (each.id === mark.id ? { ...each, linkId } : each)), "label"),
+    /** Stops hiding a mark's item here, every place of it; approving stops it everywhere. */
+    remove: (removed: Mark) => change((current) => current.filter((mark) => itemKey(mark) !== itemKey(removed)), "edit"),
+    link: (mark: Mark, linkId: string) => change(onItem(mark, (each) => ({ ...each, linkId })), "label"),
     highlight: setHighlighted,
   };
 }

@@ -3,6 +3,7 @@ poc/
 CLAUDE.local.md
 node_modules/
 dist/
+!/vendor/mupdf/package/dist/
 dist-coverage/
 coverage/
 test-results/

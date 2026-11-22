@@ -29,6 +29,8 @@ const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? "
 
 const markCount = ({ project }: StoredProject) => project.documents.reduce((sum, document) => sum + document.marks.length, 0);
 
+const approvedCount = ({ project }: StoredProject) => project.documents.filter((document) => document.review === "approved").length;
+
 const problemText: Record<UnreadableProject["problem"], string> = {
   damaged: "Its project file is damaged, so it can't be opened. Start a new project with its documents.",
   newer: "It was saved by a newer version of Redactorator. Reload the page to open it.",
@@ -160,7 +162,7 @@ function ProjectRow({ stored, actions }: { readonly stored: StoredProject; reado
   const [renaming, setRenaming] = useState(false);
   const { project } = stored;
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-4 border-t border-rule px-4 py-2.5 first:border-t-0">
+    <li className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-4 border-t border-rule px-4 py-2.5 first:border-t-0">
       {renaming ? (
         <RenameField
           name={project.name}
@@ -176,6 +178,9 @@ function ProjectRow({ stored, actions }: { readonly stored: StoredProject; reado
       )}
       <span className="text-ink-muted">{plural(project.documents.length, "document")}</span>
       <span className="text-ink-muted">{plural(markCount(stored), "mark")}</span>
+      <span className="text-ink-muted">
+        {approvedCount(stored)} of {project.documents.length} approved
+      </span>
       <RowMenu name={project.name}>
         <MenuItem label="Rename" onSelect={() => setRenaming(true)} />
         <MenuItem label="Duplicate" onSelect={() => actions.onDuplicate(stored)} />

@@ -1,12 +1,15 @@
 import type { RefObject } from "react";
 import type { PageIndex, PageModel } from "../engine/contract";
 import { CheckedBanner } from "./CheckedBanner";
-import { baseName, download } from "./download";
+import { baseName, savePdf } from "./download";
 import { DropZone } from "./DropZone";
-import { markPages, type Tool } from "./marks";
+import { firstPage, markPages, type Mark, type Tool } from "./marks";
 import { MarksPanel, marksPanelWidth } from "./MarksPanel";
-import { pageFrameId, PageScale } from "./pageGeometry";
+import { pageFrameId, PageScale, showMark } from "./pageGeometry";
 import { PageList } from "./PageList";
+import type { HiddenValue } from "./project";
+import { ReviewBanner } from "./ReviewBanner";
+import type { Reach } from "./spread";
 import { Splitter } from "./Splitter";
 import { Thumbnails, thumbnailsWidth } from "./Thumbnails";
 import type { Engine } from "./useEngine";
@@ -25,10 +28,32 @@ export interface PanelWidths {
 
 export const initialWidths: PanelWidths = { pages: thumbnailsWidth.initial, marks: marksPanelWidth.initial };
 
+/** The open document's place in the project's review. */
+export interface Review {
+  readonly hidden: readonly HiddenValue[];
+  readonly reach: ReadonlyMap<string, Reach>;
+  /** The documents whose approval brought this one's new marks. */
+  readonly newFrom: readonly string[];
+  readonly approved: boolean;
+  readonly onKeepHere: (mark: Mark) => void;
+  readonly onDownloaded: () => void;
+}
+
+const newInOrder = (marks: readonly Mark[]) =>
+  marks
+    .filter((mark) => mark.isNew)
+    .toSorted((a, b) => firstPage(a.target) - firstPage(b.target) || (a.target.kind === "text" && b.target.kind === "text" ? a.target.pieces[0].start - b.target.pieces[0].start : 0));
+
+const checkedFiles = {
+  cleaned: { note: "This is the cleaned file.", download: "Download cleaned PDF", ending: "redacted" },
+  preview: { note: "This document isn't approved yet, so this is a preview.", download: "Download preview", ending: "preview" },
+} as const;
+
 interface WorkspaceProps {
   readonly engine: Engine;
   readonly pages: readonly [PageModel, ...PageModel[]];
   readonly marks: Marks;
+  readonly review: Review;
   readonly tool: Tool;
   readonly labelling: boolean;
   readonly currentPage: PageIndex | undefined;
@@ -52,12 +77,13 @@ function pageInMiddle(view: HTMLElement, pages: readonly PageModel[]): PageIndex
 
 /** An open document: page list, pages, and marks, or the checked output in preview. */
 export function Workspace(props: WorkspaceProps) {
-  const { engine, pages, marks, widths, onWidths } = props;
+  const { engine, pages, marks, review, widths, onWidths } = props;
   const { document: opened, output } = engine;
   const source = output === undefined ? "original" : "output";
   const editing = output === undefined && engine.state === "ready";
   const shownMarks = output === undefined ? marks.marks : [];
   const zoom = useZoom(pages);
+  const checked = checkedFiles[review.approved ? "cleaned" : "preview"];
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       {props.showPages && (
@@ -91,11 +117,22 @@ export function Workspace(props: WorkspaceProps) {
           {output !== undefined && opened !== undefined && (
             <CheckedBanner
               markCount={marks.marks.length}
+              file={checked}
               downloadRef={props.downloadRef}
               onBack={props.onBack}
-              onDownload={() =>
-                download(new Blob([output.bytes], { type: "application/pdf" }), `${baseName(opened.name)}-redacted.pdf`)
-              }
+              onDownload={async () => {
+                if (await savePdf(new Blob([output.bytes], { type: "application/pdf" }), `${baseName(opened.name)}-${checked.ending}.pdf`)) review.onDownloaded();
+              }}
+            />
+          )}
+          {output === undefined && (
+            <ReviewBanner
+              marks={newInOrder(marks.marks)}
+              from={review.newFrom}
+              onShow={(mark) => {
+                marks.highlight(mark.id);
+                showMark(mark.id);
+              }}
             />
           )}
           <PageScale value={zoom.scale}>
@@ -132,11 +169,14 @@ export function Workspace(props: WorkspaceProps) {
         id={MARKS_PANEL_ID}
         width={widths.marks}
         marks={marks.marks}
+        hidden={review.hidden}
+        reach={review.reach}
         typeOptions={marks.typeOptions}
         highlighted={marks.highlighted}
         onHighlight={marks.highlight}
         onRemove={marks.remove}
         onRetype={marks.retype}
+        onKeepHere={review.onKeepHere}
         {...(props.labelling && { onLink: marks.link })}
       />
     </div>

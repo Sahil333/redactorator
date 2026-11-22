@@ -12,12 +12,15 @@ import {
   type EngineMessage,
   type FileNumber,
   type InspectionNumber,
+  type MatchNumber,
   type PageChar,
   type PageIndex,
   type PageModel,
   type PageText,
   type Source,
 } from "./contract";
+import { centre, inside, overlap, textMoved, type PageGlyph, type Point } from "./glyphs";
+import { findAll } from "./match";
 import { bounds, rangeBoxes, readingOrder } from "./pageText";
 
 interface Opened {
@@ -97,14 +100,30 @@ function load(bytes: ArrayBuffer): { readonly document: mupdf.PDFDocument; reado
   }
 }
 
+/** Whether a file can be added, and if so the text of each of its pages, which the project keeps. */
 function inspect(inspection: InspectionNumber, bytes: ArrayBuffer): void {
   const loaded = load(bytes);
   if ("code" in loaded) {
     post({ type: "refused", inspection, error: loaded });
     return;
   }
-  loaded.document.destroy();
-  post({ type: "inspected", inspection, pages: loaded.model.pages.length });
+  const { document, model } = loaded;
+  try {
+    const [first, ...rest] = model.pages.map((page) => withPage(document, page.index, pageText));
+    if (first === undefined) throw new Error("No pages");
+    post({ type: "inspected", inspection, texts: [first, ...rest] });
+  } catch {
+    post({ type: "refused", inspection, error: { code: "text-failed", message: "The text of this PDF could not be read. Choose another file." } });
+  } finally {
+    document.destroy();
+  }
+}
+
+function match(number: MatchNumber, keys: readonly string[], documents: readonly (readonly (readonly string[])[])[]): void {
+  const found = documents.flatMap((pages, document) =>
+    findAll(pages, keys).flatMap((each) => (isPageIndex(each.page) ? [{ ...each, document, page: each.page }] : [])),
+  );
+  post({ type: "matched", match: number, found });
 }
 
 function open(file: FileNumber, bytes: ArrayBuffer): void {
@@ -164,10 +183,6 @@ function render(file: FileNumber, source: Source, index: PageIndex, scale: numbe
   }
 }
 
-type Glyph = Extract<PageChar, { box: Box }>;
-
-type Point = readonly [number, number];
-
 // MuPDF's quad order: upper left, upper right, lower left, lower right.
 const quadCorners = (quad: mupdf.Quad): [Point, Point, Point, Point] => [
   [quad[0], quad[1]],
@@ -192,14 +207,36 @@ const run = <T extends { readonly box: Box }>([first, ...rest]: readonly [T, ...
   items: [first, ...rest],
 });
 
-const LINE_END: PageChar = { c: "\n", box: undefined };
+const LINE_END: Extract<PageChar, { box: undefined }> = { c: "\n", box: undefined };
 
-/** The page's characters, blocks and lines in reading order; see `PageChar` for the offset rule. */
-function pageText(page: mupdf.Page): PageText {
+// The body of a letter, as a share of the font size: from the baseline up to about cap height.
+const BODY = 0.7;
+
+/** A letter's ink: its width, from its baseline up to cap height, wherever the quad's lower edge is. */
+function bodyOf(origin: mupdf.Point, size: number, quad: mupdf.Quad): Box {
+  const [ul, ur, ll, lr] = quadCorners(quad);
+  const up: Point = [ul[0] - ll[0], ul[1] - ll[1]];
+  const height = Math.hypot(...up);
+  const clamp = (t: number) => Math.min(Math.max(t, 0), 1);
+  // How far up the quad the baseline and cap height are, from its lower edge.
+  const base = height === 0 ? 0 : clamp(((origin[0] - ll[0]) * up[0] + (origin[1] - ll[1]) * up[1]) / height ** 2);
+  const cap = height === 0 ? 1 : clamp(base + (BODY * size) / height);
+  const at = (t: number): Point[] => [
+    [ll[0] + t * up[0], ll[1] + t * up[1]],
+    [lr[0] + t * (ur[0] - lr[0]), lr[1] + t * (ur[1] - lr[1])],
+  ];
+  return around([...at(base), ...at(cap)]);
+}
+
+/**
+ * The page's characters, blocks and lines in reading order (see `PageChar` for the offset
+ * rule), and the same characters with each letter's ink band as its box.
+ */
+function readText(page: mupdf.Page): { readonly text: PageText; readonly ink: PageText } {
   const text = page.toStructuredText("preserve-whitespace");
-  const blocks: Run<Run<Glyph>>[] = [];
-  let lines: Run<Glyph>[] = [];
-  let glyphs: Glyph[] = [];
+  const blocks: Run<Run<PageGlyph>>[] = [];
+  let lines: Run<PageGlyph>[] = [];
+  let glyphs: PageGlyph[] = [];
   try {
     text.walk({
       beginTextBlock() {
@@ -208,8 +245,10 @@ function pageText(page: mupdf.Page): PageText {
       beginLine() {
         glyphs = [];
       },
-      onChar(c, _origin, _font, _size, quad) {
-        glyphs.push({ c, box: around(quadCorners(quad)) });
+      onChar(c, origin, _font, size, quad) {
+        // A PDF can draw a line break as a glyph. "\n" marks where a line ends, so the glyph
+        // reads as a space; it keeps its box, so a mark over it still removes it.
+        glyphs.push({ c: c === "\n" ? " " : c, box: around(quadCorners(quad)), body: bodyOf(origin, size, quad) });
       },
       endLine() {
         const [first, ...rest] = glyphs;
@@ -223,12 +262,17 @@ function pageText(page: mupdf.Page): PageText {
   } finally {
     text.destroy();
   }
-  const chars = readingOrder(blocks).flatMap((block) => [
+  const ordered = readingOrder(blocks).flatMap((block) => [
     ...readingOrder(block.items).flatMap((line) => [...line.items, LINE_END]),
     LINE_END,
   ]);
-  return { chars };
+  return {
+    text: { chars: ordered.map((char): PageChar => (char.box === undefined ? char : { c: char.c, box: char.box })) },
+    ink: { chars: ordered.map((char): PageChar => (char.box === undefined ? char : { c: char.c, box: char.body })) },
+  };
 }
+
+const pageText = (page: mupdf.Page): PageText => readText(page).text;
 
 function withPage<T>(document: mupdf.Document, index: number, use: (page: mupdf.Page) => T): T {
   const page = document.loadPage(index);
@@ -250,7 +294,14 @@ function text(file: FileNumber, index: PageIndex): void {
 }
 
 interface Redaction {
+  /** The box drawn, and the area whose images and drawings are removed. */
   readonly box: Box;
+  /**
+   * The area text is removed from. For marked text it is the letters' ink, not their whole
+   * height: MuPDF removes any letter whose font box an area overlaps, and the font boxes of
+   * closely set lines overlap, so the whole height would remove letters from the next line.
+   */
+  readonly textArea: Box;
   /** What the box prints when labels are on, like `[PERSON]`. */
   readonly printed: string;
 }
@@ -261,11 +312,16 @@ const inWinAnsi = (c: string) => {
   return c.length === 1 && ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff));
 };
 
-/** A text edit's boxes. An edit that is not wholly on the page's text would leave text unmarked, so it fails. */
-function textBoxes(text: PageText, edit: Extract<Edit, { kind: "text" }>): readonly Box[] {
-  const boxes = edit.end <= text.chars.length ? rangeBoxes(text, edit.start, edit.end) : [];
-  if (boxes.length === 0) throw new CheckFailed(`A mark on page ${edit.page + 1} does not match the page's text.`);
-  return boxes;
+/**
+ * A text edit's box and ink band on each line. An edit that is not wholly on the page's text
+ * would leave text unmarked, so it fails.
+ */
+function textAreas({ text, ink }: ReturnType<typeof readText>, edit: Extract<Edit, { kind: "text" }>): { box: Box; textArea: Box }[] {
+  const fits = edit.end <= text.chars.length;
+  const boxes = fits ? rangeBoxes(text, edit.start, edit.end) : [];
+  const bands = fits ? rangeBoxes(ink, edit.start, edit.end) : [];
+  if (boxes.length === 0 || bands.length !== boxes.length) throw new CheckFailed(`A mark on page ${edit.page + 1} does not match the page's text.`);
+  return boxes.map((box, line) => ({ box, textArea: bands[line] ?? box }));
 }
 
 /** Each page's redaction boxes, with text edits turned into one box per line from the original's own text. */
@@ -273,10 +329,10 @@ function redactionsByPage(original: mupdf.Document, edits: readonly Edit[]): Map
   const byPage = new Map<PageIndex, Redaction[]>();
   for (const edit of edits) {
     if (edit.page >= original.countPages()) throw new Error("An edit names a page the file does not have");
-    const boxes = edit.kind === "box" ? [edit.box] : textBoxes(withPage(original, edit.page, pageText), edit);
+    const areas = edit.kind === "box" ? [{ box: edit.box, textArea: edit.box }] : textAreas(withPage(original, edit.page, readText), edit);
     const list = byPage.get(edit.page) ?? [];
     const printed = `[${[...edit.label.toUpperCase()].map((c) => (inWinAnsi(c) ? c : "?")).join("")}]`;
-    list.push(...boxes.map((box) => ({ box, printed })));
+    list.push(...areas.map((area) => ({ ...area, printed })));
     byPage.set(edit.page, list);
   }
   return byPage;
@@ -361,13 +417,11 @@ function redact(bytes: Uint8Array, byPage: Map<PageIndex, Redaction[]>, appearan
     for (const [index, redactions] of byPage) {
       const page = document.loadPage(index);
       try {
-        for (const { box } of redactions) page.createAnnotation("Redact").setRect([box.x0, box.y0, box.x1, box.y1]);
-        page.applyRedactions(
-          false,
-          mupdf.PDFPage.REDACT_IMAGE_PIXELS,
-          mupdf.PDFPage.REDACT_LINE_ART_REMOVE_IF_COVERED,
-          mupdf.PDFPage.REDACT_TEXT_REMOVE,
-        );
+        const mark = (area: Box) => page.createAnnotation("Redact").setRect([area.x0, area.y0, area.x1, area.y1]);
+        for (const { textArea } of redactions) mark(textArea);
+        page.applyRedactions(false, mupdf.PDFPage.REDACT_IMAGE_NONE, mupdf.PDFPage.REDACT_LINE_ART_NONE, mupdf.PDFPage.REDACT_TEXT_REMOVE);
+        for (const { box } of redactions) mark(box);
+        page.applyRedactions(false, mupdf.PDFPage.REDACT_IMAGE_PIXELS, mupdf.PDFPage.REDACT_LINE_ART_REMOVE_IF_COVERED, mupdf.PDFPage.REDACT_TEXT_NONE);
         drawBoxes(document, page, redactions, appearance);
       } finally {
         page.destroy();
@@ -389,47 +443,13 @@ function redact(bytes: Uint8Array, byPage: Map<PageIndex, Redaction[]>, appearan
   }
 }
 
-const centre = (box: Box): Point => [(box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2];
-const inside = (box: Box, [x, y]: Point) => x > box.x0 && x < box.x1 && y > box.y0 && y < box.y1;
-
-// Less than this much overlap, in points, is two boxes that only touch.
-const TOUCH = 0.01;
-const overlap = (a: Box, b: Box) =>
-  Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > TOUCH && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) > TOUCH;
-
-// The body of a letter, as a share of the font size: from the baseline up to about cap height.
-const BODY = 0.7;
-
-interface OutputGlyph {
-  readonly c: string;
-  readonly box: Box;
-  /**
-   * The letter itself: its width, from the baseline up to cap height. MuPDF removes a glyph
-   * a redaction overlaps at all, judged on the glyph's ink, which is smaller than `box`: a
-   * line's boxes overlap the next line's in ordinary text, so `box` would find text that is
-   * not under the redaction.
-   */
-  readonly body: Box;
-}
-
-function glyphsOf(page: mupdf.Page): OutputGlyph[] {
+function glyphsOf(page: mupdf.Page): PageGlyph[] {
   const text = page.toStructuredText("preserve-whitespace");
-  const found: OutputGlyph[] = [];
+  const found: PageGlyph[] = [];
   try {
     text.walk({
       onChar(c, origin, _font, size, quad) {
-        const [ul, ur, ll, lr] = quadCorners(quad);
-        const up: Point = [ul[0] - ll[0], ul[1] - ll[1]];
-        const height = Math.hypot(...up);
-        const clamp = (t: number) => Math.min(Math.max(t, 0), 1);
-        // How far up the quad the baseline and cap height are, from its lower edge.
-        const base = height === 0 ? 0 : clamp(((origin[0] - ll[0]) * up[0] + (origin[1] - ll[1]) * up[1]) / height ** 2);
-        const cap = height === 0 ? 1 : clamp(base + (BODY * size) / height);
-        const at = (t: number): Point[] => [
-          [ll[0] + t * up[0], ll[1] + t * up[1]],
-          [lr[0] + t * (ur[0] - lr[0]), lr[1] + t * (ur[1] - lr[1])],
-        ];
-        found.push({ c, box: around([ul, ur, ll, lr]), body: around([...at(base), ...at(cap)]) });
+        found.push({ c, box: around(quadCorners(quad)), body: bodyOf(origin, size, quad) });
       },
     });
   } finally {
@@ -442,8 +462,8 @@ function glyphsOf(page: mupdf.Page): OutputGlyph[] {
  * Text left on a page under its redaction boxes. Only our own labels may be there: each
  * box's glyphs must spell its label, and any other glyph a box overlaps at all is left behind.
  */
-function textUnderBoxes(glyphs: readonly OutputGlyph[], redactions: readonly Redaction[], appearance: Appearance): boolean {
-  const ours = (glyph: OutputGlyph) => redactions.some(({ box }) => inside(box, centre(glyph.box)));
+function textUnderBoxes(glyphs: readonly PageGlyph[], redactions: readonly Redaction[], appearance: Appearance): boolean {
+  const ours = (glyph: PageGlyph) => redactions.some(({ box }) => inside(box, centre(glyph.box)));
   const left = glyphs.some(
     (glyph) => glyph.c.trim() !== "" && !ours(glyph) && redactions.some(({ box }) => overlap(box, glyph.body)),
   );
@@ -546,14 +566,19 @@ function imagesUnderBoxes(page: mupdf.Page, redactions: readonly Redaction[]): b
 }
 
 /** RED-3: re-read the written file and throw CheckFailed on anything left behind. */
-function check(output: mupdf.PDFDocument, byPage: Map<PageIndex, Redaction[]>, appearance: Appearance): void {
+function check(original: mupdf.PDFDocument, output: mupdf.PDFDocument, byPage: Map<PageIndex, Redaction[]>, appearance: Appearance): void {
   if (output.countVersions() !== 1) throw new CheckFailed("The cleaned file has more than one revision.");
   const trailer = output.getTrailer();
   if (!trailer.get("Info").isNull() || !trailer.get("Root").get("Metadata").isNull()) {
     throw new CheckFailed("The cleaned file still has metadata.");
   }
   for (const [index, redactions] of byPage) {
-    if (textUnderBoxes(withPage(output, index, glyphsOf), redactions, appearance)) {
+    const cleaned = withPage(output, index, glyphsOf);
+    const textAreas = redactions.map(({ textArea }) => textArea);
+    if (textMoved(withPage(original, index, glyphsOf), cleaned, textAreas)) {
+      throw new CheckFailed(`Other text on page ${index + 1} would move in the cleaned file.`);
+    }
+    if (textUnderBoxes(cleaned, redactions, appearance)) {
       throw new CheckFailed(`Text is still under a box on page ${index + 1}.`);
     }
     if (withPage(output, index, (page) => imagesUnderBoxes(page, redactions))) {
@@ -575,7 +600,7 @@ function apply(file: FileNumber, edits: readonly Edit[], appearance: Appearance)
     const byPage = redactionsByPage(document.original, edits);
     const bytes = redact(document.bytes, byPage, appearance);
     output = openPdf(bytes);
-    check(output, byPage, appearance);
+    check(document.original, output, byPage, appearance);
     const model = documentModel(output);
     if (model === undefined) throw new CheckFailed("The cleaned file has no pages.");
     document.output = output;
@@ -605,6 +630,9 @@ addEventListener("message", (event: MessageEvent<unknown>) => {
   switch (request.type) {
     case "inspect":
       inspect(request.inspection, request.bytes);
+      break;
+    case "match":
+      match(request.match, request.keys, request.documents);
       break;
     case "open":
       open(request.file, request.bytes);

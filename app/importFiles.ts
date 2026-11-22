@@ -1,3 +1,4 @@
+import { newDocumentId } from "./project";
 import type { NewDocument } from "./projects";
 import type { Inspection } from "./useEngine";
 
@@ -41,7 +42,7 @@ export async function prepareFiles(
     }
     const inspection = await inspect(bytes.slice(0));
     if ("error" in inspection) refused.push({ file: file.name, reason: inspection.error.message });
-    else added.push({ file: file.name, bytes, sha256: await sha256(bytes), pages: inspection.pages });
+    else added.push({ id: newDocumentId(), file: file.name, bytes, sha256: await sha256(bytes), texts: inspection.texts });
   }
   return { added, refused };
 }

@@ -1,5 +1,6 @@
 import { useImperativeHandle, useState, type Ref } from "react";
 import type { PageIndex } from "../engine/contract";
+import { ApproveDialog } from "./ApproveDialog";
 import { baseName, download } from "./download";
 import { DocumentTabs, DOCUMENT_PANEL_ID, tabId } from "./DocumentTabs";
 import { DropZone } from "./DropZone";
@@ -7,21 +8,23 @@ import { Explorer } from "./Explorer";
 import { groundTruth, type DocumentFacts } from "./groundTruth";
 import type { Refusal } from "./importFiles";
 import { LabelExport } from "./LabelExport";
-import { toEdits, type Mark, type Tool } from "./marks";
+import { itemKey, markKey, toEdits, type Mark, type Tool } from "./marks";
 import { NotAdded } from "./NotAdded";
-import type { DocumentId, Settings } from "./project";
+import type { DocumentId, Project, ProjectDocument, Settings } from "./project";
 import type { StoredProject } from "./projects";
+import { newFrom, reachOf } from "./spread";
 import type { Store } from "./storage";
 import { TopBar, type Editing, type History } from "./TopBar";
 import { engineStatus, type Engine, type OpenDocument } from "./useEngine";
 import { useAddDocuments } from "./useAddDocuments";
+import { useApproval } from "./useApproval";
 import { useDocumentInEngine } from "./useDocumentInEngine";
 import { useHandOffFocus } from "./useHandOffFocus";
 import { useMarks } from "./useMarks";
 import { useProject } from "./useProject";
 import { useTabs } from "./useTabs";
 import { useUndoKeys } from "./useUndoKeys";
-import { initialWidths, Workspace } from "./Workspace";
+import { initialWidths, Workspace, type Review } from "./Workspace";
 
 /** What the app asks of the open project before leaving it. */
 export interface ProjectHandle {
@@ -88,11 +91,13 @@ function PanelStrip({ panels, onToggle }: { readonly panels: Panels; readonly on
   );
 }
 
+const WAIT_FOR_APPROVAL = "This file wasn't added while a document was being approved. Add it again once the approval is done.";
+
 const SAVE_FAILED = "Your latest changes could not be saved. Check that the disk has space; the next change tries again.";
 
-/** Why saving the project, or something outside it, failed. */
-function Alerts({ saveFailed, problem }: { readonly saveFailed: boolean; readonly problem: string | undefined }) {
-  return [saveFailed ? SAVE_FAILED : undefined, problem]
+/** Why saving the project, approving, or something outside the project failed. */
+function Alerts({ saveFailed, problems }: { readonly saveFailed: boolean; readonly problems: readonly (string | undefined)[] }) {
+  return [saveFailed ? SAVE_FAILED : undefined, ...problems]
     .filter((message) => message !== undefined)
     .map((message) => (
       <p key={message} role="alert" className="m-4 mb-0 rounded-md border border-mark/40 bg-fail-wash px-3 py-2 text-mark">
@@ -101,30 +106,57 @@ function Alerts({ saveFailed, problem }: { readonly saveFailed: boolean; readonl
     ));
 }
 
-/** Marking the open document: its marks, undo and redo, and the controls the top bar shows. */
+/** The open document's place in the project's review, for the workspace. */
+function reviewOf(opened: ReturnType<typeof useProject>, document: ProjectDocument | undefined, engine: Engine): Review {
+  const { project } = opened;
+  return {
+    hidden: project.hidden,
+    reach: reachOf(project),
+    newFrom: document === undefined ? [] : newFrom(project, document),
+    approved: document?.review === "approved",
+    onKeepHere: (mark) => {
+      const key = markKey(mark);
+      if (document === undefined || key === undefined) return;
+      engine.discardOutput();
+      opened.edit(document.id, ({ marks, shown }) => ({ marks: marks.filter((each) => itemKey(each) !== key), shown: [...shown, key] }), "edit");
+    },
+    onDownloaded: () => {
+      if (document !== undefined) opened.downloaded(document.id);
+    },
+  };
+}
+
+const documentOf = (project: Project, id: DocumentId | undefined) => project.documents.find((document) => document.id === id);
+
+/** Marking the open document: its marks, undo and redo, approving, and the controls the top bar shows. */
 function useEditing(
+  store: Store,
   engine: Engine,
   opened: ReturnType<typeof useProject>,
   active: DocumentId | undefined,
   settings: Settings,
   onSettings: (settings: Settings) => void,
+  adding: boolean,
 ) {
+  const approval = useApproval(store, opened, engine);
   const [tool, setTool] = useState<Tool>("text");
   const [exporting, setExporting] = useState(false);
   const [lastFacts, setLastFacts] = useState<DocumentFacts | undefined>(undefined);
   const focus = useHandOffFocus(engine.output !== undefined);
+  const activeDocument = documentOf(opened.project, active);
   const marking = useMarks(
     active,
-    opened.project.documents.find((document) => document.id === active)?.marks ?? [],
+    activeDocument?.marks ?? [],
     (update, kind) => {
       if (active === undefined) return;
       if (kind === "edit") engine.discardOutput();
-      opened.changeMarks(active, update, kind === "edit");
+      opened.edit(active, ({ marks, shown }) => ({ marks: update(marks), shown }), kind);
     },
     settings.customTypes,
     (name) => onSettings({ ...settings, customTypes: [...settings.customTypes, name] }),
   );
-  const busy = marking.pending !== undefined || engine.state !== "ready";
+  // Adding and approving each change the whole project, so Approve waits for an add.
+  const busy = marking.pending !== undefined || engine.state !== "ready" || approval.working || approval.asking !== undefined || adding;
   const step = (direction: "undo" | "redo") => () => {
     if (active === undefined) return;
     engine.discardOutput();
@@ -150,6 +182,10 @@ function useEditing(
     hasMarks: marking.marks.length > 0,
     busy,
     onApply: () => engine.apply(marking.marks.flatMap(toEdits), settings.appearance),
+    review: activeDocument?.review ?? "not-started",
+    onApprove: () => {
+      if (active !== undefined) approval.start(active);
+    },
     onExportLabels: () => setExporting(true),
   };
   /** Labelling mode's dialog, while it is open. */
@@ -166,7 +202,7 @@ function useEditing(
         onClose={() => setExporting(false)}
       />
     );
-  return { marking, history, editing, tool, focus, labels };
+  return { marking, history, editing, tool, focus, labels, approval };
 }
 
 interface DocumentPanelProps extends Omit<Parameters<typeof Workspace>[0], "pages" | "currentPage" | "onCurrentPage"> {
@@ -211,6 +247,15 @@ function DocumentPanel({ active, shown, missing, pageInView, onPageInView, ...wo
   );
 }
 
+const addingUnless = (approving: boolean, adder: ReturnType<typeof useAddDocuments>) => (files: readonly File[]) =>
+  approving ? adder.refuse(files, WAIT_FOR_APPROVAL) : adder.add(files);
+
+function openInTabs(tabs: ReturnType<typeof useTabs>, documents: readonly ProjectDocument[]) {
+  for (const document of documents) tabs.open(document.id);
+  const [first] = documents;
+  if (first !== undefined) tabs.open(first.id);
+}
+
 /** An open project: its documents in the explorer and tabs, the open document's pages and marks. */
 export function ProjectView(props: ProjectViewProps) {
   const { store, initial, engine, settings, labelling, onClose } = props;
@@ -218,21 +263,22 @@ export function ProjectView(props: ProjectViewProps) {
   const { project } = opened;
   const tabs = useTabs(project.id, project.documents);
   const { active } = tabs;
-  const activeDocument = project.documents.find((document) => document.id === active);
+  const activeDocument = documentOf(project, active);
   const { shown, missing } = useDocumentInEngine(store, opened.folder, activeDocument, engine);
   const adder = useAddDocuments(store, { folder: opened.folder, project }, engine, props.initialRefused, (documents) => {
     opened.addDocuments(documents);
-    for (const document of documents) tabs.open(document.id);
-    const [first] = documents;
-    if (first !== undefined) tabs.open(first.id);
+    openInTabs(tabs, documents);
   });
-  // Leaving waits for an add under way: its documents land in the project before it is saved and let go.
-  useImperativeHandle(props.ref, () => ({ save: () => adder.settled().then(opened.save) }));
-  const { marking, history, editing, tool, focus, labels } = useEditing(engine, opened, active, settings, props.onSettings);
+  const { marking, history, editing, tool, focus, labels, approval } = useEditing(store, engine, opened, active, settings, props.onSettings, adder.adding);
+  // Leaving waits for an add or an approval under way: it lands in the project before it is saved and let go.
+  useImperativeHandle(props.ref, () => ({ save: () => adder.settled().then(approval.settled).then(opened.save) }));
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });
   const [pageInView, setPageInView] = useState<PageInView | undefined>(undefined);
   const [widths, setWidths] = useState(initialWidths);
-  const canSwitch = engine.state !== "applying" && !adder.adding;
+  // Adding and approving each change the whole project, so neither starts while the other runs.
+  const quiet = !adder.adding && !approval.working;
+  const addFiles = addingUnless(approval.working, adder);
+  const canSwitch = engine.state !== "applying" && quiet;
   const byId = new Map(project.documents.map((document) => [document.id, document]));
   const openDocuments = tabs.tabs.flatMap((id) => byId.get(id) ?? []);
 
@@ -244,17 +290,18 @@ export function ProjectView(props: ProjectViewProps) {
         onProjects={onClose}
         saveState={opened.saveState}
         status={statusText(engine, shown, pageOf(pageInView, active))}
-        canAdd={!adder.adding && engine.state !== "stopped"}
-        onAdd={adder.add}
+        canAdd={quiet && engine.state !== "stopped"}
+        onAdd={addFiles}
         history={history}
         editing={shown !== undefined && engine.output === undefined ? editing : undefined}
       />
       {labels(shown)}
+      <ApproveDialog approval={approval.asking} documents={project.documents} onApprove={approval.confirm} onCancel={approval.cancel} />
       <div className="flex min-h-0">
         <PanelStrip panels={panels} onToggle={(id) => setPanels((current) => ({ ...current, [id]: !current[id] }))} />
         {panels.documents && <Explorer documents={project.documents} active={active} canOpen={canSwitch} onOpen={tabs.open} />}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Alerts saveFailed={opened.saveState === "failed"} problem={props.problem} />
+          <Alerts saveFailed={opened.saveState === "failed"} problems={[approval.problem, props.problem]} />
           <NotAdded refused={adder.refused} onDismiss={adder.dismiss} />
           <DocumentTabs documents={openDocuments} active={active} canSwitch={canSwitch} onSelect={tabs.open} onClose={tabs.close} />
           <DocumentPanel
@@ -265,9 +312,10 @@ export function ProjectView(props: ProjectViewProps) {
             onPageInView={setPageInView}
             engine={engine}
             marks={marking}
+            review={reviewOf(opened, activeDocument, engine)}
             tool={tool}
             labelling={labelling}
-            onFiles={adder.add}
+            onFiles={addFiles}
             showPages={panels.pages}
             widths={widths}
             onWidths={setWidths}
