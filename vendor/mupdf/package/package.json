@@ -1,0 +1,22 @@
+{
+	"name": "mupdf",
+	"version": "1.28.6-redactorator.1",
+	"description": "MuPDF.js 1.28.6 with two fixes to how redaction keeps text in place. See ../README.md.",
+	"author": "Artifex Software, Inc.",
+	"license": "AGPL-3.0-or-later",
+	"homepage": "https://mupdf.readthedocs.io/en/latest/",
+	"repository": {
+		"type": "git",
+		"url": "https://cgit.ghostscript.com/mupdf.git/"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/mupdf.d.ts",
+			"default": "./dist/mupdf.js"
+		}
+	},
+	"files": [
+		"dist/*"
+	]
+}

@@ -1,0 +1,89 @@
+From 36c165977270aef076eaa8b31404825ecf1c8a6c Mon Sep 17 00:00:00 2001
+From: Sahil Chaddha <14136740+Sahil333@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 07:58:55 +0530
+Subject: [PATCH] Keep text after a redacted character in place.
+
+When a redaction removes characters from the middle of a string, the
+sanitize filter sends the text before them, then records the end of
+what it sent as the text matrix after the first removed character,
+because processing a character moves tm past it whether or not it is
+removed. The gap written before the next segment (a TJ adjustment, or
+a TD when the string was shown with Tj) is then short by that
+character's advance, so the rest of the line moves back by that much.
+
+For example, with Helvetica at 12pt, redacting "the" from
+
+	[(Read the about it)] TJ
+
+gives [(Read )-1112( about it)] TJ instead of -1390, and " about it"
+lands 3.336pt (the width of "t") to the left of where it was. Removing
+a single character from a Tj string moves the rest of it the same way.
+Removal that starts at the beginning of a string is unaffected.
+
+Record the matrix before the removed character instead.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ source/pdf/pdf-op-filter.c | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/source/pdf/pdf-op-filter.c b/source/pdf/pdf-op-filter.c
+index 82a020d..aa21c03 100644
+--- a/source/pdf/pdf-op-filter.c
++++ b/source/pdf/pdf-op-filter.c
+@@ -960,10 +960,11 @@ update_mcid(fz_context *ctx, pdf_sanitize_processor *p)
+  * Stop when we hit the end, or when we find a character to remove. The
+  * caller will restart us again later. On exit, *pos = the point we got to,
+  * *inc = The number of bytes to skip to step over the next character (unless
+- * we hit the end).
++ * we hit the end), and *end_tm = the text matrix at *pos: where the text up
++ * to *pos ends, which is before any character we stopped to remove.
+  */
+ static void
+-filter_string_to_segment(fz_context *ctx, pdf_sanitize_processor *p, unsigned char *buf, size_t len, size_t *pos, int *inc)
++filter_string_to_segment(fz_context *ctx, pdf_sanitize_processor *p, unsigned char *buf, size_t len, size_t *pos, int *inc, fz_matrix *end_tm)
+ {
+ 	filter_gstate *gstate = p->gstate;
+ 	pdf_font_desc *fontdesc = gstate->pending.text.font;
+@@ -978,6 +979,8 @@ filter_string_to_segment(fz_context *ctx, pdf_sanitize_processor *p, unsigned ch
+ 	{
+ 		int uni;
+ 
++		/* Processing a character moves tm past it, even one we remove. */
++		*end_tm = p->tos.tm;
+ 		*inc = pdf_decode_cmap(fontdesc->encoding, buf, end, &cpt);
+ 		buf += *inc;
+ 
+@@ -1012,6 +1015,7 @@ filter_string_to_segment(fz_context *ctx, pdf_sanitize_processor *p, unsigned ch
+ 		*pos += *inc;
+ 		*inc = 0;
+ 	}
++	*end_tm = p->tos.tm;
+ }
+ 
+ static int
+@@ -1026,7 +1030,8 @@ filter_string_in_segments(fz_context *ctx, pdf_sanitize_processor *p, unsigned c
+ 		int inc;
+ 		size_t start = j;
+ 		fz_matrix initial_tm = p->tos.tm;
+-		filter_string_to_segment(ctx, p, buf, len, &j, &inc);
++		fz_matrix end_tm = p->tos.tm;
++		filter_string_to_segment(ctx, p, buf, len, &j, &inc, &end_tm);
+ 		/* Send start..j as a segment, and then if we haven't reached the end,
+ 		 * skip a single char, j+inc bytes. */
+ 		if (start != j)
+@@ -1044,7 +1049,10 @@ filter_string_in_segments(fz_context *ctx, pdf_sanitize_processor *p, unsigned c
+ 			first = 0;
+ 			send_segment(ctx, p, buf+start, j-start, obj);
+ 			p->tos.tm = new_tm;
+-			p->sent_tm = p->tos.tm;
++			/* What was sent ends where the segment ends, not after a
++			 * character removed after it, so that the next segment is
++			 * moved on by that character's width. */
++			p->sent_tm = end_tm;
+ 		}
+ 		j += inc;
+ 	}
+-- 
+2.55.0
+
