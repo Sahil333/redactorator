@@ -1,12 +1,15 @@
 // Projects in a store: each is a folder holding its originals under their own names and its
 // records in a hidden `.redactorator/` folder.
+import type { PageText } from "../engine/contract";
 import {
   defaultSettings,
-  newDocumentId,
   parseProject,
   parseSettings,
+  parseTexts,
   projectJson,
   settingsJson,
+  textsJson,
+  type DocumentId,
   type Project,
   type ProjectDocument,
   type Settings,
@@ -16,6 +19,7 @@ import type { Store } from "./storage";
 
 const RECORDS = ".redactorator";
 const PROJECT_FILE = `${RECORDS}/project.json`;
+const textFile = (folder: string, id: DocumentId) => `${folder}/${RECORDS}/text/${id}.json`;
 const SETTINGS_FILE = `${RECORDS}/settings.json`;
 
 /** A project and the folder it lives in. */
@@ -32,10 +36,12 @@ export interface UnreadableProject {
 
 /** A file that passed the engine's inspection, ready to be added to a project. */
 export interface NewDocument {
+  readonly id: DocumentId;
   readonly file: string;
   readonly bytes: ArrayBuffer;
   readonly sha256: string;
-  readonly pages: number;
+  /** The text of each page, which the project keeps so values can be found in it later. */
+  readonly texts: readonly [PageText, ...PageText[]];
 }
 
 const sameName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
@@ -80,9 +86,10 @@ export const saveProject = (store: Store, { folder, project }: StoredProject): P
   store.write(`${folder}/${PROJECT_FILE}`, projectJson(project));
 
 /**
- * Writes each new original into the project's folder and returns the documents to add to it.
- * If one fails, every file it started to write is removed again, the failed one included (the
- * browser creates a file before writing it), so no file is left that the project does not list.
+ * Writes each new original and its text into the project's folder and returns the documents to
+ * add to it. If one fails, every file it started to write is removed again, the failed one
+ * included (the browser creates a file before writing it), so no file is left that the project
+ * does not list.
  */
 export async function writeOriginals(
   store: Store,
@@ -93,19 +100,30 @@ export async function writeOriginals(
   const started: string[] = [];
   const documents: ProjectDocument[] = [];
   try {
-    for (const { file, bytes, sha256, pages } of added) {
+    for (const { id, file, bytes, sha256, texts } of added) {
       const name = unique(safeName(file, "Document.pdf"), [...taken, RECORDS]);
       taken.push(name);
-      started.push(name);
+      started.push(`${folder}/${name}`, textFile(folder, id));
       await store.write(`${folder}/${name}`, bytes);
-      documents.push({ id: newDocumentId(), file: name, sha256, pages, marks: [] });
+      await store.write(textFile(folder, id), textsJson(texts));
+      const document: ProjectDocument = { id, file: name, sha256, pages: texts.length, marks: [], review: "not-started", download: "none", shown: [] };
+      documents.push(document);
     }
   } catch (error) {
-    await Promise.all(started.map((name) => store.remove(`${folder}/${name}`)));
+    await Promise.all(started.map((path) => store.remove(path)));
     throw error;
   }
   return documents;
 }
+
+/** A document's stored text, or why it can't be used; undefined when there is none, as for a project from before texts were kept. */
+export async function readTexts(store: Store, folder: string, document: ProjectDocument): Promise<PageText[] | StoredFileProblem | undefined> {
+  const file = await store.read(textFile(folder, document.id));
+  return file === undefined ? undefined : parseTexts(await file.text(), document.pages);
+}
+
+export const saveTexts = (store: Store, folder: string, id: DocumentId, texts: readonly PageText[]): Promise<void> =>
+  store.write(textFile(folder, id), textsJson(texts));
 
 /** Runs `fill` on a new folder, and removes the folder again if it fails part way. */
 async function intoNewFolder<T>(store: Store, name: string, fill: (folder: string) => Promise<T>): Promise<T> {
@@ -120,7 +138,7 @@ async function intoNewFolder<T>(store: Store, name: string, fill: (folder: strin
 
 export function createProject(store: Store, name: string, added: readonly NewDocument[]): Promise<StoredProject> {
   return intoNewFolder(store, name, async (folder) => {
-    const project: Project = { id: crypto.randomUUID(), name, created: new Date().toISOString(), archived: false, documents: [] };
+    const project: Project = { id: crypto.randomUUID(), name, created: new Date().toISOString(), archived: false, documents: [], hidden: [] };
     const documents = await writeOriginals(store, { folder, project }, added);
     const stored = { folder, project: { ...project, documents } };
     await saveProject(store, stored);
@@ -133,6 +151,8 @@ export function duplicateProject(store: Store, { folder, project }: StoredProjec
   return intoNewFolder(store, name, async (copyFolder) => {
     for (const document of project.documents) {
       await store.write(`${copyFolder}/${document.file}`, await readOriginal(store, folder, document));
+      const texts = await store.read(textFile(folder, document.id));
+      if (texts !== undefined) await store.write(textFile(copyFolder, document.id), texts);
     }
     const copy = { folder: copyFolder, project: { ...project, id: crypto.randomUUID(), name, created: new Date().toISOString() } };
     await saveProject(store, copy);
@@ -140,8 +160,12 @@ export function duplicateProject(store: Store, { folder, project }: StoredProjec
   });
 }
 
+/** A document's original, or undefined when it is gone from the project's folder. */
+export const findOriginal = (store: Store, folder: string, document: ProjectDocument): Promise<File | undefined> =>
+  store.read(`${folder}/${document.file}`);
+
 export async function readOriginal(store: Store, folder: string, document: ProjectDocument): Promise<File> {
-  const file = await store.read(`${folder}/${document.file}`);
+  const file = await findOriginal(store, folder, document);
   if (file === undefined) throw new Error("The original is missing");
   return file;
 }

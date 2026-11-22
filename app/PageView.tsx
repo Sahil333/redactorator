@@ -2,7 +2,7 @@ import { use, useEffect, useId, useRef, type MouseEvent, type PointerEvent, type
 import type { Box, PageModel } from "../engine/contract";
 import { boxesOn, type Mark, type MarkTarget, type Pending, type Tool } from "./marks";
 import { markTypeLabel } from "./markTypes";
-import { pageFrameId, PageScale } from "./pageGeometry";
+import { markElementId, pageFrameId, PageScale } from "./pageGeometry";
 import { CSS_PIXELS_PER_POINT, type RenderDetail } from "./useEngine";
 import { useKeyboardMarking } from "./useKeyboardMarking";
 import { usePointerMarking } from "./usePointerMarking";
@@ -50,10 +50,18 @@ const tools: Record<Tool, { readonly label: string; readonly cursor: string; rea
   },
 };
 
-const markStyle = (target: MarkTarget, highlighted: boolean) =>
-  target.kind === "box"
-    ? `absolute border-dashed border-mark ${highlighted ? "border-2 bg-mark/30" : "border-[1.5px] bg-mark-wash"}`
-    : `absolute rounded-[1px] outline-mark ${highlighted ? "bg-mark/30 outline-2" : "bg-mark-wash outline-[1.5px]"}`;
+// A new mark, brought by another document's approval, is drawn blue until this one is approved.
+const markColours = {
+  own: { box: "border-mark", text: "outline-mark", wash: "bg-mark-wash", fill: "bg-mark/30" },
+  new: { box: "border-accent", text: "outline-accent", wash: "bg-accent/15", fill: "bg-accent/30" },
+} as const;
+
+const markStyle = (target: MarkTarget, highlighted: boolean, isNew = false) => {
+  const colour = markColours[isNew ? "new" : "own"];
+  return target.kind === "box"
+    ? `absolute border-dashed ${colour.box} ${highlighted ? `border-2 ${colour.fill}` : `border-[1.5px] ${colour.wash}`}`
+    : `absolute rounded-[1px] ${colour.text} ${highlighted ? `${colour.fill} outline-2` : `${colour.wash} outline-[1.5px]`}`;
+};
 
 function PageImage({ image, label }: { readonly image: ImageData; readonly label: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -86,15 +94,23 @@ interface MarkLayerProps {
   readonly focusBox: Box | undefined;
 }
 
-/** The marks, each tagged with its type, a new mark waiting for one, and the selection being made. */
+/**
+ * The marks, a new mark waiting for its type, and the selection being made. Only the highlighted
+ * mark shows its type, on a tag above it, so tags never cover the text above the other marks.
+ */
 function MarkLayer({ page, marks, pending, highlighted, selection, focusBox }: MarkLayerProps) {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
       {marks.flatMap((mark) =>
         boxesOn(mark.target, page.index).map((box, index) => (
-          <div key={`${mark.id}-${index}`} className={markStyle(mark.target, mark.id === highlighted)} style={boxStyle(page, box)}>
-            {index === 0 && (
-              <span className="absolute bottom-full -left-[1.5px] mb-px max-w-40 truncate rounded-t-sm bg-mark px-1 py-px text-[10px] leading-3 font-medium text-white">
+          <div
+            key={`${mark.id}-${index}`}
+            {...(index === 0 && { id: markElementId(mark.id) })}
+            className={markStyle(mark.target, mark.id === highlighted, mark.isNew)}
+            style={boxStyle(page, box)}
+          >
+            {index === 0 && mark.id === highlighted && (
+              <span className={`absolute bottom-full -left-[1.5px] mb-px max-w-40 truncate rounded-t-sm px-1 py-px text-[10px] leading-3 font-medium text-white ${mark.isNew ? "bg-accent" : "bg-mark"}`}>
                 {markTypeLabel(mark.type)}
               </span>
             )}

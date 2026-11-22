@@ -1,4 +1,5 @@
 import type { Box, Edit, PageIndex } from "../engine/contract";
+import { keyOf } from "../engine/match";
 import { markTypeLabel, type MarkType } from "./markTypes";
 import type { Selection } from "./selection";
 
@@ -29,7 +30,24 @@ export interface Mark {
   readonly target: MarkTarget;
   /** Labelling mode only: marks of the same person or thing share one. Empty for none. */
   readonly linkId: string;
+  /** Brought here by approving another document, or by adding this one, and not yet approved here. */
+  readonly isNew: boolean;
 }
+
+export const nextId = (marks: readonly Mark[]) => Math.max(0, ...marks.map((mark) => mark.id)) + 1;
+
+/** The key a text mark spreads by; undefined for a box, or for text with no letters or digits. */
+export function markKey(mark: Pick<Mark, "target">): string | undefined {
+  if (mark.target.kind !== "text") return undefined;
+  const key = keyOf(mark.target.text);
+  return key === "" ? undefined : key;
+}
+
+/**
+ * What the marks panel lists as one item: every text mark of one value, which hides and
+ * spreads together, or one box.
+ */
+export const itemKey = (mark: Mark): string => markKey(mark) ?? `mark:${mark.id}`;
 
 /** A mark the user has drawn but not yet given a type, and for text the selection it came from. */
 export interface Pending {

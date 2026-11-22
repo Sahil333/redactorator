@@ -1,24 +1,30 @@
-import { copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
 import {
   addDocuments,
   crossPagePdf,
+  dropFiles,
   dear,
   encryptedPdf,
   fakeEngine,
+  imagePdf,
   inkedPixels,
   janeRoe,
+  longPdf,
   markText,
+  maskedImagePdf,
   oneWordPdf,
   openApp,
   openPdf,
   printTypes,
+  rotatedCroppedPdf,
   saved,
   showPageList,
   storedNames,
+  tablePdf,
   twoPagePdf,
 } from "./app";
 
@@ -26,20 +32,6 @@ const explorer = (page: Page) => page.getByRole("navigation", { name: "Documents
 const marks = (page: Page) => page.getByRole("complementary", { name: "Marks" }).getByRole("listitem");
 const projectName = (page: Page) => page.getByRole("navigation", { name: "Breadcrumb" });
 const projectRow = (page: Page, name: string) => page.getByRole("listitem").filter({ has: page.getByRole("button", { name, exact: true }) });
-
-/** Drops files on `target` as a person dragging them from their desktop would. */
-async function dropFiles(page: Page, target: Locator, paths: readonly string[]): Promise<void> {
-  const files = await Promise.all(paths.map(async (path) => ({ name: basename(path), data: (await readFile(path)).toString("base64") })));
-  const transfer = await page.evaluateHandle((dropped) => {
-    const data = new DataTransfer();
-    for (const { name, data: base64 } of dropped) {
-      data.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name, { type: "application/pdf" }));
-    }
-    return data;
-  }, files);
-  await target.dispatchEvent("dragover", { dataTransfer: transfer });
-  await target.dispatchEvent("drop", { dataTransfer: transfer });
-}
 
 async function goHome(page: Page): Promise<void> {
   await projectName(page).getByRole("link", { name: "Projects" }).click();
@@ -148,6 +140,27 @@ test("documents added to an open project open in tabs, each with its own marks",
 
   await page.getByRole("button", { name: "Close two-pages.pdf" }).click();
   await expect(tabs).toHaveText([/one-word\.pdf/]);
+});
+
+test("tabs that don't fit scroll with no scrollbar, and the open document's tab comes into view", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 720 });
+  await openApp(page);
+  const files = [oneWordPdf, twoPagePdf, imagePdf, rotatedCroppedPdf, crossPagePdf, tablePdf, maskedImagePdf, longPdf];
+  await openPdf(page, ...files);
+  for (const file of files) await explorer(page).getByRole("button", { name: new RegExp(`^${basename(file).replace(".", "\\.")}`) }).click();
+  const strip = page.getByRole("tablist", { name: "Open documents" });
+  await expect(strip.getByRole("tab")).toHaveCount(files.length);
+
+  // The last one opened is in view, at the far end. Headless Chrome hides every scrollbar, so
+  // the strip's own style is what says Chrome would draw none.
+  await expect(strip.getByRole("tab", { name: "long.pdf" })).toBeInViewport();
+  const shown = await strip.evaluate((element) => ({ overflows: element.scrollWidth > element.clientWidth, scrollbar: getComputedStyle(element).scrollbarWidth }));
+  expect(shown).toEqual({ overflows: true, scrollbar: "none" });
+
+  const leftmost = strip.getByRole("tab").first();
+  await expect(leftmost).not.toBeInViewport();
+  await explorer(page).getByRole("button", { name: new RegExp(`^${(await leftmost.textContent()) ?? ""}`) }).click();
+  await expect(leftmost).toBeInViewport();
 });
 
 test("the documents list starts shown and the page thumbnails hidden, and each can be toggled", async ({ page }) => {
@@ -523,7 +536,7 @@ test("if the engine stops while files are being added, the rest are listed as no
     addEventListener("message", ({ data }) => {
       if (data.type !== "inspect") return;
       seen++;
-      if (seen === 1) { postMessage({ type: "inspected", inspection: data.inspection, pages: 1 }); return; }
+      if (seen === 1) { postMessage({ type: "inspected", inspection: data.inspection, texts: [{ chars: [] }] }); return; }
       throw new Error("engine broke");
     });`,
   );

@@ -13,6 +13,19 @@ export interface Store {
   remove(path: string): Promise<void>;
 }
 
+/** Writes `data` to `file`, which changes only once the whole write lands. */
+export async function writeWhole(file: FileSystemFileHandle, data: BufferSource | Blob | string): Promise<void> {
+  // A writable writes to a copy that replaces the file only when it closes.
+  const writable = await file.createWritable();
+  try {
+    await writable.write(data);
+    await writable.close();
+  } catch (error) {
+    await writable.abort();
+    throw error;
+  }
+}
+
 const isNotFound = (error: unknown) => error instanceof DOMException && error.name === "NotFoundError";
 
 const segments = (path: string) => path.split("/").filter((segment) => segment !== "");
@@ -43,15 +56,7 @@ function directoryStore(root: FileSystemDirectoryHandle): Store {
     },
     async write(path, data) {
       const [handle, name] = await parent(path, true);
-      // A writable writes to a copy that replaces the file only when it closes.
-      const writable = await (await handle.getFileHandle(name, { create: true })).createWritable();
-      try {
-        await writable.write(data);
-        await writable.close();
-      } catch (error) {
-        await writable.abort();
-        throw error;
-      }
+      await writeWhole(await handle.getFileHandle(name, { create: true }), data);
     },
     async folders(path) {
       const names: string[] = [];

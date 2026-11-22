@@ -1,4 +1,5 @@
 // The engine's shared types and the messages between the UI and the engine worker.
+import type { Found } from "./match";
 
 declare const brand: unique symbol;
 type Brand<T, Name extends string> = T & { readonly [brand]: Name };
@@ -17,6 +18,9 @@ export type FileNumber = Brand<number, "FileNumber">;
 
 /** Numbers each file the UI asks the engine to inspect before adding it, starting at 1. */
 export type InspectionNumber = Brand<number, "InspectionNumber">;
+
+/** Numbers each search the UI asks the engine to run over documents' text, starting at 1. */
+export type MatchNumber = Brand<number, "MatchNumber">;
 
 export const isPageIndex = (value: unknown): value is PageIndex =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
@@ -74,9 +78,17 @@ export type Source = "original" | "output";
 
 // `file` numbers each file the UI opens; the worker echoes it in every reply so
 // the UI can drop a reply about a file the user has since replaced.
-// An inspection opens a file only to say whether it can be added, and keeps nothing.
+// An inspection opens a file only to say whether it can be added and to read its text, and
+// keeps nothing. A match searches documents' text for keys (engine/match.ts), each document
+// given as each page's characters.
 export type EngineRequest =
   | { readonly type: "inspect"; readonly inspection: InspectionNumber; readonly bytes: ArrayBuffer }
+  | {
+      readonly type: "match";
+      readonly match: MatchNumber;
+      readonly keys: readonly string[];
+      readonly documents: readonly (readonly (readonly string[])[])[];
+    }
   | { readonly type: "open"; readonly file: FileNumber; readonly bytes: ArrayBuffer }
   | {
       readonly type: "render";
@@ -108,9 +120,16 @@ export interface EngineError {
   readonly message: string;
 }
 
+/** A key found in one of the documents a match searched, which it names by index. */
+export interface DocumentFound extends Found {
+  readonly document: number;
+  readonly page: PageIndex;
+}
+
 export type EngineMessage =
   | { readonly type: "ready" }
-  | { readonly type: "inspected"; readonly inspection: InspectionNumber; readonly pages: number }
+  | { readonly type: "inspected"; readonly inspection: InspectionNumber; readonly texts: readonly [PageText, ...PageText[]] }
+  | { readonly type: "matched"; readonly match: MatchNumber; readonly found: readonly DocumentFound[] }
   | { readonly type: "refused"; readonly inspection: InspectionNumber; readonly error: EngineError }
   | { readonly type: "opened"; readonly file: FileNumber; readonly document: DocumentModel }
   | {
@@ -139,6 +158,9 @@ export const isFileNumber = (value: unknown): value is FileNumber =>
   typeof value === "number" && Number.isInteger(value) && value > 0;
 
 export const isInspectionNumber = (value: unknown): value is InspectionNumber =>
+  typeof value === "number" && Number.isInteger(value) && value > 0;
+
+export const isMatchNumber = (value: unknown): value is MatchNumber =>
   typeof value === "number" && Number.isInteger(value) && value > 0;
 
 const isSource = (value: unknown): value is Source => value === "original" || value === "output";
@@ -182,8 +204,19 @@ function parseInspectRequest({ inspection, bytes }: Record<string, unknown>): En
   return isInspectionNumber(inspection) && bytes instanceof ArrayBuffer ? { type: "inspect", inspection, bytes } : undefined;
 }
 
+export const isText = (value: unknown): value is string => typeof value === "string";
+
+function parseMatchRequest({ match, keys, documents }: Record<string, unknown>): EngineRequest | undefined {
+  const parsedKeys = parseAll(keys, (key) => (isText(key) ? key : undefined));
+  const parsedDocuments = parseAll(documents, (pages) => parseAll(pages, (chars) => parseAll(chars, (c) => (isText(c) ? c : undefined))));
+  return isMatchNumber(match) && parsedKeys && parsedDocuments
+    ? { type: "match", match, keys: parsedKeys, documents: parsedDocuments }
+    : undefined;
+}
+
 export function parseEngineRequest(data: unknown): EngineRequest | undefined {
   if (isRecord(data) && data.type === "inspect") return parseInspectRequest(data);
+  if (isRecord(data) && data.type === "match") return parseMatchRequest(data);
   if (!isRecord(data) || !isFileNumber(data.file)) return undefined;
   const { file } = data;
   switch (data.type) {
@@ -225,6 +258,19 @@ function parsePageChar(value: unknown): PageChar | undefined {
   return box && { c: value.c, box };
 }
 
+function parsePageText(value: unknown): PageText | undefined {
+  const chars = isRecord(value) ? parseAll(value.chars, parsePageChar) : undefined;
+  return chars && { chars };
+}
+
+function parseFound(value: unknown): DocumentFound | undefined {
+  if (!isRecord(value)) return undefined;
+  const { document, key, page, start, end } = value;
+  return isOffset(document) && isOffset(key) && isPageIndex(page) && isOffset(start) && isOffset(end) && start < end
+    ? { document, key, page, start, end }
+    : undefined;
+}
+
 function parseEngineError(value: unknown): EngineError | undefined {
   if (!isRecord(value) || typeof value.message !== "string") return undefined;
   const code = engineErrorCodes.find((known) => known === value.code);
@@ -243,8 +289,8 @@ function parseFileMessage(data: Record<string, unknown>, file: FileNumber): Engi
         ? { type: "rendered", file, source: data.source, page: data.page, image: data.image }
         : undefined;
     case "text": {
-      const chars = isRecord(data.text) ? parseAll(data.text.chars, parsePageChar) : undefined;
-      return chars && isPageIndex(data.page) ? { type: "text", file, page: data.page, text: { chars } } : undefined;
+      const text = parsePageText(data.text);
+      return text && isPageIndex(data.page) ? { type: "text", file, page: data.page, text } : undefined;
     }
     case "applied": {
       const output = parseDocumentModel(data.output);
@@ -259,9 +305,12 @@ function parseFileMessage(data: Record<string, unknown>, file: FileNumber): Engi
 
 /** An answer to an inspection: `inspected` or `refused`. */
 function parseInspectionMessage(data: Record<string, unknown>): EngineMessage | undefined {
-  const { inspection, pages } = data;
+  const { inspection } = data;
   if (!isInspectionNumber(inspection)) return undefined;
-  if (data.type === "inspected") return isOffset(pages) && pages > 0 ? { type: "inspected", inspection, pages } : undefined;
+  if (data.type === "inspected") {
+    const [first, ...rest] = parseAll(data.texts, parsePageText) ?? [];
+    return first && { type: "inspected", inspection, texts: [first, ...rest] };
+  }
   const error = parseEngineError(data.error);
   return error && { type: "refused", inspection, error };
 }
@@ -271,6 +320,10 @@ export function parseEngineMessage(data: unknown): EngineMessage | undefined {
   const { file } = data;
   if (data.type === "ready") return { type: "ready" };
   if (data.type === "inspected" || data.type === "refused") return parseInspectionMessage(data);
+  if (data.type === "matched") {
+    const found = parseAll(data.found, parseFound);
+    return found && isMatchNumber(data.match) ? { type: "matched", match: data.match, found } : undefined;
+  }
   if (data.type === "error") {
     const error = parseEngineError(data.error);
     return error && (file === undefined || isFileNumber(file)) ? { type: "error", file, error } : undefined;

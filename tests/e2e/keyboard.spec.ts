@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { test } from "./coverage";
-import { imagePdf, oneWordPdf, openApp, openPdf, saveDownload, tablePdf, tabTo, toScreen } from "./app";
+import { downloadButton, imagePdf, oneWordPdf, openApp, openPdf, saveFile, tablePdf, tabTo, toScreen } from "./app";
 import { judge } from "./oracle";
 
 test("a word is marked, applied and downloaded with the keyboard alone", async ({ page }) => {
@@ -30,8 +30,8 @@ test("a word is marked, applied and downloaded with the keyboard alone", async (
   await tabTo(page, page.getByRole("button", { name: "Apply and check" }));
   await page.keyboard.press("Enter");
   await expect(page.getByText("Checked:")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download" })).toBeFocused();
-  const output = await saveDownload(page, () => page.keyboard.press("Enter"));
+  await expect(downloadButton(page)).toBeFocused();
+  const output = await saveFile(page, () => page.keyboard.press("Enter"));
 
   await judge(oneWordPdf, output, [
     { check: "absent", values: ["Jane Roe"] },

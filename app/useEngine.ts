@@ -3,9 +3,11 @@ import {
   isAboutOlderFile,
   isFileNumber,
   isInspectionNumber,
+  isMatchNumber,
   isPageIndex,
   parseEngineMessage,
   type Appearance,
+  type DocumentFound,
   type DocumentModel,
   type Edit,
   type EngineError,
@@ -13,6 +15,7 @@ import {
   type EngineRequest,
   type FileNumber,
   type InspectionNumber,
+  type MatchNumber,
   type PageIndex,
   type PageText,
   type Source,
@@ -63,8 +66,11 @@ export interface OpenDocument extends Omit<PdfSource, "bytes"> {
   readonly model: DocumentModel;
 }
 
-/** What inspecting a file found: its page count, or why it cannot be added. */
-export type Inspection = { readonly pages: number } | { readonly error: EngineError };
+/** What inspecting a file found: the text of each of its pages, or why it cannot be added. */
+export type Inspection = { readonly texts: readonly [PageText, ...PageText[]] } | { readonly error: EngineError };
+
+/** Where a search found its keys, or why it could not run. */
+export type Matches = { readonly found: readonly DocumentFound[] } | { readonly error: EngineError };
 
 /** A cleaned file that passed the engine's check. */
 interface Output {
@@ -84,6 +90,8 @@ export interface Engine {
   open(source: PdfSource): void;
   /** Whether the engine can work on `bytes`, which it takes over. */
   inspect(bytes: ArrayBuffer): Promise<Inspection>;
+  /** Where each key is in each document, given as each page's characters. */
+  match(keys: readonly string[], documents: readonly (readonly (readonly string[])[])[]): Promise<Matches>;
   /** Asks for a page's image from `source` at `detail`, and for the original's text, once each. */
   show(source: Source, page: PageIndex, detail?: RenderDetail): void;
   apply(edits: readonly Edit[], appearance: Appearance): void;
@@ -92,26 +100,28 @@ export interface Engine {
 
 const noImages = { original: new Map(), output: new Map() } satisfies Record<Source, Images>;
 
-/** Files the engine has been asked to inspect, each waiting for its answer. */
-class Inspections {
+/** Requests the engine answers in turn, each waiting for its answer. */
+class Waiting<N extends number, T> {
   private latest = 0;
   private stopped = false;
-  private readonly waiting = new Map<InspectionNumber, (inspection: Inspection) => void>();
+  private readonly waiting = new Map<N, (answer: T | { readonly error: EngineError }) => void>();
 
-  ask(send: (inspection: InspectionNumber) => void): Promise<Inspection> {
-    const inspection = this.latest + 1;
+  constructor(private readonly isNumber: (value: unknown) => value is N) {}
+
+  ask(send: (number: N) => void): Promise<T | { readonly error: EngineError }> {
+    const number = this.latest + 1;
     // Once the engine has stopped, nothing would ever answer.
-    if (this.stopped || !isInspectionNumber(inspection)) return Promise.resolve(notRunning);
-    this.latest = inspection;
+    if (this.stopped || !this.isNumber(number)) return Promise.resolve(notRunning);
+    this.latest = number;
     return new Promise((resolve) => {
-      this.waiting.set(inspection, resolve);
-      send(inspection);
+      this.waiting.set(number, resolve);
+      send(number);
     });
   }
 
-  answer(inspection: InspectionNumber, result: Inspection) {
-    this.waiting.get(inspection)?.(result);
-    this.waiting.delete(inspection);
+  answer(number: N, result: T | { readonly error: EngineError }) {
+    this.waiting.get(number)?.(result);
+    this.waiting.delete(number);
   }
 
   stop(message: string) {
@@ -121,7 +131,7 @@ class Inspections {
   }
 }
 
-const notRunning: Inspection = { error: { code: "bad-message", message: "The PDF engine is not running. Reload the page to try again." } };
+const notRunning: { readonly error: EngineError } = { error: { code: "bad-message", message: "The PDF engine is not running. Reload the page to try again." } };
 
 /** The images with a newly drawn page in them. A finer image is kept over a coarser one that arrives after it. */
 function withImage(current: Record<Source, Images>, { source, page, image }: Extract<EngineMessage, { type: "rendered" }>) {
@@ -130,13 +140,26 @@ function withImage(current: Record<Source, Images>, { source, page, image }: Ext
   return { ...current, [source]: new Map(current[source]).set(page, image) };
 }
 
+/** Sends the requests held back until the worker was ready, in the order they were made. */
+function sendHeld(worker: Worker, held: readonly [EngineRequest, Transferable[]][] | undefined) {
+  for (const [request, transfer] of held ?? []) worker.postMessage(request, transfer);
+}
+
+/** Forgets every request whose key starts with `prefix`, so each is made again when next wanted. */
+function forgetRequests(requested: Set<string>, prefix: string) {
+  for (const key of requested) if (key.startsWith(prefix)) requested.delete(key);
+}
+
 export function useEngine(): Engine {
   const workerRef = useRef<Worker | undefined>(undefined);
   // The worker listens only once MuPDF has loaded; anything sent before it says so would be lost.
   const beforeReady = useRef<[EngineRequest, Transferable[]][] | undefined>([]);
   const latestFile = useRef(0);
   const picked = useRef({ name: "", sha256: "" });
-  const [inspections] = useState(() => new Inspections());
+  const [{ inspections, matches }] = useState(() => ({
+    inspections: new Waiting<InspectionNumber, Extract<Inspection, { texts: unknown }>>(isInspectionNumber),
+    matches: new Waiting<MatchNumber, Extract<Matches, { found: unknown }>>(isMatchNumber),
+  }));
   const requested = useRef(new Set<string>());
   // The pages drawn at detail 2, oldest first. One can take some 55 MB at a pixel ratio of 2,
   // so only the latest few are kept; an older one is drawn again if it is shown again.
@@ -161,6 +184,7 @@ export function useEngine(): Engine {
       setOutput(undefined);
       setError(message);
       inspections.stop(message);
+      matches.stop(message);
     };
 
     worker.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -173,11 +197,14 @@ export function useEngine(): Engine {
       switch (message.type) {
         case "ready":
           setState("ready");
-          for (const [request, transfer] of beforeReady.current ?? []) worker.postMessage(request, transfer);
+          sendHeld(worker, beforeReady.current);
           beforeReady.current = undefined;
           break;
         case "inspected":
-          inspections.answer(message.inspection, { pages: message.pages });
+          inspections.answer(message.inspection, { texts: message.texts });
+          break;
+        case "matched":
+          matches.answer(message.match, { found: message.found });
           break;
         case "refused":
           inspections.answer(message.inspection, { error: message.error });
@@ -217,6 +244,10 @@ export function useEngine(): Engine {
 
   function inspect(bytes: ArrayBuffer): Promise<Inspection> {
     return inspections.ask((inspection) => post({ type: "inspect", inspection, bytes }, [bytes]));
+  }
+
+  function match(keys: readonly string[], documents: readonly (readonly (readonly string[])[])[]): Promise<Matches> {
+    return matches.ask((number) => post({ type: "match", match: number, keys, documents }));
   }
 
   function open({ name, bytes, sha256 }: PdfSource) {
@@ -278,11 +309,11 @@ export function useEngine(): Engine {
 
   function discardOutput() {
     outputWanted.current = false;
-    for (const key of requested.current) if (key.startsWith(renderKeysOf("output"))) requested.current.delete(key);
+    forgetRequests(requested.current, renderKeysOf("output"));
     fine.current = fine.current.filter((each) => each.source !== "output");
     setImages((current) => ({ ...current, output: new Map() }));
     setOutput(undefined);
   }
 
-  return { state, document, images, texts, output, error, open, inspect, show, apply, discardOutput };
+  return { state, document, images, texts, output, error, open, inspect, match, show, apply, discardOutput };
 }
