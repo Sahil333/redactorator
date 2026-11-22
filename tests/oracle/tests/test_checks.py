@@ -37,6 +37,11 @@ def test_metadata_reports_info_xmp_and_revisions():
     assert checks.metadata(fx.one_word(cleaned=True)) == []
 
 
+def test_metadata_reports_an_encrypted_output():
+    assert "the output is encrypted" in checks.metadata(fx.edit_locked())
+    assert "the output is encrypted" not in checks.metadata(fx.one_word())
+
+
 def test_covered_needs_a_filled_box_over_the_word():
     assert checks.covered(fx.one_word(), fx.one_word(cleaned=True), "Jane Roe") == []
     assert checks.covered(fx.one_word(), fx.one_word(), "Jane Roe") != []

@@ -86,7 +86,7 @@ Requirements are grouped by area and tagged P0 (MVP), P1 (v1) or P2 (later). IDs
 | DOC-1 | Import text-based PDFs | P0 |
 | DOC-2 | Import free-form text: paste, `.txt`, `.md` | P0 |
 | DOC-3 | Output is the same format as the input; the original file is never modified | P0 |
-| DOC-4 | Anything that cannot be fully processed (encrypted file, unknown format, a page OCR cannot read) is refused or flagged, never passed through silently | P0 |
+| DOC-4 | Anything that cannot be fully processed (a file that needs a password to open, unknown format, a page OCR cannot read) is refused or flagged, never passed through silently. A PDF that is only locked against editing or copying is cleaned, and its cleaned file has no lock | P0 |
 | DOC-5 | Import several files at once by drag and drop or folder pick | P0 |
 | DOC-6 | Import DOCX, covering body, tables, headers, footers, footnotes, text boxes, comments and tracked changes | P1 |
 | DOC-7 | Import scanned PDFs, PDFs that mix text with scanned images, and image files (PNG, JPEG, WebP; TIFF if the PDF engine can decode it) through OCR that runs in the browser | P0 |

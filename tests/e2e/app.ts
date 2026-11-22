@@ -9,6 +9,7 @@ export const oneWordPdf = new URL("../../fixtures/one-word.pdf", import.meta.url
 export const imagePdf = new URL("../../fixtures/image.pdf", import.meta.url).pathname;
 export const rotatedCroppedPdf = new URL("../../fixtures/rotated-cropped.pdf", import.meta.url).pathname;
 export const encryptedPdf = new URL("../../fixtures/encrypted.pdf", import.meta.url).pathname;
+export const editLockedPdf = new URL("../../fixtures/edit-locked.pdf", import.meta.url).pathname;
 export const crossPagePdf = new URL("../../fixtures/cross-page.pdf", import.meta.url).pathname;
 export const tablePdf = new URL("../../fixtures/table.pdf", import.meta.url).pathname;
 export const maskedImagePdf = new URL("../../fixtures/masked-image.pdf", import.meta.url).pathname;
