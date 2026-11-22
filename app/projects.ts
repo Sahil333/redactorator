@@ -175,6 +175,133 @@ export function duplicateProject(store: Store, { folder, project }: StoredProjec
   });
 }
 
+/** `name`, or `name (2)`, `name (3)` and so on, whichever no project in `taken` has. */
+function copyName(name: string, taken: readonly string[]): string {
+  let candidate = name;
+  for (let n = 2; taken.includes(candidate); n++) candidate = `${name} (${n})`;
+  return candidate;
+}
+
+async function sameBytes(a: File, b: File): Promise<boolean> {
+  if (a.size !== b.size) return false;
+  const [x, y] = await Promise.all([a.bytes(), b.bytes()]);
+  return x.every((byte, at) => byte === y[at]);
+}
+
+/** Copies the folder at `fromPath` into `intoPath`, file by file, each read back and checked whole. */
+async function copyFolder(from: Store, fromPath: string, into: Store, intoPath: string): Promise<void> {
+  for (const name of await from.files(fromPath)) {
+    const file = await from.read(`${fromPath}/${name}`);
+    if (file === undefined) throw new Error("A file went while it was copied");
+    await into.write(`${intoPath}/${name}`, file);
+    const copy = await into.read(`${intoPath}/${name}`);
+    if (copy === undefined || !(await sameBytes(file, copy))) throw new Error("A copied file does not match its original");
+  }
+  for (const name of await from.folders(fromPath)) await copyFolder(from, `${fromPath}/${name}`, into, `${intoPath}/${name}`);
+}
+
+/**
+ * Copies the project folder at `folder` in `from` into `into`, in a new folder named after the
+ * project as it is called now (`name`, for one whose project file can't be read). A project whose
+ * id is already there becomes a separate copy, with its own id and a name like "Name (2)", so
+ * nothing there is ever written over.
+ */
+async function copyProjectInto(from: Store, folder: string, into: Store, name: string): Promise<void> {
+  const there = (await listProjects(into)).flatMap((entry) => ("project" in entry ? [entry.project] : []));
+  await intoNewFolder(into, name, async (target) => {
+    await copyFolder(from, folder, into, target);
+    const copied = await readProject(into, target);
+    if (copied === undefined || !("project" in copied) || !there.some(({ id }) => id === copied.project.id)) return;
+    const project = { ...copied.project, id: crypto.randomUUID(), name: copyName(copied.project.name, there.map((each) => each.name)) };
+    await saveProject(into, { folder: target, project });
+  });
+}
+
+/** Whether two folders hold the same files, byte for byte, and the same folders, all the way down. */
+async function sameFolder(a: Store, aPath: string, b: Store, bPath: string): Promise<boolean> {
+  const sorted = (names: string[]) => names.toSorted().join("/");
+  const [aFiles, bFiles, aFolders, bFolders] = await Promise.all([a.files(aPath), b.files(bPath), a.folders(aPath), b.folders(bPath)]);
+  if (sorted(aFiles) !== sorted(bFiles) || sorted(aFolders) !== sorted(bFolders)) return false;
+  for (const name of aFiles) {
+    const [x, y] = await Promise.all([a.read(`${aPath}/${name}`), b.read(`${bPath}/${name}`)]);
+    if (x === undefined || y === undefined || !(await sameBytes(x, y))) return false;
+  }
+  for (const name of aFolders) if (!(await sameFolder(a, `${aPath}/${name}`, b, `${bPath}/${name}`))) return false;
+  return true;
+}
+
+/** Whether `into` already holds this very project, unchanged: the same id, file for file. */
+async function alreadyThere(from: Store, entry: StoredProject, into: Store): Promise<boolean> {
+  const twin = (await listProjects(into)).find((each) => "project" in each && each.project.id === entry.project.id);
+  return twin !== undefined && (await sameFolder(from, entry.folder, into, twin.folder));
+}
+
+/** Moves a project folder: copies it in under `name`, checked, then removes the old copy. */
+async function moveFolder(from: Store, folder: string, into: Store, name: string): Promise<void> {
+  await copyProjectInto(from, folder, into, name);
+  await from.remove(folder);
+}
+
+/** Moves one readable project, while no other tab has it open; false when one does. */
+async function moveProject(from: Store, entry: StoredProject, into: Store): Promise<boolean> {
+  const release = await lockProject(entry.project.id);
+  if (release === undefined) return false;
+  try {
+    // Another tab, starting at the same time, may have moved it while this one waited.
+    if ((await readProject(from, entry.folder)) === undefined) return true;
+    if (await alreadyThere(from, entry, into)) await from.remove(entry.folder);
+    else await moveFolder(from, entry.folder, into, entry.project.name);
+    return true;
+  } finally {
+    release();
+  }
+}
+
+/**
+ * Moves the app's settings: into `into` when it has none, and otherwise only the custom mark
+ * types `into` lacks, so its own settings stay as they were.
+ */
+async function moveSettings(from: Store, into: Store): Promise<void> {
+  if ((await from.read(SETTINGS_FILE)) === undefined) return;
+  const [moving, there] = await Promise.all([loadSettings(from), loadSettings(into)]);
+  if (typeof moving !== "string" && typeof there !== "string") {
+    const customTypes = [...new Set([...there.customTypes, ...moving.customTypes])];
+    if ((await into.read(SETTINGS_FILE)) === undefined) await saveSettings(into, moving);
+    else if (customTypes.length > there.customTypes.length) await saveSettings(into, { ...there, customTypes });
+  }
+  await from.remove(RECORDS);
+}
+
+/**
+ * Moves every project in `from` into `into`, one at a time: each is copied and checked before
+ * its old copy is removed; one already there unchanged, as after browser data was cleared and
+ * the project imported again, is only removed. A project open in another tab can't be moved
+ * now; the names of those left behind are returned. The app's settings go too, unless `into`
+ * has its own.
+ */
+export async function moveProjects(from: Store, into: Store): Promise<string[]> {
+  const left: string[] = [];
+  for (const entry of await listProjects(from)) {
+    if ("problem" in entry) await moveFolder(from, entry.folder, into, entry.folder);
+    else if (!(await moveProject(from, entry, into))) left.push(entry.project.name);
+  }
+  await moveSettings(from, into);
+  return left;
+}
+
+/**
+ * Copies in the project folder `from`, as picked to import; or says why it can't: "projects"
+ * when it is a folder of projects rather than one, "missing" when it holds none, or its project
+ * file's problem.
+ */
+export async function importProject(from: Store, into: Store): Promise<StoredFileProblem | "projects" | "missing" | undefined> {
+  const found = await readProject(from, "");
+  if (found === undefined) return (await listProjects(from)).length > 0 ? "projects" : "missing";
+  if ("problem" in found) return found.problem;
+  await copyProjectInto(from, "", into, found.project.name);
+  return undefined;
+}
+
 /** A document's original, or undefined when it is gone from the project's folder. */
 export const findOriginal = (store: Store, folder: string, document: ProjectDocument): Promise<File | undefined> =>
   store.read(`${folder}/${document.file}`);

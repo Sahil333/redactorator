@@ -9,6 +9,8 @@ export interface Store {
   write(path: string, data: BufferSource | Blob | string): Promise<void>;
   /** The names of the folders directly inside `path` ("" for the root). */
   folders(path: string): Promise<string[]>;
+  /** The names of the files directly inside `path` ("" for the root). */
+  files(path: string): Promise<string[]>;
   /** Removes the file or folder at `path`, with everything in it. */
   remove(path: string): Promise<void>;
 }
@@ -30,7 +32,16 @@ const isNotFound = (error: unknown) => error instanceof DOMException && error.na
 
 const segments = (path: string) => path.split("/").filter((segment) => segment !== "");
 
-function directoryStore(root: FileSystemDirectoryHandle): Store {
+async function names(folder: FileSystemDirectoryHandle, kind: FileSystemHandleKind): Promise<string[]> {
+  const found: string[] = [];
+  for await (const [name, handle] of folder.entries()) {
+    if (handle.kind === kind) found.push(name);
+  }
+  return found;
+}
+
+/** The files and folders under `root`: Chrome's private storage, or a folder the user picked. */
+export function directoryStore(root: FileSystemDirectoryHandle): Store {
   async function folder(names: readonly string[], create: boolean): Promise<FileSystemDirectoryHandle> {
     let handle = root;
     for (const name of names) handle = await handle.getDirectoryHandle(name, { create });
@@ -59,11 +70,10 @@ function directoryStore(root: FileSystemDirectoryHandle): Store {
       await writeWhole(await handle.getFileHandle(name, { create: true }), data);
     },
     async folders(path) {
-      const names: string[] = [];
-      for await (const [name, handle] of (await folder(segments(path), false)).entries()) {
-        if (handle.kind === "directory") names.push(name);
-      }
-      return names;
+      return names(await folder(segments(path), false), "directory");
+    },
+    async files(path) {
+      return names(await folder(segments(path), false), "file");
     },
     async remove(path) {
       try {

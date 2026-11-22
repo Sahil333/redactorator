@@ -4,6 +4,7 @@ import type { Refusal } from "./importFiles";
 import { NotAdded } from "./NotAdded";
 import { PickFiles } from "./PickFiles";
 import type { ProjectEntries, StoredProject, UnreadableProject } from "./projects";
+import type { Whereabouts } from "./useProjectStore";
 
 interface ProjectActions {
   readonly onOpen: (stored: StoredProject) => void;
@@ -23,6 +24,19 @@ interface HomeProps extends ProjectActions {
   readonly refused: readonly Refusal[];
   readonly onDismissRefused: () => void;
   readonly onFiles: (files: readonly File[]) => void;
+  /** Where the projects are kept; undefined until that is known. */
+  readonly where: Whereabouts | undefined;
+  /** Whether the user put off moving the projects into a folder, on this visit. */
+  readonly later: boolean;
+  readonly folder: FolderActions;
+}
+
+interface FolderActions {
+  readonly onChoose: () => void;
+  readonly onReopen: () => void;
+  readonly onLater: () => void;
+  /** Copies in a project folder, say one from another computer. */
+  readonly onImport: () => void;
 }
 
 const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`;
@@ -69,7 +83,59 @@ function Steps() {
   );
 }
 
-function EmptyHome({ canAdd, onFiles }: Pick<HomeProps, "canAdd" | "onFiles">) {
+const card = "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-accent/25 bg-accent-wash px-4 py-3";
+
+/** Where the projects are kept, when that asks something of the user: a folder to pick, or Chrome's permission again. */
+function FolderCard({ where, later, folder }: Pick<HomeProps, "where" | "later" | "folder">) {
+  if (where === undefined || where.kind === "folder" || (where.kind === "browser" && later)) return null;
+  if (where.kind === "moving" || where.kind === "opening") {
+    return (
+      <p role="status" className={card}>
+        {where.kind === "moving" ? `Moving your projects into “${where.name}”…` : `Opening “${where.name}”…`}
+      </p>
+    );
+  }
+  const name = where.kind === "browser" ? "" : where.name;
+  const { title, text, action, onAction } = {
+    browser: {
+      title: "Keep your projects in a folder on this computer",
+      text: "Right now they live inside Chrome, which can delete them when you clear site data. In a folder, they are ordinary files you can see, copy and back up.",
+      action: "Choose a folder for projects",
+      onAction: folder.onChoose,
+    },
+    reopen: {
+      title: "Reopen your projects folder",
+      text: `Your projects are in “${name}”. Chrome asks again before this page can use it.`,
+      action: "Reopen your projects folder",
+      onAction: folder.onReopen,
+    },
+    missing: {
+      title: "Your projects folder can't be found",
+      text: `“${name}” may have been moved, renamed or deleted. Choose it again where it is now.`,
+      action: "Choose a folder for projects",
+      onAction: folder.onChoose,
+    },
+  }[where.kind];
+  return (
+    <section aria-label={title} className={card}>
+      <div className="min-w-0 flex-1">
+        <p className="font-display font-semibold text-base">{title}</p>
+        <p className="text-ink-muted">{text}</p>
+      </div>
+      <button type="button" onClick={onAction} className="rounded-md bg-ink px-3.5 py-1.5 text-paper hover:bg-ink/85">
+        {action}
+      </button>
+      {where.kind === "browser" && (
+        <button type="button" onClick={folder.onLater} className="rounded-md px-3 py-1.5 text-ink-muted hover:bg-paper-sunk">
+          Later
+        </button>
+      )}
+    </section>
+  );
+}
+
+function EmptyHome({ canAdd, onFiles, folder, where }: Pick<HomeProps, "canAdd" | "onFiles" | "where" | "folder">) {
+  const link = "underline hover:text-ink disabled:opacity-50";
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-8">
       <h2 className="font-display font-semibold text-3xl text-balance">Hide personal data across a whole project</h2>
@@ -80,8 +146,23 @@ function EmptyHome({ canAdd, onFiles }: Pick<HomeProps, "canAdd" | "onFiles">) {
           <PickFiles label="Choose PDFs" disabled={!canAdd} className={`${darkButton} px-4 py-2`} onFiles={onFiles} />
           <PickFiles label="Choose a folder" folder disabled={!canAdd} className={`${button} cursor-pointer has-disabled:opacity-50 ${pickFocus}`} onFiles={onFiles} />
         </div>
-        <p className="text-ink-muted">Kept in this browser only. Nothing is uploaded.</p>
+        <p className="text-ink-muted">Kept on this computer only. Nothing is uploaded.</p>
       </div>
+      {/* Kept inside Chrome, as after its site data is cleared: an existing projects folder can be opened. */}
+      {where?.kind === "browser" && (
+        <p className="text-center text-ink-muted">
+          Already keep your projects in a folder on this computer?{" "}
+          <button type="button" disabled={!canAdd} onClick={folder.onChoose} className={link}>
+            Open your projects folder
+          </button>
+        </p>
+      )}
+      <p className="text-center text-ink-muted">
+        Moving to this computer from another?{" "}
+        <button type="button" disabled={!canAdd} onClick={folder.onImport} className={link}>
+          Import a project
+        </button>
+      </p>
     </div>
   );
 }
@@ -287,7 +368,7 @@ function DeleteDialog({ stored, onDelete, onClose }: {
 }
 
 export function Home(props: HomeProps) {
-  const { projects, canAdd, status, error, refused, onDismissRefused, onFiles } = props;
+  const { projects, canAdd, status, error, refused, onDismissRefused, onFiles, where, folder } = props;
   const empty = projects !== undefined && projects.length === 0;
   const [deleting, setDeleting] = useState<StoredProject | undefined>(undefined);
   const actions: ProjectActions = { ...props, onDelete: setDeleting };
@@ -300,18 +381,31 @@ export function Home(props: HomeProps) {
         </p>
         <div className="flex-1" />
         {projects !== undefined && !empty && (
-          <PickFiles label="New project" disabled={!canAdd} className={`${darkButton} px-3.5 py-1.5`} onFiles={onFiles} />
+          <>
+            <button type="button" disabled={!canAdd} onClick={folder.onImport} className={`${button} disabled:opacity-50`}>
+              Import a project
+            </button>
+            <PickFiles label="New project" disabled={!canAdd} className={`${darkButton} px-3.5 py-1.5`} onFiles={onFiles} />
+          </>
         )}
       </header>
       <DropZone error={error} onFiles={onFiles}>
         <NotAdded refused={refused} onDismiss={onDismissRefused} />
-        {empty && <EmptyHome canAdd={canAdd} onFiles={onFiles} />}
+        {(where?.kind === "reopen" || where?.kind === "missing") && (
+          <div className="mx-auto w-full max-w-3xl p-8">
+            <FolderCard where={where} later={props.later} folder={folder} />
+          </div>
+        )}
+        {empty && <EmptyHome canAdd={canAdd} onFiles={onFiles} folder={folder} where={where} />}
         {projects !== undefined && !empty && (
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-8">
+            <FolderCard where={where} later={props.later} folder={folder} />
             <h2 className="font-display font-semibold text-2xl">Projects</h2>
             <ProjectList projects={projects} actions={actions} />
             <p className="text-ink-muted">
-              Projects are kept in this browser on this device. Clearing this site's data in the browser deletes them.
+              {where?.kind === "folder"
+                ? `Projects are kept in the folder “${where.name}” on this computer.`
+                : "Projects are kept in this browser on this device. Clearing this site's data in the browser deletes them."}
             </p>
           </div>
         )}

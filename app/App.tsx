@@ -52,7 +52,11 @@ interface OpenProject {
 export function App() {
   const engine = useEngine();
   const projectStore = useProjectStore((listed) => void openFromAddress(listed));
-  const { store, projects, settings, problem, refresh, whileLocked } = projectStore;
+  const { store, projects, settings, problem, where, refresh, whileLocked } = projectStore;
+  // "Later" on the folder card holds until the next visit.
+  const [later, setLater] = useState(false);
+  // No new project while the projects move into a folder: it would be left behind in the browser.
+  const settling = where?.kind === "moving" || where?.kind === "opening";
   const [open, setOpen] = useState<OpenProject | undefined>(undefined);
   const [refused, setRefused] = useState<readonly Refusal[]>([]);
   const [adding, setAdding] = useState(false);
@@ -101,7 +105,7 @@ export function App() {
   useHistoryMoves(() => void followAddress());
 
   async function startProject(files: readonly File[]) {
-    if (store === undefined || adding) return;
+    if (store === undefined || adding || settling) return;
     setAdding(true);
     try {
       const prepared = await prepareFiles(files, engine.inspect);
@@ -109,7 +113,7 @@ export function App() {
       const [first] = prepared.added;
       if (first === undefined) return;
       const stored = await createProject(store, nameFromFile(first.file), prepared.added);
-      keepStorage();
+      if (where?.kind === "browser") keepStorage();
       await refresh();
       await openProject(stored, "push", prepared.refused);
     } catch {
@@ -140,12 +144,20 @@ export function App() {
   return (
     <Home
       projects={projects}
-      canAdd={store !== undefined && engine.state === "ready" && !adding}
+      canAdd={store !== undefined && engine.state === "ready" && !adding && !settling}
       status={engineStatus(engine) ?? ""}
       error={engine.error ?? problem}
       refused={refused}
       onDismissRefused={() => setRefused([])}
       onFiles={(files) => void startProject(files)}
+      where={where}
+      later={later}
+      folder={{
+        onChoose: () => void projectStore.chooseFolder(),
+        onReopen: () => void projectStore.reopenFolder(),
+        onLater: () => setLater(true),
+        onImport: () => void projectStore.importFromFolder(),
+      }}
       onOpen={(stored) => void openProject(stored, "push")}
       onRename={(stored, name) => void whileLocked(stored, (from, current) => saveProject(from, { ...current, project: { ...current.project, name } }))}
       onDuplicate={(stored) => void whileLocked(stored, (from, current) => duplicateProject(from, current))}
