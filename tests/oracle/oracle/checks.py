@@ -82,6 +82,9 @@ def present(output: bytes, text: str) -> list[str]:
 def metadata(output: bytes) -> list[str]:
     reasons = []
     document = PDFDocument(PDFParser(io.BytesIO(output)))
+    # An encrypted output hides its streams from the raw-bytes scan in `absent`.
+    if document.encryption is not None:
+        reasons.append("the output is encrypted")
     if any(info for info in document.info):
         reasons.append("the output has an Info dictionary")
     if "Metadata" in document.catalog:

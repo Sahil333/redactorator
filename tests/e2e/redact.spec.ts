@@ -4,6 +4,7 @@ import {
   applyAndDownload,
   dear,
   drawBox,
+  editLockedPdf,
   encryptedPdf,
   crossPagePdf,
   imagePdf,
@@ -38,6 +39,22 @@ test("a marked word is removed from the file, boxed, and its neighbours stay put
   // Not yet approved, so the download is a preview.
   expect(output).toMatch(/one-word-preview\.pdf$/);
   await judge(oneWordPdf, output, [
+    { check: "absent", values: ["Jane Roe"] },
+    { check: "covered", word: "Jane Roe" },
+    { check: "positions", words: ["Jane Roe"] },
+    { check: "metadata" },
+  ]);
+});
+
+test("a PDF locked only against editing, with no password to open it, is cleaned, and its cleaned file has no lock", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, editLockedPdf);
+  await markText(page, 1, janeRoe, "Person");
+
+  const output = await applyAndDownload(page);
+
+  // The metadata check also fails an encrypted file, whose streams the raw scan can't read.
+  await judge(editLockedPdf, output, [
     { check: "absent", values: ["Jane Roe"] },
     { check: "covered", word: "Jane Roe" },
     { check: "positions", words: ["Jane Roe"] },

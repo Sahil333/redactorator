@@ -82,8 +82,9 @@ function load(bytes: ArrayBuffer): { readonly document: mupdf.PDFDocument; reado
   try {
     document = mupdf.Document.openDocument(bytes, "application/pdf");
     if (!(document instanceof mupdf.PDFDocument)) throw new Error("Not a PDF");
-    // DOC-4: an encrypted file is refused, never processed in part.
-    if (document.needsPassword() || !document.getTrailer().get("Encrypt").isNull()) {
+    // DOC-4: a file that needs a password to open is refused, never processed in part. One with
+    // an empty password, locked only against editing or copying, is read in full like any other.
+    if (document.needsPassword()) {
       document.destroy();
       return { code: "encrypted", message: "This PDF is encrypted. Remove its password in the app that made it, then open it again." };
     }
@@ -434,7 +435,8 @@ function redact(bytes: Uint8Array, byPage: Map<PageIndex, Redaction[]>, appearan
       document.findPage(index).delete("Metadata");
     }
     // A full rewrite: one revision, and garbage collection drops every object nothing refers to.
-    const saved = document.saveToBuffer("garbage=4,compress").asUint8Array();
+    // Without encryption, which MuPDF would otherwise keep from the original, lock and all.
+    const saved = document.saveToBuffer("garbage=4,compress,encrypt=none").asUint8Array();
     const copy = new Uint8Array(saved.length);
     copy.set(saved);
     return copy;
@@ -569,6 +571,7 @@ function imagesUnderBoxes(page: mupdf.Page, redactions: readonly Redaction[]): b
 function check(original: mupdf.PDFDocument, output: mupdf.PDFDocument, byPage: Map<PageIndex, Redaction[]>, appearance: Appearance): void {
   if (output.countVersions() !== 1) throw new CheckFailed("The cleaned file has more than one revision.");
   const trailer = output.getTrailer();
+  if (!trailer.get("Encrypt").isNull()) throw new CheckFailed("The cleaned file is still encrypted.");
   if (!trailer.get("Info").isNull() || !trailer.get("Root").get("Metadata").isNull()) {
     throw new CheckFailed("The cleaned file still has metadata.");
   }

@@ -285,11 +285,28 @@ def encrypted() -> bytes:
     return out.getvalue()
 
 
+def edit_locked() -> bytes:
+    """one-word.pdf locked against editing and copying by an owner password, with an empty
+    password to open it: any reader opens it, and only asks apps to respect the lock."""
+    import io
+
+    import pikepdf
+
+    pdf = pikepdf.open(io.BytesIO(one_word()))
+    out = io.BytesIO()
+    pdf.save(out, encryption=pikepdf.Encryption(
+        user="", owner="locked-owner", R=4, aes=True,
+        allow=pikepdf.Permissions(extract=False, modify_annotation=False, modify_assembly=False,
+                                  modify_form=False, modify_other=False)))
+    return out.getvalue()
+
+
 if __name__ == "__main__":
     for name, build in [("one-word", one_word), ("image", image), ("rotated-cropped", rotated_cropped),
                         ("encrypted", encrypted), ("cross-page", cross_page), ("masked-image", masked_image),
                         ("table", table), ("long", long_document),
                         ("letter-a", lambda: letter(LETTER_A)), ("letter-b", lambda: letter(LETTER_B)),
-                        ("line-feed-glyph", line_feed_glyph), ("tj-strings", tj_strings)]:
+                        ("line-feed-glyph", line_feed_glyph), ("tj-strings", tj_strings),
+                        ("edit-locked", edit_locked)]:
         (FIXTURES / f"{name}.pdf").write_bytes(build())
         print(f"wrote fixtures/{name}.pdf")
