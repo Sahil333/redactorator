@@ -536,7 +536,7 @@ test("if the engine stops while files are being added, the rest are listed as no
     addEventListener("message", ({ data }) => {
       if (data.type !== "inspect") return;
       seen++;
-      if (seen === 1) { postMessage({ type: "inspected", inspection: data.inspection, texts: [{ chars: [] }] }); return; }
+      if (seen === 1) { postMessage({ type: "inspected", inspection: data.inspection, reading: { texts: [{ chars: [] }], images: [] } }); return; }
       throw new Error("engine broke");
     });`,
   );

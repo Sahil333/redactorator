@@ -20,6 +20,7 @@ import { useAddDocuments } from "./useAddDocuments";
 import { useApproval } from "./useApproval";
 import { useDocumentInEngine } from "./useDocumentInEngine";
 import { useHandOffFocus } from "./useHandOffFocus";
+import { useImages } from "./useImages";
 import { useMarks } from "./useMarks";
 import { useProject } from "./useProject";
 import { useTabs } from "./useTabs";
@@ -144,6 +145,7 @@ function useEditing(
   const [lastFacts, setLastFacts] = useState<DocumentFacts | undefined>(undefined);
   const focus = useHandOffFocus(engine.output !== undefined);
   const activeDocument = documentOf(opened.project, active);
+  const images = useImages(store, opened.folder, activeDocument, engine);
   const marking = useMarks(
     active,
     activeDocument?.marks ?? [],
@@ -202,7 +204,7 @@ function useEditing(
         onClose={() => setExporting(false)}
       />
     );
-  return { marking, history, editing, tool, focus, labels, approval };
+  return { marking, history, editing, tool, focus, labels, approval, images };
 }
 
 interface DocumentPanelProps extends Omit<Parameters<typeof Workspace>[0], "pages" | "currentPage" | "onCurrentPage"> {
@@ -269,7 +271,7 @@ export function ProjectView(props: ProjectViewProps) {
     opened.addDocuments(documents);
     openInTabs(tabs, documents);
   });
-  const { marking, history, editing, tool, focus, labels, approval } = useEditing(store, engine, opened, active, settings, props.onSettings, adder.adding);
+  const { marking, history, editing, tool, focus, labels, approval, images } = useEditing(store, engine, opened, active, settings, props.onSettings, adder.adding);
   // Leaving waits for an add or an approval under way: it lands in the project before it is saved and let go.
   useImperativeHandle(props.ref, () => ({ save: () => adder.settled().then(approval.settled).then(opened.save) }));
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });
@@ -313,6 +315,7 @@ export function ProjectView(props: ProjectViewProps) {
             engine={engine}
             marks={marking}
             review={reviewOf(opened, activeDocument, engine)}
+            images={images}
             tool={tool}
             labelling={labelling}
             onFiles={addFiles}

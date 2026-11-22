@@ -24,9 +24,13 @@ Browser tests call it through `tests/e2e/oracle.ts`.
 | `metadata` | — | No Info dictionary, no XMP, exactly one revision |
 | `covered` | `word` | A filled shape in the output covers the word's box as pdfminer reads it in the input |
 | `positions` | `words` | Every glyph of the input outside the given words is in the output at the same place (0.5 pt) |
-| `pixels` | `region` | Image pixels wholly inside the region are one colour; pixels wholly outside are unchanged |
+| `pixels` | `region`, `mask`?, `at`? | Image pixels wholly inside the region are one colour; pixels wholly outside are unchanged. With `mask`, the image's soft mask is judged. With `at`, the image drawn over that box is judged; without it, the file must draw one image |
+| `unchanged` | `at` | Every pixel of the image drawn over `at` is as it was (within 8 levels) |
 
-`region` is PDF user space as pdfminer lays out the page: points, origin
+A pixel's place on the page follows the matrix the image is drawn with, so a
+turned or resized image is judged where its pixels actually land.
+
+`region` and `at` are PDF user space as pdfminer lays out the page: points, origin
 bottom-left. Input and output are always read the same way, so no check depends
 on the app's own box convention.
 
@@ -56,4 +60,8 @@ rotation and crop applied):
 | `letter-a.pdf` | 612 × 792 | Four lines at x 72, 12 pt, starting "Jane Roe" (x 72–123.4, y 79.1–95.6), "1234 5678" (x 72–128.7, y 99.1–115.6), "Roe" (x 72–94.0, y 119.1–135.6) and "We" |
 | `letter-b.pdf` | 612 × 792 | The same values written otherwise: "Statement by JANE  ROE" ("Statement" at x 72–126.7, y 79.1–95.6), "1234-5678" and "1234.5678", "Monroe Street", "Jane" ending one line and "Roe" starting the next, and "91234 5678", which holds no match |
 | `tj-strings.pdf` | 612 × 792 | `one-word.pdf`'s three lines and places, with no metadata. The line "Dear Jane Roe, thank you for writing to us." is one `TJ` array: "Dear Jane Roe, thank you for wri", a kerning of 20, then "ting to us.", so "Jane Roe" (x 101.3–152.7, y 99.1–115.6) starts in the middle of a string |
+| `logo-a.pdf` | 612 × 792 | "Acme Ltd", a 96 × 64 RGB logo (red rings and a bar on cream) at x 100–388, y 100–292, and "Reference 4471" at x 100, baseline y 342 |
+| `logo-b.pdf` | 612 × 792 | The logo's pixels drawn at half size over user space `[100 550 244 646]` and a quarter turned over `[304 550 400 694]` (one shared image); a JPEG re-save of it over `[100 250 388 442]`; a different 96 × 64 image over `[420 300 564 396]`; and the logo again off the page, over `[700 900 844 996]`. The logo's left 90% is `[100 550 229.6 646]` at half size and `[304 550 400 679.6]` turned |
+| `unmatchable-images.pdf` | 612 × 792, two pages | Each page draws the same three images: a 102 × 132 one over the whole page, as a scan does; a patterned 24 × 24 one at x 100–196, y 96–192; and a plain grey 64 × 64 one at x 300–428, y 64–192 |
+| `signatures.pdf` | 612 × 792, two pages | A signature-like shape drawn as a 96 × 64 stencil mask (ImageMask), and a black 96 × 64 logo whose shape lives in its soft mask. Page 1 draws them over user space `[100 500 292 628]` and `[100 200 292 328]`; page 2 at half size over `[300 600 396 664]` and `[300 300 396 364]` |
 | `line-feed-glyph.pdf` | 612 × 792 | Two lines at x 72, 12 pt. Its font names byte 10's glyph `uni000A`, so the first line, "Dear Jane Roe", then a line-feed glyph, then " thank you for writing to us.", draws a line break as a glyph with a box: "Jane Roe" at x 101.3–152.7 and the glyph at x 152.7–156.0, y 79.1–95.6 |

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { documentTexts, findPlaces } from "./documentTexts";
+import { documentReadings, findPlaces } from "./documentReadings";
 import type { DocumentId, Project } from "./project";
 import { approve, changed, keysToFind, type Approval } from "./spread";
 import type { Store } from "./storage";
@@ -27,10 +27,10 @@ export function useApproval(store: Store, opened: ReturnType<typeof useProject>,
 
   async function plan(id: DocumentId): Promise<PendingApproval | undefined> {
     const project = opened.current();
-    const texts = await documentTexts(store, opened.folder, project.documents, engine);
-    const searched = project.documents.map((document) => ({ id: document.id, texts: texts.get(document.id) ?? [] }));
+    const readings = await documentReadings(store, opened.folder, project.documents, engine);
+    const searched = [...readings].map(([document, { texts }]) => ({ id: document, texts }));
     const places = await findPlaces(engine, keysToFind(project, id), searched);
-    const approval = approve(project, id, texts, places);
+    const approval = approve(project, id, readings, places);
     return approval && { ...approval, document: id, from: project };
   }
 

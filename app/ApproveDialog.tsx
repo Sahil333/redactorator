@@ -27,7 +27,7 @@ function consequences(approval: PendingApproval, documents: readonly ProjectDocu
       `It ${names(what)} in ${names(others)}. ${others.length === 1 ? "That document goes" : "Those documents go"} back to In review, with the changes shown as new.`,
     );
   }
-  if (approval.here.hidden > 0) lines.push(`It also hides ${places(approval.here.hidden)} more in this document, where the same values appear.`);
+  if (approval.here.hidden > 0) lines.push(`It also hides ${places(approval.here.hidden)} more in this document, where the same values or images appear.`);
   return lines;
 }
 

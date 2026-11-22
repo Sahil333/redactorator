@@ -18,6 +18,7 @@ import {
   type MatchNumber,
   type PageIndex,
   type PageText,
+  type Reading,
   type Source,
 } from "../engine/contract";
 
@@ -66,8 +67,8 @@ export interface OpenDocument extends Omit<PdfSource, "bytes"> {
   readonly model: DocumentModel;
 }
 
-/** What inspecting a file found: the text of each of its pages, or why it cannot be added. */
-export type Inspection = { readonly texts: readonly [PageText, ...PageText[]] } | { readonly error: EngineError };
+/** What inspecting a file found: its pages' text and images, or why it cannot be added. */
+export type Inspection = Reading | { readonly error: EngineError };
 
 /** Where a search found its keys, or why it could not run. */
 export type Matches = { readonly found: readonly DocumentFound[] } | { readonly error: EngineError };
@@ -201,7 +202,7 @@ export function useEngine(): Engine {
           beforeReady.current = undefined;
           break;
         case "inspected":
-          inspections.answer(message.inspection, { texts: message.texts });
+          inspections.answer(message.inspection, message.reading);
           break;
         case "matched":
           matches.answer(message.match, { found: message.found });
