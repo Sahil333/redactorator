@@ -1369,19 +1369,19 @@ callers: `busy-adding`, `busy-approving`, `busy-applying`,
 #### 1. `app/App.tsx` (Modify)
 
 *   **Type / Scope**: React component.
-*   **Proposed Changes**: `settling` (`App.tsx:58-59`: projects are moving
-    into a folder, or the remembered folder is reopening) is also kept in a
-    ref updated on every render, because `onLoaded` runs through a closure
-    from the render where the folder was chosen (`useProjectStore.ts:136,
-    162`; `App.tsx:54`), in which `settling` is still false.
-    `openProject` (`App.tsx:65-74`) does nothing while the ref says settling.
-    `openFromAddress` (`App.tsx:77-83`) and `followAddress`
-    (`App.tsx:97-104`) never open a project directly: they store the
-    address's project id in a `waitingFor` ref. One effect on `where?.kind`
-    opens `waitingFor` when settling is false, looking the id up in the list
-    loaded after the move (folder names can change during the move,
-    `projects.ts:209-217`), and clears it; no other path opens it. So the
-    project opens once.
+*   **Proposed Changes**: built in PR #15. `onLoaded` runs through a
+    closure from the render where the folder was chosen
+    (`useProjectStore.ts:136, 162`; `App.tsx:54`), in which `settling`
+    (`App.tsx:58-59`: projects are moving into a folder, or the remembered
+    folder is reopening) is still false. So the address is no longer opened
+    from there. A new hook, `useAddressedProject`, holds the address's
+    project id in state; `openFromAddress` and `followAddress`
+    (`App.tsx:77-104`) only set it. One effect opens it when the projects are
+    listed and `settling` is false, looking the id up in the list loaded
+    after the move (folder names can change during the move,
+    `projects.ts:209-217`), and clears it; no other path opens it, so the
+    project opens once. `openProject` (`App.tsx:65-74`) also does nothing
+    while settling.
 
 #### 2. `app/Home.tsx` (Modify)
 
@@ -1396,14 +1396,14 @@ callers: `busy-adding`, `busy-approving`, `busy-applying`,
 #### 3. `tests/e2e/folder.spec.ts` (Modify)
 
 *   **Type / Scope**: Playwright test.
-*   **Proposed Changes**: a new test. Setup with `page.addInitScript` (so it
-    survives navigation): `standInForFolderPicker(page, "Picked")`
-    (`tests/e2e/app.ts:324`) and a `createWritable` wrapper that, once armed
-    by a `BroadcastChannel("hold-writes")` "arm" message, waits for a
-    "release" message before writing. It makes a marked project in Chrome's
-    storage (`markedProject`, `folder.spec.ts:18`), which saves unhindered,
-    goes Home, arms the hold, chooses the folder (`chooseFolder`'s click,
-    without its final wait), and while "Moving your projects into" shows:
+*   **Proposed Changes**: a new test, built in PR #15. It uses
+    `standInForFolderPicker(page, "Picked")` (`tests/e2e/app.ts:324`), makes
+    a project with "Jane Roe" marked, keeps its address, and goes Home. Then
+    a `createWritable` wrapper installed with `page.evaluate` holds every
+    write until the test releases it; setting the address later does not
+    reload the page, so the wrapper stays. It chooses the folder
+    (`chooseFolder`'s click, without its final wait), and while "Moving your
+    projects into" shows:
     checks the row button and its menu button are disabled; sets
     `location.hash` to `#project=<id>`; releases the writes. It then checks
     the project opens with no alert shown, that
