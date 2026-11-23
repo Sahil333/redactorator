@@ -83,6 +83,42 @@ test("choosing a folder moves the projects into it, where they open with their m
   await expect(marks(page)).toHaveText([/Jane Roe/]);
 });
 
+test("while the projects move into a folder, no project opens until the move ends, so none is left behind", async ({ page }) => {
+  await standInForFolderPicker(page, "Picked");
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await markText(page, 1, janeRoe, "Person");
+  await saved(page);
+  const address = new URL(page.url()).hash;
+  await goHome(page);
+  // From now on every write waits until the test lets it go, so the move stays under way.
+  await page.evaluate(() => {
+    const original = FileSystemFileHandle.prototype.createWritable;
+    const released = new Promise<void>((resolve) => Reflect.set(window, "releaseWrites", resolve));
+    FileSystemFileHandle.prototype.createWritable = async function (...args) {
+      await released;
+      return original.apply(this, args);
+    };
+  });
+
+  await keepInFolder(page).getByRole("button", { name: "Choose a folder for projects" }).click();
+  await expect(page.getByText(/^Moving your projects/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "one-word", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Actions for one-word" })).toBeDisabled();
+  // The address names the project while it is being moved, as Back or a link would.
+  await page.evaluate((hash) => {
+    location.hash = hash;
+  }, address);
+  await page.evaluate(() => Reflect.get(window, "releaseWrites")());
+
+  // It opens once the move has ended, from the folder, with no "open in another tab" problem.
+  await expect(projectName(page)).toContainText("one-word");
+  await expect(marks(page)).toHaveText([/Jane Roe/]);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(await storedNames(page)).toEqual(["Picked"]);
+  expect(await storedNamesIn(page, "Picked/one-word/.redactorator")).toContain("project.json");
+});
+
 test("a project renamed before it moves gets a folder of its new name", async ({ page }) => {
   await standInForFolderPicker(page, "Picked");
   await openApp(page);
