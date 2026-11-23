@@ -170,7 +170,7 @@ function EmptyHome({ canAdd, onFiles, folder, where }: Pick<HomeProps, "canAdd" 
 const menuSteps: Partial<Record<string, 1 | -1>> = { ArrowDown: 1, ArrowUp: -1 };
 
 /** A row's ⋯ button and its menu. Arrow keys move through the items; Escape or a click outside closes it. */
-function RowMenu({ name, children }: { readonly name: string; readonly children: ReactNode }) {
+function RowMenu({ name, disabled, children }: { readonly name: string; readonly disabled: boolean; readonly children: ReactNode }) {
   const menuId = useId();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -190,7 +190,8 @@ function RowMenu({ name, children }: { readonly name: string; readonly children:
         popoverTarget={menuId}
         aria-label={`Actions for ${name}`}
         aria-haspopup="menu"
-        className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-paper-sunk hover:text-ink"
+        disabled={disabled}
+        className="grid size-8 place-items-center rounded-md text-ink-muted enabled:hover:bg-paper-sunk enabled:hover:text-ink disabled:opacity-50"
       >
         ⋯
       </button>
@@ -239,7 +240,8 @@ function RenameField({ name, onDone }: { readonly name: string; readonly onDone:
   );
 }
 
-function ProjectRow({ stored, actions }: { readonly stored: StoredProject; readonly actions: ProjectActions }) {
+/** A project on Home. While projects move into a folder, it can't be opened or changed. */
+function ProjectRow({ stored, actions, moving }: { readonly stored: StoredProject; readonly actions: ProjectActions; readonly moving: boolean }) {
   const [renaming, setRenaming] = useState(false);
   const { project } = stored;
   return (
@@ -253,7 +255,12 @@ function ProjectRow({ stored, actions }: { readonly stored: StoredProject; reado
           }}
         />
       ) : (
-        <button type="button" onClick={() => actions.onOpen(stored)} className="min-h-6 truncate text-left font-display font-semibold text-base hover:underline">
+        <button
+          type="button"
+          disabled={moving}
+          onClick={() => actions.onOpen(stored)}
+          className="min-h-6 truncate text-left font-display font-semibold text-base enabled:hover:underline disabled:text-ink-muted"
+        >
           {project.name}
         </button>
       )}
@@ -262,7 +269,7 @@ function ProjectRow({ stored, actions }: { readonly stored: StoredProject; reado
       <span className="text-ink-muted">
         {approvedCount(stored)} of {project.documents.length} approved
       </span>
-      <RowMenu name={project.name}>
+      <RowMenu name={project.name} disabled={moving}>
         <MenuItem label="Rename" onSelect={() => setRenaming(true)} />
         <MenuItem label="Duplicate" onSelect={() => actions.onDuplicate(stored)} />
         <MenuItem label={project.archived ? "Unarchive" : "Archive"} onSelect={() => actions.onArchive(stored, !project.archived)} />
@@ -295,7 +302,7 @@ function sortEntries(projects: ProjectEntries) {
   return { current: current.toSorted(byName), archived: archived.toSorted(byName), unreadable };
 }
 
-function ProjectList({ projects, actions }: { readonly projects: ProjectEntries; readonly actions: ProjectActions }) {
+function ProjectList({ projects, actions, moving }: { readonly projects: ProjectEntries; readonly actions: ProjectActions; readonly moving: boolean }) {
   const { current, archived, unreadable } = sortEntries(projects);
   const list = "overflow-hidden rounded-lg border border-rule bg-paper-raised";
   return (
@@ -303,7 +310,7 @@ function ProjectList({ projects, actions }: { readonly projects: ProjectEntries;
       {(current.length > 0 || unreadable.length > 0) && (
         <ul className={list}>
           {current.map((stored) => (
-            <ProjectRow key={stored.folder} stored={stored} actions={actions} />
+            <ProjectRow key={stored.folder} stored={stored} actions={actions} moving={moving} />
           ))}
           {unreadable.map((entry) => (
             <UnreadableRow key={entry.folder} entry={entry} />
@@ -315,7 +322,7 @@ function ProjectList({ projects, actions }: { readonly projects: ProjectEntries;
           <summary className="cursor-pointer text-ink-muted">Archived ({archived.length})</summary>
           <ul className={`${list} mt-2`}>
             {archived.map((stored) => (
-              <ProjectRow key={stored.folder} stored={stored} actions={actions} />
+              <ProjectRow key={stored.folder} stored={stored} actions={actions} moving={moving} />
             ))}
           </ul>
         </details>
@@ -401,7 +408,7 @@ export function Home(props: HomeProps) {
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-8">
             <FolderCard where={where} later={props.later} folder={folder} />
             <h2 className="font-display font-semibold text-2xl">Projects</h2>
-            <ProjectList projects={projects} actions={actions} />
+            <ProjectList projects={projects} actions={actions} moving={where?.kind === "moving" || where?.kind === "opening"} />
             <p className="text-ink-muted">
               {where?.kind === "folder"
                 ? `Projects are kept in the folder “${where.name}” on this computer.`

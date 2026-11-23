@@ -42,6 +42,29 @@ function useHistoryMoves(onChange: () => void) {
   }, []);
 }
 
+/**
+ * Opens the project the address names, once the projects are listed and none are moving into a
+ * folder; a project the list doesn't hold sends the address back to the projects. Returns the
+ * function that reads the address. It may run through a closure from an earlier render, as after
+ * a move, so it only sets state.
+ */
+function useAddressedProject(projects: ProjectEntries | undefined, settling: boolean, open: (stored: StoredProject) => void) {
+  const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
+  const openWaiting = useEffectEvent((id: string, listed: ProjectEntries) => {
+    setWaitingFor(undefined);
+    const stored = listed.find((entry) => "project" in entry && entry.project.id === id);
+    if (stored !== undefined && "project" in stored) open(stored);
+    else navigate("replace", homeAddress());
+  });
+  useEffect(() => {
+    if (waitingFor !== undefined && projects !== undefined && !settling) openWaiting(waitingFor, projects);
+  }, [waitingFor, projects, settling]);
+  return () => {
+    const id = projectInAddress();
+    if (id !== undefined) setWaitingFor(id);
+  };
+}
+
 interface OpenProject {
   readonly stored: StoredProject;
   readonly release: () => void;
@@ -51,18 +74,20 @@ interface OpenProject {
 
 export function App() {
   const engine = useEngine();
-  const projectStore = useProjectStore((listed) => void openFromAddress(listed));
+  const projectStore = useProjectStore(() => openFromAddress());
   const { store, projects, settings, problem, where, refresh, whileLocked } = projectStore;
   // "Later" on the folder card holds until the next visit.
   const [later, setLater] = useState(false);
-  // No new project while the projects move into a folder: it would be left behind in the browser.
+  // No project opens or starts while the projects move into a folder: it would be left behind in the browser.
   const settling = where?.kind === "moving" || where?.kind === "opening";
+  const openFromAddress = useAddressedProject(projects, settling, (stored) => void openProject(stored, "none"));
   const [open, setOpen] = useState<OpenProject | undefined>(undefined);
   const [refused, setRefused] = useState<readonly Refusal[]>([]);
   const [adding, setAdding] = useState(false);
   const projectRef = useRef<ProjectHandle>(null);
 
   async function openProject(stored: StoredProject, how: Navigation, notAdded: readonly Refusal[] = []) {
+    if (settling) return;
     const taken = await projectStore.take(stored, "open it");
     if (taken === undefined) {
       if (how === "none") navigate("replace", homeAddress());
@@ -71,15 +96,6 @@ export function App() {
     setRefused([]);
     setOpen({ stored: taken.current, release: taken.release, refused: notAdded });
     navigate(how, projectAddress(stored.project.id));
-  }
-
-  /** Opens the project the address names, if it is one of `listed`; otherwise the address goes back to the projects. */
-  async function openFromAddress(listed: ProjectEntries) {
-    const id = projectInAddress();
-    if (id === undefined) return;
-    const stored = listed.find((entry) => "project" in entry && entry.project.id === id);
-    if (stored !== undefined && "project" in stored) await openProject(stored, "none");
-    else navigate("replace", homeAddress());
   }
 
   /** False, and the project stays open, when its changes could not be saved. */
@@ -100,7 +116,7 @@ export function App() {
       navigate("push", projectAddress(open.stored.project.id));
       return;
     }
-    if (projects !== undefined) await openFromAddress(projects);
+    openFromAddress();
   }
   useHistoryMoves(() => void followAddress());
 
