@@ -10,8 +10,10 @@ rule there, AGENTS.md wins.
 
 ## Shape of the code
 
-1. Write only what the task needs. No options, layers, helpers or config for
+1. Write only what the task needs. No features, options, helpers or config for
    cases nobody asked for. A few similar lines beat an early abstraction.
+   Splitting code into components that each own one responsibility is not an
+   early abstraction.
 2. Prefer deep modules: a small interface over real work. Delete wrappers that
    only pass calls through.
 3. Change behaviour where it lives. Edit the module that owns it instead of
