@@ -83,6 +83,7 @@ function forgetRequests(requested: Set<string>, prefix: string) {
 
 export function useEngine(): Engine {
   const client = useRef<PdfClient | undefined>(undefined);
+  const picked = useRef({ name: "", sha256: "" });
   const requested = useRef(new Set<string>());
   // The pages drawn at detail 2, oldest first. One can take some 55 MB at a pixel ratio of 2,
   // so only the latest few are kept; an older one is drawn again if it is shown again.
@@ -120,6 +121,7 @@ export function useEngine(): Engine {
 
   function open({ name, bytes, sha256 }: PdfSource) {
     if (client.current === undefined || state === "stopped") return;
+    picked.current = { name, sha256 };
     requested.current = new Set();
     fine.current = [];
     setDocument(undefined);
@@ -129,7 +131,7 @@ export function useEngine(): Engine {
     setError(undefined);
     void client.current.open(bytes).then((model) => {
       if ("code" in model) showFailure(model);
-      else setDocument({ name, sha256, model });
+      else setDocument({ ...picked.current, model });
     });
   }
 
