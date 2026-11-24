@@ -533,7 +533,7 @@ test("leaving a project while documents are being added waits for them, so they 
 });
 
 test("if the engine stops while files are being added, the rest are listed as not added instead of waiting forever", async ({ page }) => {
-  await stopWorkerAfter(page, "inspect");
+  await stopWorkerAfter(page);
   await openApp(page);
   await openPdf(page, crossPagePdf, oneWordPdf, twoPagePdf);
 

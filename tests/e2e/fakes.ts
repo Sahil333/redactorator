@@ -144,22 +144,19 @@ export async function staleOpenReply(page: Page): Promise<void> {
   await workerFake(page, "staleOpenReply", { script });
 }
 
-/** The PDF worker answers the first `request`, then throws on the next one instead of answering it. */
-export async function stopWorkerAfter(page: Page, request: "inspect"): Promise<void> {
-  const prelude = sourceOf(
-    (scope: WorkerScope, acted, type: string) => {
-      let seen = 0;
-      scope.addEventListener("message", (event) => {
-        if (event.data.type !== type) return;
-        seen++;
-        if (seen === 1) return;
-        event.stopImmediatePropagation();
-        acted("stopWorkerAfter");
-        throw new Error("The fake stopped the PDF worker");
-      });
-    },
-    request,
-  );
+/** The PDF worker reads the first file inspected, then throws on the next inspection instead of answering it. */
+export async function stopWorkerAfter(page: Page): Promise<void> {
+  const prelude = sourceOf((scope: WorkerScope, acted) => {
+    let seen = 0;
+    scope.addEventListener("message", (event) => {
+      if (event.data.type !== "inspect") return;
+      seen++;
+      if (seen === 1) return;
+      event.stopImmediatePropagation();
+      acted("stopWorkerAfter");
+      throw new Error("The fake stopped the PDF worker");
+    });
+  });
   await workerFake(page, "stopWorkerAfter", { prelude });
 }
 

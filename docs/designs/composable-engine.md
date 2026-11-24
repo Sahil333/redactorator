@@ -1475,24 +1475,33 @@ Every test in this step passes on today's code before any code moves.
     | `failWorkerStart` | `(page: Page): Promise<void>` | `fakeEngine` at `engine-replies.spec.ts:6` |
     | `replyWith` | `(page: Page, message: unknown): Promise<void>` (after `ready`) | `fakeEngine` at `engine-replies.spec.ts:15` |
     | `staleOpenReply` | `(page: Page): Promise<void>` | `fakeEngine` at `engine-replies.spec.ts:28-39` |
-    | `stopWorkerAfter` | `(page: Page, request: "inspect"): Promise<void>`: answers the first such request, then throws | `fakeEngine` at `projects.spec.ts:532-542` |
+    | `stopWorkerAfter` | `(page: Page): Promise<void>`: wraps the real worker, which reads the first file inspected; the next inspection throws instead of being answered | `fakeEngine` at `projects.spec.ts:532-542` |
     | `delayPageText` | `(page: Page, pageIndex: number, ms: number): Promise<void>` | `wrapEngine` at `pages.spec.ts:71-76` |
     | `tamperApply` | `(page: Page): Promise<void>` | `wrapEngine` at `redact.spec.ts:251-256` |
     | `delayApplied` | `(page: Page, ms: number): Promise<void>` | `wrapEngine` at `redact.spec.ts:268-273` |
     | `holdApprovalSearch` | `(page: Page): Promise<() => Promise<void>>` | `holdReplies(page, "matched")` at `spreading.spec.ts:453, 471` |
     | `holdInspection` | `(page: Page): Promise<() => Promise<void>>` | `holdReplies(page, "inspected")` at `spreading.spec.ts:494` |
-    | `holdWrites` | `(page: Page, file?: string): Promise<() => Promise<void>>` (installed with `addInitScript`) | the slow `createWritable` at `projects.spec.ts:514-521` |
+    | `holdWrites` | `(page: Page, file?: string): Promise<() => Promise<void>>` (installed with `addInitScript`, and on the page already loaded); the release lets held writes go newest first, as a disk might finish them, so a write that must land last only does if it waited | the slow `createWritable` at `projects.spec.ts:514-521` |
     | `failWrites`, `restoreWrites`, `writeAttempts` | as today | moved from `projects.spec.ts:368-387` |
     | `countWrites` | `(page: Page, file: string): Promise<() => Promise<number>>` | new: counts `createWritable` calls on handles named `file` |
+    | `connectionsMade` | `(page: Page): Promise<() => string[]>` | new, for item 13: lists the `WebSocket` and `EventSource` connections made in the page and the PDF worker |
+
+    Worker-side parts use `Wire<T>`, the message types with plain numbers
+    for branded ones, so a fake can write literals without casts. The
+    helpers several specs share (`explorer`, `inExplorer`, `marks`,
+    `approve`, `show`, the letter and logo fixtures) move into `app.ts`.
 
     Self-checking: each helper registers itself with a `fakes` auto fixture
     added to `tests/e2e/coverage.ts`'s `test` (`coverage.ts:14-24`). Each
-    worker-side part sets `globalThis.__fakes[<helper name>] = true` when it
-    acts, read after the test body through the PDF worker (found by its
-    `worker-` URL prefix). The fixture fails the test when:
+    fake reports when it acts: in the PDF worker through a
+    `BroadcastChannel` to the page, and from the page through a function
+    the test exposes, so the report survives reloads. The worker cannot be
+    read after the test, because the app terminates it when it fails
+    (`useEngine.ts:183`), which `failWorkerStart`, `replyWith` and
+    `stopWorkerAfter` cause. The fixture fails the test when:
     *   a helper's route served no worker script;
     *   `failWorkerStart`, `replyWith`, `staleOpenReply`, `stopWorkerAfter`,
-        `delayPageText`, `tamperApply` or `delayApplied` never set its flag;
+        `delayPageText`, `tamperApply` or `delayApplied` never acted;
     *   a hold (`holdApprovalSearch`, `holdInspection`, `holdWrites`) was
         released without having held anything;
     *   `failWrites` or `countWrites` saw no matching write.
@@ -1510,9 +1519,10 @@ Every test in this step passes on today's code before any code moves.
 #### 9. `tests/e2e/history.spec.ts` (Create)
 
 *   **Type / Scope**: Playwright test.
-*   **Proposed Changes**: a new change clears redo; undo and redo put an
-    approved document back in review and mark a downloaded document "Changed
-    since download"; undoing "Don't hide here" brings the value back, and
+*   **Proposed Changes**: a new change clears redo; undo and redo keep a
+    downloaded document in review and mark it "Changed since download" (an
+    approved document cannot be undone today: approval ends its own undo
+    history, `useProject.ts:132-136`); undoing "Don't hide here" brings the value back, and
     marking it again drops it from the kept-visible list; approval clears
     history only for the documents it changed; undo is disabled while an
     apply (`delayApplied`), an approval search (`holdApprovalSearch`) or an
@@ -1527,11 +1537,16 @@ Every test in this step passes on today's code before any code moves.
         at most 2, and the stored `project.json` holds all ten marks.
     *   Retry: with `failWrites(page, 1)`, one mark shows "Not saved"; the
         next mark saves, and the stored file holds both.
-    *   `pagehide`: make a mark, then navigate to `about:blank` at once and
-        come back: the stored file holds the mark. The same during a
-        `delayApplied` apply and during a `holdApprovalSearch` search.
+    *   `pagehide`: held, not in this step. A change made right before the
+        page is left is lost today: in 3 of 3 runs a mark, then
+        `about:blank` at once, then back left the stored file without it.
+        So the three tests (a mark, then leaving at once; the same during a
+        `delayApplied` apply and during a `holdApprovalSearch` search) fail
+        on today's code. The gap is tracked as a bug, and the tests land
+        with its fix.
     *   After the worker stops (`stopWorkerAfter`, triggered by adding a
-        document): a box drawn afterwards is in the stored file.
+        document): a mark removed afterwards is gone from the stored file.
+        No mark can be made once the worker stops (`Workspace.tsx:85`).
     *   Settings order: with `holdWrites(page, "settings.json")`, change the
         box colour twice, then release: `settings.json` holds the second
         colour.
@@ -1562,13 +1577,19 @@ Every test in this step passes on today's code before any code moves.
         `page.evaluate` (as `projects.spec.ts:259-263` does), replaces each
         distinct UUID and ISO date with a numbered placeholder by first
         appearance (so the same id is always the same placeholder), names
-        each `text/<id>.json` and `images/<id>.json` by its id's placeholder,
-        and compares the bytes with `fixtures/golden/expected/`. With `GOLDEN_UPDATE=1` it writes those
-        files instead. They are recorded once, on commit `f64230d` with this
-        step's test code, and the PR names that commit.
-    *   Old projects: `fixtures/golden/project/`, a project folder written by
-        today's build during that recording, is copied into Chrome's storage
-        before the app loads. The test opens it, adds one text mark, and
+        each `text/<id>.json` and `images/<id>.json` by its id's placeholder
+        without the angle brackets (`text/id-2.json`, since some file
+        systems refuse them), and compares the bytes with
+        `fixtures/golden/expected/`. With `GOLDEN_UPDATE=1` it writes those
+        files instead. They were recorded once, on commit `fc0649f`
+        (`f64230d` with the step −1 race fix and this design), with this
+        step's test code; with `app/` and `engine/` from `f64230d` the test
+        passes against the same files.
+    *   Old projects: `fixtures/golden/project/` holds the whole storage
+        today's build left during that recording: the project folder and
+        the root `.redactorator/settings.json`, so all four files exist. The
+        test copies it into Chrome's storage and reloads, so the app reads
+        it as it loads; it opens the project, adds one text mark, and
         compares the four files with `fixtures/golden/expected-old/`,
         recorded the same way.
 
@@ -1577,13 +1598,13 @@ Every test in this step passes on today's code before any code moves.
 *   **Type / Scope**: Playwright test.
 *   **Proposed Changes**: wrap the `WebSocket` and `EventSource`
     constructors on the page (`addInitScript`) and in the worker (a prelude
-    from `fakes.ts`), run the golden session, and assert neither was
+    from `fakes.ts`, `connectionsMade`), run the golden session, and assert neither was
     constructed. Find the PDF worker by its `worker-` URL prefix instead of
     taking the first worker (`network.spec.ts:47`).
 
-**Done when:** every new and rewritten test passes on today's code; each
-timing or ordering test was shown red once with its behaviour removed; the
-ledger lists every rewrite.
+**Done when:** every new and rewritten test passes on today's code (the
+held `pagehide` tests apart); each timing or ordering test was shown red
+once with its behaviour removed; the ledger lists every rewrite.
 
 ### Step 2: moves into `engine/model`, `engine/pdf-protocol` and `engine/core/formats` (decision 27)
 

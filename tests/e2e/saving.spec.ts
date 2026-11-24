@@ -40,7 +40,7 @@ test("after a save fails, the next change saves both", async ({ page }) => {
 });
 
 test("after the PDF engine stops, a mark removed from the open document is still saved", async ({ page }) => {
-  await stopWorkerAfter(page, "inspect");
+  await stopWorkerAfter(page);
   await openOneWord(page);
   await markText(page, 1, janeRoe, "Person");
   await markText(page, 1, dear, "Other");
