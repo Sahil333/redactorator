@@ -84,6 +84,9 @@ function forgetRequests(requested: Set<string>, prefix: string) {
 export function useEngine(): Engine {
   const client = useRef<PdfClient | undefined>(undefined);
   const picked = useRef({ name: "", sha256: "" });
+  // The client acts on the document opened last, so a request from a render made before then
+  // must not reach it: it would ask the new document about the old one's pages or marks.
+  const opened = useRef<OpenDocument | undefined>(undefined);
   const requested = useRef(new Set<string>());
   // The pages drawn at detail 2, oldest first. One can take some 55 MB at a pixel ratio of 2,
   // so only the latest few are kept; an older one is drawn again if it is shown again.
@@ -122,6 +125,7 @@ export function useEngine(): Engine {
   function open({ name, bytes, sha256 }: PdfSource) {
     if (client.current === undefined || state === "stopped") return;
     picked.current = { name, sha256 };
+    opened.current = undefined;
     requested.current = new Set();
     fine.current = [];
     setDocument(undefined);
@@ -131,7 +135,10 @@ export function useEngine(): Engine {
     setError(undefined);
     void client.current.open(bytes).then((model) => {
       if ("code" in model) showFailure(model);
-      else setDocument({ ...picked.current, model });
+      else {
+        opened.current = { ...picked.current, model };
+        setDocument(opened.current);
+      }
     });
   }
 
@@ -162,7 +169,7 @@ export function useEngine(): Engine {
 
   function show(source: Source, page: PageIndex, detail: RenderDetail = 1) {
     const started = client.current;
-    if (started === undefined || document === undefined) return;
+    if (started === undefined || document === undefined || document !== opened.current) return;
     const evicted = detail === 2 && !requested.current.has(renderKey(source, page, 2)) ? makeRoom(fine.current, { source, page }) : undefined;
     if (evicted !== undefined) forget(evicted.source, evicted.page);
     const scale = CSS_PIXELS_PER_POINT * window.devicePixelRatio * detail;
@@ -181,7 +188,7 @@ export function useEngine(): Engine {
   }
 
   function apply(edits: readonly Edit[], appearance: Appearance) {
-    if (client.current === undefined || document === undefined || state !== "ready") return;
+    if (client.current === undefined || document === undefined || document !== opened.current || state !== "ready") return;
     discardOutput();
     setError(undefined);
     outputWanted.current = true;

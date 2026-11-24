@@ -264,6 +264,8 @@ function render(file: FileNumber, source: Source, index: PageIndex, scale: numbe
     const height = pixmap.getHeight();
     const stride = pixmap.getStride();
     const rgb = pixmap.getPixels();
+    // An empty page has no pixels to draw; the reply's parser refuses one, as ImageData did.
+    if (width === 0 || height === 0) throw new RangeError("The page is empty");
     const rgba = new Uint8ClampedArray(width * height * 4);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {

@@ -23,6 +23,15 @@ test("an engine reply the app cannot read stops the engine", async ({ page }) =>
   await expect(page.getByLabel("Choose PDFs")).toBeDisabled();
 });
 
+test("a request the engine could not read is reported with the engine's own sentence, and the engine keeps running", async ({ page }) => {
+  const sentence = "The engine got a message it does not know. Reload the page to try again.";
+  await replyWith(page, { type: "error", error: { code: "bad-message", message: sentence } });
+  await page.goto("/");
+
+  await expect(page.getByRole("alert")).toHaveText(sentence);
+  await expect(page.getByLabel("Choose PDFs")).toBeEnabled();
+});
+
 test("a reply about a document the user has since left is ignored", async ({ page }) => {
   await staleOpenReply(page);
   await openApp(page);
