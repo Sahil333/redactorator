@@ -1,6 +1,7 @@
 // Text selection over the whole document. A position is a caret place between two
 // characters of a page's text, so a selection can start on one page and end on another.
-import { isPageIndex, type Box, type PageIndex, type PageText } from "../engine/contract";
+import type { PageText } from "../engine/model/document";
+import { isPageIndex, type Box, type PageIndex } from "../engine/model/geometry";
 import { bounds, rangeBoxes, rangeText, sharesColumns, wordAt } from "../engine/pageText";
 import type { TextPiece, TextTarget } from "./marks";
 

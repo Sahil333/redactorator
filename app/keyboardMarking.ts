@@ -1,5 +1,6 @@
 // Drawing a box with the keyboard: one starts in view, and the arrow keys move and size it.
-import { pointBox, type Box, type PageModel } from "../engine/contract";
+import type { PageModel } from "../engine/model/document";
+import { pointBox, type Box } from "../engine/model/geometry";
 
 const BOX_STEP = 4;
 const NEW_BOX = { width: 120, height: 40 };

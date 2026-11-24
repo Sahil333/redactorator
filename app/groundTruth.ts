@@ -1,6 +1,6 @@
 // Builds a ground-truth file (dataset/ground-truth.schema.json, version 1) from the marks
 // on one PDF. Labelling mode downloads it; nothing here leaves the browser.
-import type { Box, PageIndex } from "../engine/contract";
+import type { Box, PageIndex } from "../engine/model/geometry";
 import type { Mark } from "./marks";
 import type { MarkType } from "./markTypes";
 import schema from "../dataset/ground-truth.schema.json";

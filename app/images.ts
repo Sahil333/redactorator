@@ -1,6 +1,7 @@
 // Spreading boxes over images: a box that lies mostly on an image is kept in that image's own
 // frame, so it can be laid over every copy of the image, at whatever size and turn it is drawn.
-import { pointBox, type Box, type Matrix, type PageIndex, type PlacedImage } from "../engine/contract";
+import type { PlacedImage } from "../engine/model/document";
+import { pointBox, type Box, type Matrix, type PageIndex } from "../engine/model/geometry";
 
 /** A box's part of the image it lies mostly on. */
 export interface ImageAnchor {

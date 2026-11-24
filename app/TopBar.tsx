@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import type { Appearance } from "../engine/contract";
+import type { Appearance } from "../engine/model/document";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { PickFiles } from "./PickFiles";
 import type { Tool } from "./marks";

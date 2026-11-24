@@ -1,23 +1,10 @@
 // The stored formats: a project's `project.json`, the text of each of its documents, and the
 // app's `settings.json`. All are read from storage the user's browser keeps across app
 // versions, so each carries a version and is checked whole when read.
-import {
-  isFingerprint,
-  isOffset,
-  isPositiveNumber,
-  isPageIndex,
-  isRecord,
-  isText,
-  parseAll,
-  parseAppearance,
-  parseBox,
-  parsePlacedImage,
-  pointBox,
-  type Appearance,
-  type PageChar,
-  type PageText,
-  type PlacedImage,
-} from "../engine/contract";
+import type { Appearance, PageChar, PageText, PlacedImage } from "../engine/model/document";
+import { isPageIndex, parseBox, pointBox } from "../engine/model/geometry";
+import { isOffset, isPositiveNumber, isRecord, isText, parseAll } from "../engine/model/guards";
+import { isFingerprint, parseAppearance, parsePlacedImage } from "../engine/model/parse";
 import type { ImageAnchor } from "./images";
 import type { Mark, MarkTarget, TextPiece } from "./marks";
 import type { MarkType } from "./markTypes";

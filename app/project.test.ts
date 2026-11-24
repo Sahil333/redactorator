@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { isPageIndex, pointBox, type PageText, type PlacedImage } from "../engine/contract";
+import type { PageText, PlacedImage } from "../engine/model/document";
+import { isPageIndex, pointBox } from "../engine/model/geometry";
 import type { ImageAnchor } from "./images";
 import { imagesJson, parseImages, parseProject, parseTexts, projectJson, textsJson, type Project } from "./project";
 

@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes } from "react";
-import type { PageIndex } from "../engine/contract";
+import type { PageIndex } from "../engine/model/geometry";
 import { pageFrameId, showMark } from "./pageGeometry";
 
 type PageLinkProps = {

@@ -1,6 +1,6 @@
 // Projects in a store: each is a folder holding its originals under their own names and its
 // records in a hidden `.redactorator/` folder.
-import type { PageText, PlacedImage, Reading } from "../engine/contract";
+import type { PageText, PlacedImage, Reading } from "../engine/model/document";
 import {
   defaultSettings,
   imagesJson,

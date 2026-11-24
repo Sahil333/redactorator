@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { pointBox, type Box } from "./contract";
+import { pointBox, type Box } from "./model/geometry";
 import { textMoved, type PageGlyph } from "./glyphs";
 
 function box(x0: number, y0: number, x1: number, y1: number): Box {

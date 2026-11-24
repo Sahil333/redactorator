@@ -1,5 +1,5 @@
 import { useId } from "react";
-import type { Appearance } from "../engine/contract";
+import type { Appearance } from "../engine/model/document";
 
 interface AppearanceSettingsProps {
   readonly appearance: Appearance;

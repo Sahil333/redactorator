@@ -1,7 +1,8 @@
 // Spreading: how approving a document hides its values, and parts of its images, in the
 // project's other documents. Pure functions over the project, the documents' stored readings and
 // where the engine found each value in their text; nothing spreads until a document is approved.
-import type { Box, PageIndex, PageText, Reading } from "../engine/contract";
+import type { PageText, Reading } from "../engine/model/document";
+import type { Box, PageIndex } from "../engine/model/geometry";
 import { rangeBoxes, rangeText } from "../engine/pageText";
 import { anchorOf, placesOnCopies } from "./images";
 import { markKey, markName, nextId, type Mark } from "./marks";

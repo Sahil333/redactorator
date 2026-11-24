@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
-import type { PageIndex, PageModel, PlacedImage } from "../engine/contract";
+import type { PageModel, PlacedImage } from "../engine/model/document";
+import type { PageIndex } from "../engine/model/geometry";
 import { CheckedBanner } from "./CheckedBanner";
 import { baseName, savePdf } from "./download";
 import { DropZone } from "./DropZone";

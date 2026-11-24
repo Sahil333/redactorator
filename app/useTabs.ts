@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isRecord } from "../engine/contract";
+import { isRecord } from "../engine/model/guards";
 import type { DocumentId, ProjectDocument } from "./project";
 
 interface OpenTabs {

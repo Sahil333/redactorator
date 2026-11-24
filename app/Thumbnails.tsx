@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import type { PageIndex, PageModel } from "../engine/contract";
+import type { PageModel } from "../engine/model/document";
+import type { PageIndex } from "../engine/model/geometry";
 import { PageLink } from "./PageLink";
 import type { PanelWidth } from "./Splitter";
 import { useWhenVisible } from "./useWhenVisible";

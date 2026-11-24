@@ -1,5 +1,5 @@
 import { useImperativeHandle, useState, type Ref } from "react";
-import type { PageIndex } from "../engine/contract";
+import type { PageIndex } from "../engine/model/geometry";
 import { ApproveDialog } from "./ApproveDialog";
 import { baseName, download } from "./download";
 import { DocumentTabs, DOCUMENT_PANEL_ID, tabId } from "./DocumentTabs";

@@ -1,5 +1,6 @@
 import { use, useEffect, useId, useRef, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
-import type { Box, PageModel } from "../engine/contract";
+import type { PageModel } from "../engine/model/document";
+import type { Box } from "../engine/model/geometry";
 import { boxesOn, type Mark, type MarkTarget, type Pending, type Tool } from "./marks";
 import { markTypeLabel } from "./markTypes";
 import { markElementId, pageFrameId, PageScale } from "./pageGeometry";
