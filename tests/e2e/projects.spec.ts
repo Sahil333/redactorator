@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { failWrites, holdRead, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
+import { failWrites, holdInspection, holdRead, holdReadFromStart, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
 import {
   addDocuments,
   crossPagePdf,
@@ -266,6 +266,45 @@ test("a project open in another tab can't be renamed, duplicated, archived or de
   expect((await storedNames(page)).filter((name) => name !== ".redactorator")).toEqual(["one-word"]);
 });
 
+test("while chosen files are made into a project, no project can be opened and no folder chosen", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await saved(page);
+  await goHome(page);
+  // Held from here on: the next file's inspection, which keeps the new project being made.
+  const release = await holdInspection(page);
+  await page.reload();
+  const chooseFolder = page.getByRole("button", { name: "Choose a folder for projects" });
+  await expect(page.getByLabel("New project")).toBeEnabled();
+  await expect(chooseFolder).toBeEnabled();
+
+  await page.getByLabel("New project").setInputFiles([twoPagePdf]);
+
+  await expect(page.getByRole("button", { name: "one-word", exact: true })).toBeDisabled();
+  await expect(chooseFolder).toBeDisabled();
+  await release();
+  await expect(projectName(page)).toContainText("two-pages");
+});
+
+test("files dropped while the projects are still being read are not made into a project", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await saved(page);
+  await goHome(page);
+  // The project list's first read as the page starts is held, so the projects are still being read.
+  const release = await holdReadFromStart(page, "project.json", 1);
+  await page.reload();
+  await dropFiles(page, page.getByRole("main"), [twoPagePdf]);
+  await release();
+  await expect(page.getByRole("button", { name: "one-word", exact: true })).toBeVisible();
+
+  // Files dropped now make a project, which a project still being made from the first drop would refuse.
+  await dropFiles(page, page.getByRole("main"), [crossPagePdf]);
+
+  await expect(projectName(page)).toContainText("cross-page");
+  expect((await storedNames(page)).filter((name) => name !== ".redactorator").sort()).toEqual(["cross-page", "one-word"]);
+});
+
 test("a change to a project that goes through clears the reason an earlier action failed", async ({ page }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf);
@@ -436,6 +475,9 @@ test("of two lists of the projects read at once, the one started last stays, tho
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await goHome(page);
+  // Listed afresh, so no read of the list made on leaving is still under way when the hold starts counting.
+  await page.reload();
+  await expect(projectRow(page, "one-word")).toBeVisible();
   const rename = async (from: string, to: string) => {
     await rowAction(page, from, "Rename");
     await page.getByRole("textbox", { name: "Project name" }).fill(to);
@@ -445,6 +487,8 @@ test("of two lists of the projects read at once, the one started last stays, tho
   // A rename reads the project again, saves it, then lists the projects: that list's read is held.
   const release = await holdRead(page, "project.json", 2);
   await rename("one-word", "First");
+  // Saved, and so let go, before the second rename asks for the project's lock.
+  await expect.poll(() => storedText(page, "one-word/.redactorator/project.json")).toContain('"name":"First"');
   await rename("one-word", "Second");
   await expect(projectRow(page, "Second")).toBeVisible();
   await release();

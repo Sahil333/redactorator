@@ -13,7 +13,8 @@ export function gate({ library, session }: LibraryView, command: LibraryCommand,
   // A store still loading may yet have projects moved into it, under folder names a new project could take too.
   if (phase === "loading" && (command === "create" || command === "import")) return "busy-moving";
   if (session !== undefined && (command === "open" || command === "create" || command === "switchTo")) return "session-open";
-  if (library.settings.creating && (command === "open" || command === "create")) return "busy-creating";
+  // A project being made is written into the store in use, which a folder chosen now would leave behind.
+  if (library.settings.creating && (command === "open" || command === "create" || command === "switchTo")) return "busy-creating";
   // This engine's own Session holds the lock, which would otherwise read as another tab's.
   if (command === "manage" && session !== undefined && session.project.id === projectId) return "open-here";
   return undefined;
@@ -28,5 +29,12 @@ export function can(view: LibraryView): LibraryState["can"] {
   const listed = view.library.list.projects !== undefined;
   const allows = (command: LibraryCommand) => listed && gate(view, command) === undefined;
   const free = view.worker.status === "ready" && !view.library.settings.creating;
-  return { create: free && allows("create"), open: allows("open"), manage: allows("manage"), import: free && allows("import") };
+  return {
+    create: free && allows("create"),
+    open: allows("open"),
+    manage: allows("manage"),
+    import: free && allows("import"),
+    // A folder can be chosen before any list, as when the remembered one is missing.
+    switchTo: gate(view, "switchTo") === undefined,
+  };
 }

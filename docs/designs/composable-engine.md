@@ -181,6 +181,7 @@ the code, not reproduced.
     | --- | --- | --- |
     | Project rows and their menus on Home are not clickable while projects move into a folder or the remembered folder reopens; opening from the address waits for the move | 31, 43, 51 | Yes |
     | Only the newest project-list refresh lands | 37 | Yes: an older list can no longer replace a newer one |
+    | While chosen files are made into a project, the project rows are not clickable and no projects folder can be chosen (owner, step 5b). Today a row opened then could leave the new project closed, and a folder chosen then left the new project inside Chrome | 37 | Yes: rows and "Choose a folder for projects" are disabled until the new project opens |
     | No store change while a project is open | 37 | No |
     | A Library command on this engine's own open project is refused with its own code | 11 | No (headless callers only) |
     | `marks.add` refuses invalid targets with typed codes | 33 | No |
@@ -563,7 +564,7 @@ interface TextPieceRange { page: PageIndex; start: number; end: number }
 
 interface IncomingFile {                       // the app wraps a browser File; a script wraps a path
   name: string; path: string; type: string;
-  read(): Promise<Uint8Array>;                 // called only for PDFs, one at a time, in order
+  read(): Promise<Uint8Array<ArrayBuffer>>;    // called only for PDFs, one at a time, in order; section 10 says why ArrayBuffer
 }
 
 interface DocumentHandle { readonly document: DocumentId; readonly pages: readonly PageModel[] }
@@ -608,6 +609,9 @@ Passing a function works because the facade is in-process (decision 38).
 `documents.add`, each with its code; a sentence the worker composed (an
 encrypted or unreadable PDF) rides in `error.message`. `projects.create`
 returns no Session when nothing was added, and still returns the refusals.
+It also returns `ok` with no Session and the refusals when the project could
+not be written (raising `change-failed`) or opened (raising that open's
+problem), so the app still lists the files that were not added, as today.
 The "files not added" notice, its dismissal, and carrying it from Home into
 the new project are the app's state (`NotAdded.tsx`, `App.tsx:72, 133, 151`).
 When the gate refuses a whole `documents.add` (for example
@@ -759,7 +763,7 @@ interface LibraryState {
   projects?: readonly ProjectSummary[];  // undefined until the first list lands
   settings: Settings;
   creating: boolean;
-  can: { create: boolean; open: boolean; manage: boolean; import: boolean };  // from the Library gate
+  can: { create: boolean; open: boolean; manage: boolean; import: boolean; switchTo: boolean };  // from the Library gate
 }
 
 type ProjectSummary =
@@ -786,8 +790,8 @@ interface SessionState {
 
 | Problems | Raised by | Cleared by |
 | --- | --- | --- |
-| Store problems: `projects-read-failed`, `settings-damaged`, `settings-newer`, `left-behind`, `not-moved` | a store load or refresh | the next store load (which replaces them), a successful open, a successful import |
-| `change-failed`, `open-elsewhere`, `project-gone`, `settings-save-failed` | the command | a successful open, the next store load |
+| Store problems: `projects-read-failed`, `settings-damaged`, `settings-newer`, `left-behind`, `not-moved` | a store load or refresh | the next store load (which replaces them), a successful open, a successful import, a change whose project is locked and read again |
+| `change-failed`, `open-elsewhere`, `project-gone`, `settings-save-failed` | the command | a successful open, the next store load, a successful import, a change whose project is locked and read again |
 | `approval-failed` | approval | the next `approval.plan` |
 | `save-failed` | not in the list | shown while `session.save` is `failed` |
 | Worker errors | not in the list | `worker.error`, shown before any problem |
@@ -796,7 +800,9 @@ The app shows one slot, as today: the worker's error if any; otherwise the
 newer of its own problem (from picking a folder or asking permission,
 `one-project`, `import-*`, stamped with the revision when set) and the newest
 engine problems. Store problems raised together are joined with a space, as
-today.
+today. A rename, duplicate, archive or delete that settles drops the app's own
+problem too, as today's single slot cleared; one that failed has raised a
+newer engine problem, which shows.
 
 The app keeps what is not the engine's: whether the remembered folder waits
 for permission or is missing (`reopen`, `missing`), the pending mark, the
@@ -957,16 +963,23 @@ store's settings until its own are read: they may be a newer version's.
 Gates (decisions 31, 37, 43, 51), in `engine/core/library/gate.ts`:
 *   `projects.refresh` is always allowed and does not ask the gate.
 *   While the phase is `moving` or `opening`, every other Library command is
-    refused with `busy-moving`.
-*   `projects.create` and `projects.open` are refused with `busy-creating`
-    while `creating`, and with `session-open` while a Session is open;
-    `folders.switchTo` is refused with `session-open` while a Session is open.
+    refused with `busy-moving`. While it is `loading`, `projects.create` and
+    `folders.importFrom` are too: a move into the store may still be
+    starting, and a new project could take the folder name of one moving in
+    (as step 5a refused, and as before a store existed today).
+*   `projects.create`, `projects.open` and `folders.switchTo` are refused
+    with `busy-creating` while `creating` (a folder chosen then would leave
+    the new project behind in the store in use), and with `session-open`
+    while a Session is open.
+*   `projects.create` and `folders.importFrom` with no store (`place:
+    none`) are refused with `no-store`.
 *   `projects.create` and `folders.importFrom` are not refused while the
     worker starts: files chosen then wait for it, since the client queues
     requests until `ready`, as today.
 *   `rename`, `duplicate`, `archive` and `remove` each take the lock and read
     the project again, and are refused with `open-elsewhere` when another tab
-    holds it or `open-here` when this engine's Session does.
+    holds it or `open-here` when this engine's Session does. A change whose
+    project is locked and read again clears the problems, as today.
 *   Each list refresh carries a sequence number; a result older than the
     newest started refresh is dropped.
 *   `projects.open` checks again once it has read the project: if a
@@ -977,9 +990,11 @@ Gates (decisions 31, 37, 43, 51), in `engine/core/library/gate.ts`:
     `unknown-project`.
 
 The same gate fills `LibraryState.can`, which Home reads for its rows,
-menus, Add and Import. Each flag is also false until the first list lands,
-and `can.create` and `can.import` until the worker is ready and not
-applying, as Home's add controls are today (`App.tsx:147`).
+menus, Add, Import and the folder card's button (`switchTo`). Each flag but
+`switchTo` is also false until the first list lands (a folder can be chosen
+when the remembered one is missing), and `can.create` and `can.import` until
+the worker is ready and not applying and while `creating`, as Home's add
+controls are today (`App.tsx:147`).
 
 **Starting in the browser.** The app decides the first store, as today
 (`useProjectStore.ts:81-99`): a remembered folder with permission gives
@@ -1446,11 +1461,11 @@ command's error.
 | `folder-not-allowed` | `name` (folder) | `app/useProjectStore.ts:58` | app problem (permission stays in the app) | 5a |
 | `import-projects`, `import-missing`, `import-damaged`, `import-newer`, `import-failed` | none | `app/useProjectStore.ts:64-68` | result, shown as an app problem | 5b |
 | `settings-save-failed` | none | `app/useProjectStore.ts:229` | problem | 5a |
-| `add-while-approving` | none | `app/ProjectView.tsx:95` | `documents.add` result; the app adds one notice entry per file | 6d |
+| `add-while-approving` | none | `app/ProjectView.tsx:95` | `documents.add` result; the app adds one notice entry per file | 5b (as a refusal the app makes until 6d) |
 | `save-failed` | none | `app/ProjectView.tsx:97` | problem, and `close`'s result | 6a |
 | `approval-failed` | none | `app/useApproval.ts:9` | problem | 6c |
-| `add-save-failed` | none | `app/useAddDocuments.ts:10` | refusal, for every file | 6d |
-| `add-search-failed` | none | `app/useAddDocuments.ts:11` | refusal, for every file | 6d |
+| `add-save-failed` | none | `app/useAddDocuments.ts:10` | refusal, for every file | 5b (made by the app until 6d) |
+| `add-search-failed` | none | `app/useAddDocuments.ts:11` | refusal, for every file | 5b (made by the app until 6d) |
 | `original-missing` | `file` | `app/useDocumentInEngine.ts:28` | `viewer.open` result | 6b |
 | `not-pdf` | none | `app/importFiles.ts:33` | refusal | 5b |
 | `unreadable-file` | none | `app/importFiles.ts:40` | refusal | 5b |
@@ -1485,7 +1500,7 @@ disables the control from the state's `can` flags or never sends the
 command, so `app/errors.ts` maps them to no sentence. They reach headless
 callers: `busy-adding`, `busy-approving`, `busy-applying`,
 `busy-moving`, `busy-creating`, `worker-not-ready`, `no-plan`,
-`session-open`, `session-closed`, `open-here`, `unknown-project`, `stale-handle`,
+`session-open`, `session-closed`, `open-here`, `unknown-project`, `no-store`, `stale-handle`,
 `page-text-missing`, `empty-target`, `empty-box`, `unknown-document`,
 `unknown-mark`.
 
@@ -2248,6 +2263,22 @@ and worker status from the state.
     `rename`, `duplicate`, `archive`, `remove` (each locks and reads again,
     `useProjectStore.ts:209-221`); `folders.importFrom`
     (`projects.ts:292-303`).
+*   **As built**: refusals carry codes (`not-pdf`, `unreadable-file`, or
+    the client's error with the worker's sentence). `projects.create`
+    dispatches `createStarted`, runs intake (waiting for a starting worker),
+    creates, refreshes, opens through the open effect (not the gated
+    command) and dispatches `createEnded`; a project that could not be
+    written or opened gives no Session but still the refusals (section 4).
+    The changes share `effects/manage.ts`, which dispatches `changeStarted`
+    once the project is locked and read again (clearing the problems, as
+    today). A successful import dispatches `imported`; its `import-*` codes
+    are the result, which the app shows as its own problem. `creating` is in
+    the settings slice, as section 5's table says. The gate adds
+    `busy-creating` (create, open, `switchTo`), `open-here`, and refuses
+    create and import while `loading`; `no-store` when there is no store;
+    `can.switchTo` for the folder card's button (section 8). Owner decision
+    in 5b: rows and the folder button are disabled while a project is made
+    (Non-Goals).
 
 #### 38. App side (Create, Modify, Delete)
 
@@ -2258,6 +2289,18 @@ and worker status from the state.
     call `library.projects.*`; `app/useAddDocuments.ts` (Modify) takes
     `intake` from `interim`; `app/NotAdded.tsx` (Modify) shows refusals
     through `app/errors.ts`, which gains the step 5b codes.
+*   **As built**: `app/useHomeChanges.ts` (5a) is deleted; `interim.store()`
+    goes and `interim.intake` comes, and `interim.stored` loses the
+    functions only the Library calls now. The app holds the open Session
+    together with the refusals carried into it, set at once, so a new
+    project never starts without them. `add-save-failed`,
+    `add-search-failed` and `add-while-approving` come in this step, so
+    every refusal `NotAdded` shows has a code. New browser tests
+    (`projects.spec.ts`): a project that cannot be written still lists the
+    files not added; a change that goes through clears an earlier problem;
+    while a project is made, rows and the folder button are disabled
+    (`holdInspection`); files dropped while the projects are still read are
+    not made into a project (new fake `holdReadFromStart`).
 
 **Done when:** the project, folder, import and add tests and the golden test
 are green.
