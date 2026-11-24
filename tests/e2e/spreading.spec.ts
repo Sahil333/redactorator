@@ -517,7 +517,7 @@ test("a file dropped while an approval is worked out isn't added, and says why",
   await expect(inExplorer(page, "letter-b.pdf")).toHaveCount(0);
 });
 
-test("a document can't be approved while files are being added, and can once they're in", async ({ page }) => {
+test("a document can't be approved or switched while files are being added, and can once they're in", async ({ page }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
@@ -529,6 +529,8 @@ test("a document can't be approved while files are being added, and can once the
 
   await addDocuments(page, letterB);
   await expect(approveButton(page)).toBeDisabled();
+  // No other document opens while the add runs either.
+  await expect(inExplorer(page, "one-word.pdf")).toBeDisabled();
   await release();
   await expect(inExplorer(page, "letter-b.pdf")).toBeVisible();
   await show(page, "one-word.pdf");

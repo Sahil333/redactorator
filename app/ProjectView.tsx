@@ -225,7 +225,6 @@ function DocumentPanel({ active, shown, missing, pageInView, onPageInView, ...wo
 /**
  * Adds chosen files to the project, and keeps the "files not added" notice: an add replaces it
  * with its own refusals, and one refused as a whole lists each file under the notice already shown.
- * `onAdded` gets the documents that joined.
  */
 function useAddFiles(session: Session, initialRefused: readonly Refusal[], onAdded: (added: readonly DocumentId[]) => void) {
   const [refused, setRefused] = useState(initialRefused);
