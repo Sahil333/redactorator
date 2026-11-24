@@ -4,9 +4,7 @@ import type { FileNumber } from "../pdf-protocol/messages";
 import { fail, post } from "./messages";
 import { documentModel } from "./read";
 import { current } from "./state";
-import { check } from "./write/check";
-import { CheckFailed, openPdf } from "./write/common";
-import { redact, redactionsByPage } from "./write/redact";
+import { CheckFailed, writeAndCheck } from "./write";
 
 export function apply(file: FileNumber, edits: readonly Edit[], appearance: Appearance): void {
   const document = current(file);
@@ -18,10 +16,9 @@ export function apply(file: FileNumber, edits: readonly Edit[], appearance: Appe
   document.output = undefined;
   let output: mupdf.PDFDocument | undefined;
   try {
-    const byPage = redactionsByPage(document.original, edits);
-    const bytes = redact(document.bytes, byPage, appearance);
-    output = openPdf(bytes);
-    check(document.original, output, byPage, appearance);
+    const written = writeAndCheck(document.original, document.bytes, edits, appearance);
+    const bytes = written.bytes;
+    output = written.output;
     const model = documentModel(output);
     if (model === undefined) throw new CheckFailed("The cleaned file has no pages.");
     document.output = output;
