@@ -96,7 +96,7 @@ describe("approval", () => {
   function waitingForHeadsUp() {
     const { project, document } = projectWith([jane]);
     const opened = sessionOver(project);
-    const approved = { ...project, documents: [{ ...document, review: "approved" as const }] };
+    const approved: Project = { ...project, documents: [{ ...document, review: "approved" }] };
     const plan = { planId: 1, document: document.id, changes: [], here: { ...none(document.id), hidden: 1 } };
     opened.land({ type: "planned", plan, from: project, project: approved });
     return { ...opened, document, approved };
