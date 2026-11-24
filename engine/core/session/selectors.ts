@@ -24,15 +24,24 @@ export function validOutput({ worker, settings, parts }: SessionView): OutputPar
   return valid ? output : undefined;
 }
 
-/** What the gate allows now, for the open document. */
+/** The documents undo, or redo, can act on now: the gate allows it and there is a snapshot to go back to. */
+function steppable(view: SessionView, direction: "undo" | "redo"): ReadonlySet<DocumentId> {
+  const documents = new Set<DocumentId>();
+  for (const document of view.parts.record.steps.keys()) {
+    if (gate(view, "history", document) === undefined && canStep(view, document, direction)) documents.add(document);
+  }
+  return documents;
+}
+
+/** What the gate allows now: for the open document, and for undo and redo per document, since they need none open. */
 function can(view: SessionView): SessionState["can"] {
   const document = view.parts.viewer.handle?.document;
   const allows = (command: Parameters<typeof gate>[1]) => gate(view, command, document) === undefined;
   const opened = document !== undefined;
   return {
     mark: opened && allows("add"),
-    undo: opened && allows("history") && canStep(view, document, "undo"),
-    redo: opened && allows("history") && canStep(view, document, "redo"),
+    undo: steppable(view, "undo"),
+    redo: steppable(view, "redo"),
     apply: allows("apply"),
     approve: opened && allows("approve"),
     add: allows("addDocuments"),

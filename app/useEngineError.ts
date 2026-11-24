@@ -3,15 +3,15 @@ import type { EngineError } from "../engine/api/errors";
 import type { EngineState } from "../engine/api/state";
 
 /**
- * What went wrong with the open document: the PDF worker's latest error, or a request's that the
- * worker explained. Opening a document or applying clears it.
+ * What went wrong with the PDF worker: its latest error, or a request's that the worker explained.
+ * Opening a document or applying clears it, on Home too. `worker` is undefined until the engine starts.
  */
-export function useEngineError(worker: EngineState["worker"]) {
-  const [error, setError] = useState(worker.error);
-  const [seen, setSeen] = useState(worker.error);
-  if (worker.error !== seen) {
-    setSeen(worker.error);
-    if (worker.error !== undefined) setError(worker.error);
+export function useEngineError(worker: EngineState["worker"] | undefined) {
+  const [error, setError] = useState(worker?.error);
+  const [seen, setSeen] = useState(worker?.error);
+  if (worker?.error !== seen) {
+    setSeen(worker?.error);
+    if (worker?.error !== undefined) setError(worker.error);
   }
   return {
     error,
@@ -22,7 +22,7 @@ export function useEngineError(worker: EngineState["worker"]) {
     },
     clear: () => {
       // Once the worker stops, that is all there is to say.
-      if (worker.status !== "stopped") setError(undefined);
+      if (worker?.status !== "stopped") setError(undefined);
     },
   };
 }

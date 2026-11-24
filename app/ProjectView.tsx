@@ -21,7 +21,7 @@ import { engineStatus } from "./engineStatus";
 import { useAddDocuments } from "./useAddDocuments";
 import { useApproval } from "./useApproval";
 import { useDocumentInEngine } from "./useDocumentInEngine";
-import { useEngineError } from "./useEngineError";
+import type { useEngineError } from "./useEngineError";
 import { useHandOffFocus } from "./useHandOffFocus";
 import { useImages } from "./useImages";
 import { useMarks } from "./useMarks";
@@ -48,6 +48,8 @@ interface ProjectViewProps {
   /** Files that could not be added when the project was made, still to be shown. */
   readonly initialRefused: readonly Refusal[];
   readonly worker: EngineState["worker"];
+  /** What went wrong with the PDF worker, which opening a document or applying clears. */
+  readonly failure: ReturnType<typeof useEngineError>;
   readonly settings: Settings;
   readonly onAppearance: (appearance: Appearance) => void;
   readonly labelling: boolean;
@@ -130,6 +132,14 @@ function reviewOf(session: Session, { project, reach, newFrom }: SessionState, d
 
 const documentOf = (project: Project, id: DocumentId | undefined) => project.documents.find((document) => document.id === id);
 
+/** Undo and redo on the tab's record, which need no document open. `waiting`: the app has something under way. */
+const historyOf = (session: Session, can: SessionState["can"], active: DocumentId, waiting: boolean): History => ({
+  canUndo: !waiting && can.undo.has(active),
+  canRedo: !waiting && can.redo.has(active),
+  onUndo: () => session.history.undo(active),
+  onRedo: () => session.history.redo(active),
+});
+
 /** Marking the open document: its marks, undo and redo, approving, and the controls the top bar shows. */
 function useEditing(
   { session, interim, store, opened: { can, output }, onAppearance }: Pick<ProjectViewProps, "session" | "interim" | "store" | "opened" | "onAppearance">,
@@ -147,14 +157,9 @@ function useEditing(
   const images = useImages(session, active);
   const marking = useMarks(session, shown, activeDocument?.marks ?? [], settings.customTypes);
   // Adding and approving each change the whole project, so Approve waits for an add.
-  const busy = marking.pending !== undefined || !can.apply || approval.working || approval.asking !== undefined || adding;
-  const history: History | undefined = active && {
-    // The state's flags are for the open document, which is the tab's once it is shown.
-    canUndo: !busy && shown !== undefined && can.undo,
-    canRedo: !busy && shown !== undefined && can.redo,
-    onUndo: () => session.history.undo(active),
-    onRedo: () => session.history.redo(active),
-  };
+  const waiting = marking.pending !== undefined || approval.working || approval.asking !== undefined || adding;
+  const busy = waiting || !can.apply;
+  const history = active && historyOf(session, can, active, waiting);
   useUndoKeys(history);
 
   const editing: Editing = {
@@ -263,11 +268,10 @@ function useFlushOnLeave(session: Session) {
 
 /** An open project: its documents in the explorer and tabs, the open document's pages and marks. */
 export function ProjectView(props: ProjectViewProps) {
-  const { session, interim, store, worker, settings, labelling, onClose } = props;
+  const { session, interim, store, worker, failure, settings, labelling, onClose } = props;
   const { output, save } = props.opened;
   const opened = useProject(props.facade, session, props.opened, interim);
   useFlushOnLeave(session);
-  const failure = useEngineError(worker);
   const { project } = opened;
   const tabs = useTabs(project.id, project.documents);
   const { active } = tabs;

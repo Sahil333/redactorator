@@ -23,7 +23,7 @@ import {
   storedJson,
   twoPagePdf,
 } from "./app";
-import { delayApplied, holdApprovalSearch, holdInspection } from "./fakes";
+import { delayApplied, holdApprovalSearch, holdInspection, holdRead } from "./fakes";
 
 const undoButton = (page: Page) => page.getByRole("button", { name: "Undo" });
 const redoButton = (page: Page) => page.getByRole("button", { name: "Redo" });
@@ -104,6 +104,23 @@ test("approval ends undo only in the documents it changed", async ({ page }) => 
   await expect(undoButton(page)).toBeDisabled();
   await show(page, "two-pages.pdf");
   await expect(undoButton(page)).toBeEnabled();
+});
+
+test("undo works on a document's marks before its pages have opened", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, letterA, letterB);
+  await markText(page, 1, aJaneRoe, "Person");
+  await show(page, "letter-b.pdf");
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  const release = await holdRead(page, "letter-a.pdf", 1);
+
+  await show(page, "letter-a.pdf");
+  await expect(undoButton(page)).toBeEnabled();
+  await undoButton(page).click();
+  await release();
+
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  await expect(marks(page)).toHaveCount(0);
 });
 
 test("undo waits while an apply runs", async ({ page }) => {

@@ -244,23 +244,37 @@ export async function failRenderUntilApply(page: Page, pageIndex: number, messag
  * Once a document opens, and after its first pages have had time to be drawn, the PDF worker sends
  * an error about it that answers no request.
  */
-export async function errorAfterOpen(page: Page, message: string): Promise<void> {
+export const errorAfterOpen = (page: Page, message: string) => errorAfter(page, "errorAfterOpen", { after: "opened", message });
+
+/** Once the PDF worker is ready, it reports a request it could not read, which names no document. */
+export const errorAfterReady = (page: Page, message: string) => errorAfter(page, "errorAfterReady", { after: "ready", message });
+
+/**
+ * The real PDF worker, which after each `after` reply sends an error with `message`: about the
+ * document that reply names, a second later, or, after `ready`, about no document at once.
+ */
+async function errorAfter(page: Page, key: string, options: { readonly after: "ready" | "opened"; readonly message: string }): Promise<void> {
   const prelude = sourceOf(
-    (scope: WorkerScope, acted, message: string) => {
+    (scope: WorkerScope, acted, key: string, { after, message }: typeof options) => {
       const send = scope.postMessage.bind(scope);
       scope.postMessage = (reply, transfer) => {
         send(reply, transfer);
-        if (reply.type !== "opened") return;
+        if (reply.type === "ready" && after === "ready") {
+          acted(key);
+          send({ type: "error", file: undefined, error: { code: "bad-message", message } });
+        }
+        if (reply.type !== "opened" || after !== "opened") return;
         const { file } = reply;
         setTimeout(() => {
-          acted("errorAfterOpen");
+          acted(key);
           send({ type: "error", file, error: { code: "render-failed", message } });
         }, 1000);
       };
     },
-    message,
+    key,
+    options,
   );
-  await workerFake(page, "errorAfterOpen", { prelude });
+  await workerFake(page, key, { prelude });
 }
 
 /** Holds the PDF worker's replies of `type` from its next start until the returned function releases them. */

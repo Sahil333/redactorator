@@ -1,11 +1,11 @@
 import type { Result } from "../../api/errors";
 import type { Session, TargetInput } from "../../api/facade";
-import type { EngineState } from "../../api/state";
+import type { DocumentHandle, EngineState } from "../../api/state";
 import { groundTruth } from "../../model/groundTruth";
 import { markKey, nextId, type Mark, type MarkTarget } from "../../model/marks";
 import { customTypeName, type MarkType } from "../../model/markTypes";
 import type { DocumentId, Project, Settings } from "../../model/project";
-import { textTarget, type Texts } from "../../model/selection";
+import { textTarget, type TextPieceRange, type Texts } from "../../model/selection";
 import type { Store } from "../../storage/store";
 import type { PdfClient } from "../pdf-client/client";
 import type { LockHold } from "../ports";
@@ -44,11 +44,18 @@ const closed: Result<never> = { ok: false, error: { code: "session-closed" } };
 
 const documentIn = (project: Project, id: DocumentId) => project.documents.find((document) => document.id === id);
 
-/** A new mark's target: the text of the pieces, worked out from the page texts the Session holds, or a box. */
-function targetOf(texts: Texts, input: TargetInput): MarkTarget | "page-text-missing" | "empty-target" | "empty-box" {
-  if (input.kind === "text") return textTarget(texts, input.pieces);
+/** Whether a piece's offsets lie within its page's text; a page with no text yet is `textTarget`'s to refuse. */
+function fits(texts: Texts, { page, start, end }: TextPieceRange): boolean {
+  const text = texts.get(page);
+  return text === undefined || (Number.isInteger(start) && Number.isInteger(end) && start >= 0 && start <= end && end <= text.chars.length);
+}
+
+/** A new mark's target on the open document: the text of the pieces, worked out from the page texts the Session holds, or a box. */
+function targetOf(texts: Texts, handle: DocumentHandle, input: TargetInput): MarkTarget | "page-text-missing" | "empty-target" | "empty-box" {
+  if (input.kind === "text") return input.pieces.every((piece) => fits(texts, piece)) ? textTarget(texts, input.pieces) : "empty-target";
   const { page, box } = input;
-  return box.x1 > box.x0 && box.y1 > box.y0 ? { kind: "box", page, box } : "empty-box";
+  const onPage = handle.pages.some(({ index }) => index === page);
+  return onPage && box.x1 > box.x0 && box.y1 > box.y0 ? { kind: "box", page, box } : "empty-box";
 }
 
 /**
@@ -105,7 +112,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
         if (!at.ok) return at;
         const { viewer, record } = at.value.parts;
         if (viewer.handle !== handle) return staleHandle;
-        const built = targetOf(viewer.texts, target);
+        const built = targetOf(viewer.texts, handle, target);
         if (typeof built === "string") return { ok: false, error: { code: built } };
         const marks = documentIn(record.present.project, handle.document)?.marks ?? [];
         const mark: Mark = { id: nextId(marks), type, linkId: "", target: built, isNew: false };

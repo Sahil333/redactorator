@@ -61,11 +61,11 @@ export interface SessionState {
   readonly open?: DocumentHandle;
   /** The open document's cleaned file, only while it still matches its marks and the appearance; its bytes stay inside. */
   readonly output?: DocumentHandle;
-  /** What the Session's gate allows now, for the open document. */
+  /** What the Session's gate allows now: for the open document, and for undo and redo, the documents each can act on. */
   readonly can: {
     readonly mark: boolean;
-    readonly undo: boolean;
-    readonly redo: boolean;
+    readonly undo: ReadonlySet<DocumentId>;
+    readonly redo: ReadonlySet<DocumentId>;
     readonly apply: boolean;
     readonly approve: boolean;
     readonly add: boolean;
