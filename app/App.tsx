@@ -102,9 +102,9 @@ function useOpenProject(facade: Engine | undefined, state: EngineState | undefin
 
   const leaving = useRef<Promise<boolean>>(undefined);
 
-  async function close(open: Session, how: Navigation): Promise<boolean> {
+  async function close(opened: Session, how: Navigation): Promise<boolean> {
     await projectRef.current?.settled();
-    if (!(await open.close()).ok) return false;
+    if (!(await opened.close()).ok) return false;
     navigate(how, homeAddress());
     return true;
   }
