@@ -1,5 +1,5 @@
 import { firstPage, type MarkTarget } from "../engine/model/marks";
-import type { Selection } from "./selection";
+import type { Selection } from "../engine/model/selection";
 
 export type Tool = "text" | "box";
 

@@ -1,134 +1,20 @@
-// Text selection over the whole document. A position is a caret place between two
-// characters of a page's text, so a selection can start on one page and end on another.
 import type { PageText } from "../engine/model/document";
 import { isPageIndex, type Box, type PageIndex } from "../engine/model/geometry";
-import { bounds, rangeBoxes, rangeText, sharesColumns, wordAt } from "../engine/model/pageText";
 import type { TextPiece, TextTarget } from "../engine/model/marks";
+import { rangeBoxes, rangeText, sharesColumns, wordAt } from "../engine/model/pageText";
+import {
+  lines,
+  pageText,
+  pieceRange,
+  shown,
+  sorted,
+  type Position,
+  type Run,
+  type Selection,
+  type Texts,
+} from "../engine/model/selection";
 
-/** Before character `offset` of a page's text; from 0 to the text's length. */
-export interface Position {
-  readonly page: PageIndex;
-  readonly offset: number;
-}
-
-export interface Selection {
-  readonly anchor: Position;
-  readonly focus: Position;
-}
-
-/** The text of each page that has arrived from the engine. */
-export type Texts = ReadonlyMap<PageIndex, PageText>;
-
-const compare = (a: Position, b: Position) => a.page - b.page || a.offset - b.offset;
-
-export const sorted = ({ anchor, focus }: Selection): readonly [Position, Position] =>
-  compare(anchor, focus) <= 0 ? [anchor, focus] : [focus, anchor];
-
-function pageText(texts: Texts, page: number): readonly [PageIndex, PageText] | undefined {
-  const text = isPageIndex(page) ? texts.get(page) : undefined;
-  return isPageIndex(page) && text !== undefined ? [page, text] : undefined;
-}
-
-const shown = (text: PageText, offset: number) => text.chars[offset]?.box !== undefined;
 const onWord = (text: PageText, offset: number) => wordAt(text, offset) !== undefined;
-
-interface Run {
-  readonly start: number;
-  readonly end: number;
-  readonly box: Box;
-}
-
-/** A page's lines: each from its first character up to its line end. */
-function lines(text: PageText): Run[] {
-  const found: Run[] = [];
-  let start = 0;
-  text.chars.forEach((char, offset) => {
-    if (char.box !== undefined) return;
-    const [first, ...rest] = text.chars.slice(start, offset).flatMap((each) => (each.box ? [each.box] : []));
-    if (first) found.push({ start, end: offset, box: bounds([first, ...rest]) });
-    start = offset + 1;
-  });
-  return found;
-}
-
-/** A page's blocks, each with its line and block ends. A block end follows a line end. */
-function blocks(text: PageText): Run[] {
-  const found: Run[] = [];
-  let open: Run | undefined;
-  for (const line of lines(text)) {
-    open = open === undefined ? line : { start: open.start, end: line.end, box: bounds([open.box, line.box]) };
-    if (text.chars[line.end + 1]?.box === undefined && line.end + 1 < text.chars.length) {
-      found.push({ ...open, end: line.end + 2 });
-      open = undefined;
-    }
-  }
-  return found;
-}
-
-// Running text, such as a header or a page number, is at the same place on the next page
-// and reads the same there but for its numbers.
-const RUNNING_PLACE = 3;
-const runningKey = (text: PageText, block: Run) => rangeText(text, block.start, block.end).replace(/\d+/g, "#");
-
-/** The starts of the page's blocks (`own`) that repeat on a neighbouring page. */
-function runningBlocks(texts: Texts, page: PageIndex, text: PageText, own: readonly Run[]): Set<number> {
-  const theirs = [page - 1, page + 1].flatMap((neighbour) => {
-    const found = pageText(texts, neighbour);
-    return found ? blocks(found[1]).map((block) => ({ box: block.box, key: runningKey(found[1], block) })) : [];
-  });
-  const repeats = (block: Run) => {
-    const key = runningKey(text, block);
-    return theirs.some(
-      (other) =>
-        other.key === key &&
-        Math.abs(other.box.x0 - block.box.x0) < RUNNING_PLACE &&
-        Math.abs(other.box.y0 - block.box.y0) < RUNNING_PLACE,
-    );
-  };
-  return new Set(own.filter(repeats).map((block) => block.start));
-}
-
-/**
- * The selected range of one page. Where the selection runs over a page edge it leaves out
- * the page's running headers and footers, unless one of its ends is inside one.
- */
-function pieceRange(texts: Texts, page: PageIndex, text: PageText, first: Position, last: Position): [number, number] {
-  const start = page === first.page ? first.offset : 0;
-  const end = page === last.page ? last.offset : text.chars.length;
-  if (first.page === last.page) return [start, end];
-  const all = blocks(text);
-  const running = runningBlocks(texts, page, text, all);
-  const top =
-    page === first.page
-      ? start
-      : pastRunning(all, running, (block) => [block.start, block.end], (block) => page === last.page && end < block.end);
-  const foot =
-    page === last.page
-      ? end
-      : pastRunning(all.toReversed(), running, (block) => [block.end, block.start], (block) => page === first.page && start >= block.start);
-  return [top, foot];
-}
-
-/**
- * From one edge of the page past the running blocks in a row there, taking `order` from that
- * edge inwards. `across` gives a block's near and far edge. A block `kept` (one an end of the
- * selection is inside) stops it.
- */
-function pastRunning(
-  order: readonly Run[],
-  running: ReadonlySet<number>,
-  across: (block: Run) => readonly [near: number, far: number],
-  kept: (block: Run) => boolean,
-): number {
-  const [first] = order;
-  let at = first === undefined ? 0 : across(first)[0];
-  for (const block of order) {
-    const [near, far] = across(block);
-    if (near !== at || !running.has(block.start) || kept(block)) break;
-    at = far;
-  }
-  return at;
-}
 
 /** The pages a selection spans whose text has not arrived yet. */
 export function missingPages(selection: Selection, texts: Texts): PageIndex[] {

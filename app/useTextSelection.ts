@@ -4,19 +4,8 @@ import type { Box, PageIndex } from "../engine/model/geometry";
 import { charAt } from "../engine/model/pageText";
 import { boxesOn } from "../engine/model/marks";
 import type { Pending, Tool } from "./marks";
-import {
-  extend,
-  firstWordIn,
-  missingPages,
-  nextWord,
-  selectionTarget,
-  sorted,
-  wordAround,
-  wordOnNextLine,
-  type Position,
-  type Selection,
-  type Texts,
-} from "./selection";
+import { sorted, type Position, type Selection, type Texts } from "../engine/model/selection";
+import { extend, firstWordIn, missingPages, nextWord, selectionTarget, wordAround, wordOnNextLine } from "./selection";
 import { pageFrameId, pointOnPage } from "./pageGeometry";
 
 const frameOf = (page: PageIndex) => document.getElementById(pageFrameId(page));
