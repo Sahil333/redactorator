@@ -2,19 +2,20 @@ import { useRef, useState } from "react";
 import { findPlaces } from "./documentReadings";
 import { prepareFiles, type Refusal } from "./importFiles";
 import type { ProjectDocument } from "../engine/model/project";
-import { writeOriginals, type StoredProject } from "./projects";
 import { hiddenTextKeys, spreadToAdded } from "../engine/model/spread";
+import type { StoredFiles, StoredProject } from "../engine/host-browser/interim";
 import type { Store } from "../engine/storage/store";
-import type { Engine } from "./useEngine";
+import type { PdfEngine } from "./useEngine";
 
 const NOT_SAVED = "This file could not be saved in the project. Check that the disk has space, then add it again.";
 const NOT_SEARCHED = "This file could not be searched for the project's hidden values, so it wasn't added. Reload the page, then add it again.";
 
 /** Adds chosen files to the open project, and keeps the list of those that could not be added. */
 export function useAddDocuments(
+  storedFiles: StoredFiles,
   store: Store,
   project: StoredProject,
-  engine: Engine,
+  engine: PdfEngine,
   initialRefused: readonly Refusal[],
   onAdded: (documents: readonly ProjectDocument[]) => void,
 ) {
@@ -35,7 +36,7 @@ export function useAddDocuments(
       return;
     }
     try {
-      const documents = await writeOriginals(store, project, prepared.added);
+      const documents = await storedFiles.writeOriginals(store, project, prepared.added);
       const readings = new Map(prepared.added.map((each) => [each.id, each.reading]));
       onAdded(spreadToAdded(project.project, documents, readings, places));
     } catch {

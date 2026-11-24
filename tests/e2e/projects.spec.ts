@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { failWrites, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
+import { failWrites, holdRead, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
 import {
   addDocuments,
   crossPagePdf,
@@ -400,6 +400,28 @@ const filesInFolder = (page: Page, folder: string) =>
     }
     return names.sort();
   }, folder);
+
+test("of two lists of the projects read at once, the one started last stays, though the other finishes after it", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await goHome(page);
+  const rename = async (from: string, to: string) => {
+    await rowAction(page, from, "Rename");
+    await page.getByRole("textbox", { name: "Project name" }).fill(to);
+    await page.getByRole("textbox", { name: "Project name" }).press("Enter");
+  };
+
+  // A rename reads the project again, saves it, then lists the projects: that list's read is held.
+  const release = await holdRead(page, "project.json", 2);
+  await rename("one-word", "First");
+  await rename("one-word", "Second");
+  await expect(projectRow(page, "Second")).toBeVisible();
+  await release();
+  // The held list, read while the project was called "First", lands within a few ticks.
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 500)));
+  await expect(projectRow(page, "Second")).toBeVisible();
+  await expect(page.getByRole("button", { name: "First", exact: true })).toHaveCount(0);
+});
 
 test("a project changed in another tab since the list was shown is opened and changed as it is now", async ({ page, context }) => {
   await openApp(page);

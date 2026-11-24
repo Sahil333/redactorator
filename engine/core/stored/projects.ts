@@ -1,6 +1,6 @@
 // Projects in a store: each is a folder holding its originals under their own names and its
 // records in a hidden `.redactorator/` folder.
-import type { PageText, PlacedImage, Reading } from "../engine/model/document";
+import type { PageText, PlacedImage, Reading } from "../../model/document";
 import {
   imagesJson,
   parseImages,
@@ -11,16 +11,16 @@ import {
   settingsJson,
   textsJson,
   type StoredFileProblem,
-} from "../engine/core/formats/project";
+} from "../formats/project";
 import {
   defaultSettings,
   type DocumentId,
   type Project,
   type ProjectDocument,
   type Settings,
-} from "../engine/model/project";
-import type { LockPort } from "../engine/core/ports";
-import type { Store } from "../engine/storage/store";
+} from "../../model/project";
+import type { LockPort } from "../ports";
+import type { Store } from "../../storage/store";
 
 const RECORDS = ".redactorator";
 const PROJECT_FILE = `${RECORDS}/project.json`;
@@ -38,7 +38,7 @@ export interface StoredProject {
 }
 
 /** A project folder whose records this app cannot read. It is shown, and never written over. */
-export interface UnreadableProject {
+interface UnreadableProject {
   readonly folder: string;
   readonly problem: StoredFileProblem;
 }

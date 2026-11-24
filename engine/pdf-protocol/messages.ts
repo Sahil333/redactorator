@@ -1,6 +1,7 @@
 // The messages between the UI and the PDF worker.
 import type { Brand } from "../model/brand";
 import type { Appearance, DocumentModel, Edit, PageText, Reading, Source } from "../model/document";
+import type { ReaderErrorCode, WriterErrorCode } from "../model/errors";
 import type { PageIndex } from "../model/geometry";
 import type { Found } from "../model/match";
 
@@ -59,7 +60,7 @@ export const engineErrorCodes = [
   "apply-failed",
   "check-failed",
   "bad-message",
-] as const;
+] as const satisfies readonly (ReaderErrorCode | WriterErrorCode | "bad-message")[];
 
 export interface PdfError {
   readonly code: (typeof engineErrorCodes)[number];

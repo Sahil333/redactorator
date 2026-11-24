@@ -1,6 +1,5 @@
 import { newDocumentId } from "../engine/model/project";
-import type { NewDocument } from "./projects";
-import type { PdfClient } from "../engine/core/pdf-client/client";
+import type { NewDocument, PdfClient } from "../engine/host-browser/interim";
 import { errorText } from "./errors";
 
 /** A file the user chose that was not added, and why. DOC-4: nothing is left out silently. */

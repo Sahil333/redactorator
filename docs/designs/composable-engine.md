@@ -696,7 +696,8 @@ The rules:
    `history(marks, isUndoable)`.
 5. **One gate.** `gate(state, command)` in `engine/core/session/gate.ts`
    implements section 7's table, and `engine/core/library/gate.ts` section
-   8's gates. Every command calls it first; a refused command returns its
+   8's gates. Every command calls it first, except `projects.refresh`,
+   which is always allowed and skips it; a refused command returns its
    code and dispatches nothing. The same functions fill the `can` flags of
    both scopes, so the app enables its controls from the state and never
    repeats the tables.
@@ -933,8 +934,7 @@ so work a closed Session started can never land in the next project.
 stateDiagram-v2
   [*] --> loading: a store
   [*] --> none: no store (the remembered folder waits for permission or is missing)
-  none --> opening: folders.switchTo (Reopen allowed)
-  none --> moving: folders.switchTo with adoptFrom (a folder chosen)
+  none --> opening: folders.switchTo (Reopen allowed, or a missing folder chosen again)
   loading --> ready: list read, or failed (projects-read-failed)
   loading --> moving: adoptFrom has projects
   moving --> ready: moved, failed (not-moved), or some left behind
@@ -947,23 +947,39 @@ stateDiagram-v2
 A Session is open while `EngineState.session` is set; the Library's phase
 does not change for it.
 
+`folders.switchTo` starts in `moving` when the projects listed now are
+kept in the browser, and otherwise in `opening`; a start or an `opening`
+becomes `moving` once the store it adopts from is found to hold projects.
+A store load that fails ends in `ready` with `projects-read-failed`, and
+the list of the store that was left is cleared. Nothing is written into a
+store's settings until its own are read: they may be a newer version's.
+
 Gates (decisions 31, 37, 43, 51), in `engine/core/library/gate.ts`:
-*   While the phase is `moving` or `opening`, every Library command except
-    `projects.refresh` is refused with `busy-moving`.
+*   `projects.refresh` is always allowed and does not ask the gate.
+*   While the phase is `moving` or `opening`, every other Library command is
+    refused with `busy-moving`.
 *   `projects.create` and `projects.open` are refused with `busy-creating`
     while `creating`, and with `session-open` while a Session is open;
     `folders.switchTo` is refused with `session-open` while a Session is open.
-*   `projects.create` and `folders.importFrom` are refused with
-    `worker-not-ready` unless the worker is ready and not applying, as Home's
-    add controls are today (`App.tsx:147`).
+*   `projects.create` and `folders.importFrom` are not refused while the
+    worker starts: files chosen then wait for it, since the client queues
+    requests until `ready`, as today.
 *   `rename`, `duplicate`, `archive` and `remove` each take the lock and read
     the project again, and are refused with `open-elsewhere` when another tab
     holds it or `open-here` when this engine's Session does.
 *   Each list refresh carries a sequence number; a result older than the
     newest started refresh is dropped.
+*   `projects.open` checks again once it has read the project: if a
+    `folders.switchTo` started meanwhile it lets the lock go and returns
+    `busy-moving` (the project would be saved into the wrong store); if
+    another Session opened meanwhile, `session-open` (the first Session's
+    lock would never be let go). An id the list doesn't hold is refused with
+    `unknown-project`.
 
 The same gate fills `LibraryState.can`, which Home reads for its rows,
-menus, Add and Import.
+menus, Add and Import. Each flag is also false until the first list lands,
+and `can.create` and `can.import` until the worker is ready and not
+applying, as Home's add controls are today (`App.tsx:147`).
 
 **Starting in the browser.** The app decides the first store, as today
 (`useProjectStore.ts:81-99`): a remembered folder with permission gives
@@ -1071,8 +1087,9 @@ today (issue #13).
 
 **Wire changes.** One: `rendered` carries `{width, height, rgba}` instead of
 an `ImageData` (`worker.ts:286`, `contract.ts:166, 334`), in its `image`
-field, typed `Pixels` in `engine/pdf-protocol/messages.ts` until step 5a's
-api types; `app/usePageImages.ts` (`useEngine` until step 6b) wraps it in an
+field, typed `Pixels` in `engine/pdf-protocol/messages.ts` (the app reaches
+the type through `interim` until `viewer.render` brings it into the api in
+step 6b); `app/usePageImages.ts` (`useEngine` until step 6b) wraps it in an
 `ImageData` to draw. The parser keeps what `ImageData` guaranteed: `rgba`
 is a `Uint8ClampedArray` over an `ArrayBuffer`, of width × height × 4
 bytes, with both sizes positive integers. The worker refuses an empty
@@ -1388,6 +1405,7 @@ app's not-yet-moved hooks what they took from today's modules:
 | `opened(session)`, giving `{ store, folder, project }` for the open Session | 5a | 6d |
 | the stored-file functions of `engine/core/stored/projects.ts` | 5a | 6d |
 | `addCustomType(name)`, adding a custom type to the Library's settings | 5a | 6b |
+| `store()`, the Library's current store, for Home's create, changes and import while they stay in the app | 5a | 5b |
 | `intake` | 5b | 6d |
 | `replace(document, marks, shown, kind)`, dispatching a temporary `replaced` record | 6a | 6b |
 | `approve(pending)`, dispatching `approved` | 6a | 6c |
@@ -1467,7 +1485,7 @@ disables the control from the state's `can` flags or never sends the
 command, so `app/errors.ts` maps them to no sentence. They reach headless
 callers: `busy-adding`, `busy-approving`, `busy-applying`,
 `busy-moving`, `busy-creating`, `worker-not-ready`, `no-plan`,
-`session-open`, `session-closed`, `open-here`, `stale-handle`,
+`session-open`, `session-closed`, `open-here`, `unknown-project`, `stale-handle`,
 `page-text-missing`, `empty-target`, `empty-box`, `unknown-document`,
 `unknown-mark`.
 
@@ -2111,6 +2129,15 @@ owner together here, so the store never has two owners.
     `engine/model/errors.ts` declares the reader and writer error codes;
     `engine/pdf-protocol/messages.ts`'s wire list is checked against them
     with `satisfies`.
+*   **As built**: `SessionState` has `project` (as read when the Session
+    opened) and `folder`; `save` comes in step 6a, when the Session saves.
+    `LibraryState.creating` comes in step 5b with `projects.create`; until
+    then the app ANDs its own `adding` into `can.create` and `can.import`.
+    `ErrorCode` also carries `bad-message` (the client passes a wire error
+    through, and the wire may name a file with it) and the client's codes as
+    `PdfClientErrorCode`, which `engine/core/pdf-client/errors.ts` names
+    `ClientErrorCode`. `Pixels` is not in the api yet (no 5a command uses
+    it).
 
 #### 33. `engine/core/createEngine.ts`, `engine/core/dispatcher.ts`, `engine/core/problems.ts`, `engine/core/dispatcher.test.ts` (Create)
 
@@ -2122,6 +2149,11 @@ owner together here, so the store never has two owners.
     with the clearing rules of Technical Plan section 6. The unit test
     dispatches from an effect and from a listener and checks that no update
     is lost and listeners are notified once per pass.
+*   **As built**: `dispatch(record, ...effects)`: a command passes the
+    effects its record starts, so they start inside that record's pass; a
+    record that changes nothing notifies no one. `createEngine` returns
+    `{ engine, interim }`, since only the root holds the client and the open
+    Session's store.
 
 #### 34. `app/projects.ts` (Move to `engine/core/stored/projects.ts`); `engine/core/library/` (Create): `facade.ts`, `changes.ts`, `gate.ts`, `slices/list.ts`, `slices/place.ts`, `slices/settings.ts`, `effects/refresh.ts`, `effects/open.ts`, `effects/move.ts`, `effects/settings.ts`
 
@@ -2136,6 +2168,12 @@ owner together here, so the store never has two owners.
     (`useProjectStore.ts:113-121, 223-230`); the Library gate of Technical
     Plan section 8 and `LibraryState.can`. `engine/core/stored/projects.ts`
     is imported by both the Library and, later, the Session.
+*   **As built**: as section 8 now says: the phases a move goes through,
+    `projects.refresh` outside the gate, `projects.open`'s second check and
+    `unknown-project`, `can` needing the list (and, for create and import,
+    the worker). Two more files: `library/host.ts` (what the Library reads
+    and dispatches through, apart from the root, so nothing imports in a
+    cycle) and `library/slices/index.ts` (composes the three slices).
 
 #### 35. `engine/core/session/facade.ts` (Create); `engine/host-browser/createBrowserEngine.ts`, `engine/host-browser/interim.ts` (Create)
 
@@ -2148,6 +2186,9 @@ owner together here, so the store never has two owners.
     worker channel and the Web Locks adapter and calls `createEngine`, and
     returns `{ engine, interim }` with the step 5a members of the `interim`
     table.
+*   **As built**: `interim` also has `store()`, the Library's current store,
+    which Home's create, changes and import need while they stay in the app
+    (the `interim` table); it goes in 5b.
 
 #### 36. App side, and configs (Create and Modify)
 
@@ -2180,13 +2221,21 @@ owner together here, so the store never has two owners.
         `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify): the api
         and core configs, the `api` zone, and the rules of `api` and `core`
         (the `core` zone exists from step 2).
+*   **As built**: Home's create, rename, duplicate, archive, delete and
+    import moved from `App.tsx` into `app/useHomeChanges.ts` (fallow's
+    complexity limit), which step 5b deletes; the problem slot moved into
+    `app/useProblem.ts`, where the app's own problem is stamped with the
+    engine's revision. Files chosen on Home while the worker starts wait
+    for it, as today. A new browser test (`projects.spec.ts`, "of two lists
+    of the projects read at once…", fake `holdRead`) shows that only the
+    newest list refresh lands (decision 37).
 *   **Temporary edges:** none from core to app; `app` imports
     `engine/host-browser/interim.ts` until step 6d.
 
 **Done when:** `tsc -p engine/api` and `tsc -p engine/core` pass; the
-dispatcher test, the project, folder and race tests and the golden test are
-green; Home reads the project list, settings and worker status from the
-state.
+dispatcher test, the project, folder and race tests, the newest-refresh
+test and the golden test are green; Home reads the project list, settings
+and worker status from the state.
 
 ### Step 5b: intake and project management (decisions 1, 11, 37)
 
