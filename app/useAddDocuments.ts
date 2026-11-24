@@ -3,7 +3,7 @@ import { findPlaces } from "./documentReadings";
 import { prepareFiles, type Refusal } from "./importFiles";
 import type { ProjectDocument } from "../engine/model/project";
 import { writeOriginals, type StoredProject } from "./projects";
-import { hiddenTextKeys, spreadToAdded } from "./spread";
+import { hiddenTextKeys, spreadToAdded } from "../engine/model/spread";
 import type { Store } from "./storage";
 import type { Engine } from "./useEngine";
 

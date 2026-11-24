@@ -1,12 +1,12 @@
 // Spreading: how approving a document hides its values, and parts of its images, in the
 // project's other documents. Pure functions over the project, the documents' stored readings and
 // where the engine found each value in their text; nothing spreads until a document is approved.
-import type { PageText, Reading } from "../engine/model/document";
-import type { Box, PageIndex } from "../engine/model/geometry";
-import { rangeBoxes, rangeText } from "../engine/model/pageText";
-import { anchorOf, placesOnCopies } from "../engine/model/images";
-import { markKey, markName, nextId, type Mark } from "../engine/model/marks";
-import type { DocumentId, HiddenValue, Project, ProjectDocument } from "../engine/model/project";
+import type { PageText, Reading } from "./document";
+import type { Box, PageIndex } from "./geometry";
+import { rangeBoxes, rangeText } from "./pageText";
+import { anchorOf, placesOnCopies } from "./images";
+import { markKey, markName, nextId, type Mark } from "./marks";
+import type { DocumentId, HiddenValue, Project, ProjectDocument } from "./project";
 
 /** How far a hidden value reaches in the project. */
 export interface Reach {

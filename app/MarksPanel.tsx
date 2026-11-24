@@ -6,7 +6,7 @@ import { pagesLabel } from "./marks";
 import { markTypeLabel, type MarkTypeOption } from "../engine/model/markTypes";
 import { PageLink } from "./PageLink";
 import type { HiddenValue } from "../engine/model/project";
-import type { Reach } from "./spread";
+import type { Reach } from "../engine/model/spread";
 import type { PanelWidth } from "./Splitter";
 import { TypePicker } from "./TypePicker";
 

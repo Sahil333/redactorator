@@ -11,7 +11,7 @@ import { pageFrameId, PageScale, showMark } from "./pageGeometry";
 import { PageList } from "./PageList";
 import type { HiddenValue } from "../engine/model/project";
 import { ReviewBanner } from "./ReviewBanner";
-import type { Reach } from "./spread";
+import type { Reach } from "../engine/model/spread";
 import { Splitter } from "./Splitter";
 import { Thumbnails, thumbnailsWidth } from "./Thumbnails";
 import type { Engine } from "./useEngine";

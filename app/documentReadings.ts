@@ -3,7 +3,7 @@
 import type { PageText, PlacedImage, Reading } from "../engine/model/document";
 import type { DocumentId, ProjectDocument } from "../engine/model/project";
 import { findOriginal, readImages, readTexts, saveImages, saveTexts } from "./projects";
-import type { TextPlace } from "./spread";
+import type { TextPlace } from "../engine/model/spread";
 import type { Store } from "./storage";
 import type { Engine } from "./useEngine";
 
