@@ -46,7 +46,7 @@ function approving({ operation }: SessionView["parts"]["operation"], command: Se
   if (command === "confirm") return operation === "confirming" ? undefined : "no-plan";
   if (operation !== "planning" && operation !== "confirming") return undefined;
   if (command === "addDocuments") return "add-while-approving";
-  // Another document can be opened behind the heads-up, as before.
+  // Another document can be opened behind the heads-up.
   return waitsForApproval.has(command) || (command === "open" && operation === "planning") ? "busy-approving" : undefined;
 }
 

@@ -118,7 +118,6 @@ interface ItemRowProps extends Pick<MarksPanelProps, "canMark" | "typeOptions" |
   readonly onKeepHere: (() => void) | undefined;
 }
 
-/** A row's background: the highlight over the new-mark tint. */
 const tintOf = (highlighted: boolean, isNew: boolean) => (highlighted ? "bg-mark-wash" : isNew ? "bg-accent-wash" : "");
 
 /** Delete removes the item while the marks can be changed, unless it is pressed in a field. */

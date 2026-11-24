@@ -284,7 +284,6 @@ export function ProjectView(props: ProjectViewProps) {
     adding: adder.adding,
     onFailure: failure,
   });
-  // Leaving waits for an add under way: it lands in the project before it is saved and let go.
   useImperativeHandle(props.ref, () => ({ settled: adder.settled }));
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });
   const [pageInView, setPageInView] = useState<PageInView | undefined>(undefined);

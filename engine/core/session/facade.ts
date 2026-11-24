@@ -186,7 +186,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
       if (!at.ok) return at;
       dispatch({ type: "closeStarted" });
       // An approval being worked out lands first; one waiting for its heads-up is cancelled.
-      if (view()?.parts.operation.operation === "planning") await approval.settled();
+      await approval.settled();
       if (view()?.parts.operation.operation === "confirming") dispatch({ type: "approvalCancelled" });
       if (!(await saving.flush())) {
         dispatch({ type: "closeFailed" });

@@ -434,6 +434,21 @@ test("an approval that can't read the documents approves nothing and says so, un
   await expect(inExplorer(page, "one-word.pdf")).toContainText("Approved");
 });
 
+test("an approval that can't read the documents says so only in its project", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await markText(page, 1, janeRoe, "Person");
+  const readable = await refuseReadings(page);
+  await storeAsVersion1(page, "one-word");
+  await approveButton(page).click();
+  await expect(page.getByRole("alert")).toHaveText("The documents' text could not be read, so nothing was approved. Reload the page and approve again.");
+
+  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Projects" }).click();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await readable();
+});
+
 test("while an approval is worked out, the page and the marks panel take no marks, and the approval then lands", async ({ page }) => {
   const release = await holdApprovalSearch(page);
   await openApp(page);

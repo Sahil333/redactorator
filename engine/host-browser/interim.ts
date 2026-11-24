@@ -1,18 +1,16 @@
 // What the app's hooks that have not moved into the engine yet take from it, until step 6d.
 import type { Session } from "../api/facade";
 import type { EngineInterim } from "../core/createEngine";
-import { documentReadings, findPlaces } from "../core/session/effects/readings";
+import { findPlaces } from "../core/session/effects/readings";
 import { writeOriginals } from "../core/stored/projects";
-import type { PageText, Reading } from "../model/document";
+import type { PageText } from "../model/document";
 import type { DocumentId, ProjectDocument } from "../model/project";
 import type { TextPlace } from "../model/spread";
-import type { Store } from "../storage/store";
 
 export type { StoredProject } from "../core/stored/projects";
 
-/** What spreading searches: each document's reading as the project keeps it, and where values are in the text. */
+/** What spreading searches: where values are in the text. */
 interface Readings {
-  documentReadings(store: Store, folder: string, documents: readonly ProjectDocument[]): Promise<Map<DocumentId, Reading>>;
   findPlaces(keys: readonly string[], documents: readonly { readonly id: DocumentId; readonly texts: readonly PageText[] }[]): Promise<TextPlace[]>;
 }
 
@@ -30,7 +28,6 @@ export const interimOf = (core: EngineInterim): Interim => ({
   ...core,
   stored: { writeOriginals },
   readings: {
-    documentReadings: (store, folder, documents) => documentReadings({ store, folder, client: core.client }, documents),
     findPlaces: (keys, documents) => findPlaces(core.client, keys, documents),
   },
   addDocuments: (session, documents) => core.opened(session)?.commit({ type: "documentsAdded", documents }),
