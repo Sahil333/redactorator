@@ -1169,7 +1169,8 @@ arose, each keeping today's sentence.
 
 **The worker after the split** (`engine/pdf/`) is listed function by
 function in item 52's move table, which is the only list. The worker stays
-one bundled entry.
+one bundled entry. A host's worker entry must call `setSend` before anything
+posts: until then `post` has nowhere to send, and a reply would throw.
 
 ### 10. The lock port and stores
 

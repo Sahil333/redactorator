@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p . && tsc -p engine/model && tsc -p engine/storage && tsc -p engine/pdf-protocol && tsc -p engine/api && tsc -p engine/core && tsc -p engine/tsconfig.test.json",
+    "typecheck": "tsc -p . && tsc -p engine/model && tsc -p engine/storage && tsc -p engine/pdf-protocol && tsc -p engine/api && tsc -p engine/core && tsc -p engine/pdf && tsc -p engine/pdf/tsconfig.worker.json && tsc -p engine/tsconfig.test.json",
     "test": "pnpm typecheck && pnpm exec fallow architecture --boundaries && vitest run && pnpm test:tools && pnpm test:coverage && pnpm exec fallow audit",
     "test:coverage": "COVERAGE=1 playwright test",
     "test:tools": "uv run --project tests/oracle python -m pytest tests/oracle -q && uv run --project tools/dataset python -m pytest tools/dataset -q"
