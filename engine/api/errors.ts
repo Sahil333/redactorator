@@ -34,6 +34,7 @@ export type ErrorCode =
   | "add-save-failed"
   | "add-search-failed"
   | "add-while-approving"
+  | "add-while-applying"
   // The open document's original is not in the project's folder.
   | "original-missing"
   // The project's latest changes could not be saved: `close`'s result while the Session stays open.
