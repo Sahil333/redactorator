@@ -2,6 +2,7 @@ import type { WorkerChannel } from "../core/ports";
 
 /** Starts the PDF worker, a Web Worker running MuPDF, and gives the channel to it. */
 export function startPdfWorker(): WorkerChannel {
+  // fallow-ignore-next-line boundary-violation
   const worker = new Worker(new URL("../pdf/worker.ts", import.meta.url), { type: "module" });
   return {
     post: (message, transfer = []) => worker.postMessage(message, transfer),

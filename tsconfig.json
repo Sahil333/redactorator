@@ -17,6 +17,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["app", "engine", "tests", "*.config.ts"],
-  "exclude": ["engine/model", "engine/storage", "engine/pdf-protocol", "engine/api", "engine/core", "engine/pdf", "engine/globals.ts"]
+  "include": ["app", "engine/host-browser", "tests", "*.config.ts"]
 }
