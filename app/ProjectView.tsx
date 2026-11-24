@@ -24,6 +24,7 @@ import { useHandOffFocus } from "./useHandOffFocus";
 import { useImages } from "./useImages";
 import { useMarks } from "./useMarks";
 import { useProject } from "./useProject";
+import { errorText } from "./errors";
 import { useTabs } from "./useTabs";
 import { useUndoKeys } from "./useUndoKeys";
 import { initialWidths, Workspace, type Review } from "./Workspace";
@@ -242,7 +243,7 @@ function DocumentPanel({ active, shown, missing, pageInView, onPageInView, ...wo
           onCurrentPage={(page) => onPageInView({ document: active, page })}
         />
       ) : (
-        <DropZone error={missing ?? workspace.engine.error} onFiles={workspace.onFiles}>
+        <DropZone error={missing ?? errorText(workspace.engine.error)} onFiles={workspace.onFiles}>
           {active === undefined && <p className="m-auto p-8 text-ink-muted">Open a document from the list, or drop PDFs here to add them.</p>}
         </DropZone>
       )}

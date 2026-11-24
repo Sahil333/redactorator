@@ -7,7 +7,7 @@ import type { PdfReply, PdfRequest } from "../../engine/pdf-protocol/messages";
 /** A message as it crosses the wire: the same shape, with plain numbers for branded ones. */
 type Wire<T> = T extends number
   ? number
-  : T extends string | boolean | undefined | ArrayBuffer | ImageData
+  : T extends string | boolean | undefined | ArrayBuffer | Uint8ClampedArray
     ? T
     : T extends readonly (infer E)[]
       ? Wire<E>[]

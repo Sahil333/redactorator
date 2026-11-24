@@ -275,8 +275,7 @@ function render(file: FileNumber, source: Source, index: PageIndex, scale: numbe
         rgba[to + 3] = 255;
       }
     }
-    const image = new ImageData(rgba, width, height);
-    post({ type: "rendered", file, source, page: index, image }, [rgba.buffer]);
+    post({ type: "rendered", file, source, page: index, image: { width, height, rgba } }, [rgba.buffer]);
   } catch {
     fail(file, "render-failed", `Page ${index + 1} could not be drawn. Open the PDF again.`);
   } finally {

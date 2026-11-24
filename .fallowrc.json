@@ -17,7 +17,8 @@
     ],
     "rules": [
       { "from": "model", "allow": [] },
-      { "from": "storage", "allow": [] }
+      { "from": "storage", "allow": [] },
+      { "from": "pdf-protocol", "allow": ["model"] }
     ]
   }
 }
