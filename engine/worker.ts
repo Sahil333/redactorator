@@ -1,28 +1,20 @@
 import * as mupdf from "mupdf";
-import {
-  isPageIndex,
-  isPoints,
-  parseEngineRequest,
-  pointBox,
-  type Appearance,
-  type Box,
-  type DocumentModel,
-  type Edit,
-  type EngineError,
-  type EngineMessage,
-  type FileNumber,
-  type InspectionNumber,
-  type MatchNumber,
-  type PageChar,
-  type PageIndex,
-  type PageModel,
-  type PageText,
-  type PlacedImage,
-  type Source,
-} from "./contract";
+import type {
+  Appearance,
+  DocumentModel,
+  Edit,
+  PageChar,
+  PageModel,
+  PageText,
+  PlacedImage,
+  Source,
+} from "./model/document";
+import { isPageIndex, isPoints, pointBox, type Box, type PageIndex } from "./model/geometry";
+import type { FileNumber, InspectionNumber, MatchNumber, PdfError, PdfReply } from "./pdf-protocol/messages";
+import { parsePdfRequest } from "./pdf-protocol/parse";
 import { centre, inside, overlap, textMoved, type PageGlyph, type Point } from "./glyphs";
-import { findAll } from "./match";
-import { bounds, rangeBoxes, readingOrder } from "./pageText";
+import { findAll } from "./model/match";
+import { bounds, rangeBoxes, readingOrder } from "./model/pageText";
 
 interface Opened {
   readonly file: FileNumber;
@@ -34,11 +26,11 @@ interface Opened {
 
 let opened: Opened | undefined;
 
-function post(message: EngineMessage, transfer: Transferable[] = []): void {
+function post(message: PdfReply, transfer: Transferable[] = []): void {
   postMessage(message, { transfer });
 }
 
-function fail(file: FileNumber, code: EngineError["code"], message: string): void {
+function fail(file: FileNumber, code: PdfError["code"], message: string): void {
   post({ type: "error", file, error: { code, message } });
 }
 
@@ -78,7 +70,7 @@ function closeAll(): void {
 }
 
 /** Opens a PDF the engine can work on, or says why it can't. */
-function load(bytes: ArrayBuffer): { readonly document: mupdf.PDFDocument; readonly model: DocumentModel } | EngineError {
+function load(bytes: ArrayBuffer): { readonly document: mupdf.PDFDocument; readonly model: DocumentModel } | PdfError {
   let document: mupdf.Document | undefined;
   try {
     document = mupdf.Document.openDocument(bytes, "application/pdf");
@@ -730,7 +722,7 @@ function apply(file: FileNumber, edits: readonly Edit[], appearance: Appearance)
 }
 
 addEventListener("message", (event: MessageEvent<unknown>) => {
-  const request = parseEngineRequest(event.data);
+  const request = parsePdfRequest(event.data);
   if (request === undefined) {
     post({
       type: "error",

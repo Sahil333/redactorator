@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
-import type { PlacedImage } from "../engine/contract";
+import type { PlacedImage } from "../engine/model/document";
 import { imagesOf } from "./documentReadings";
-import type { DocumentId, ProjectDocument } from "./project";
+import type { DocumentId, ProjectDocument } from "../engine/model/project";
 import type { Store } from "./storage";
 import type { Engine } from "./useEngine";
 

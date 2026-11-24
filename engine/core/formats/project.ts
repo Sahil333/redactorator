@@ -1,96 +1,21 @@
 // The stored formats: a project's `project.json`, the text of each of its documents, and the
 // app's `settings.json`. All are read from storage the user's browser keeps across app
 // versions, so each carries a version and is checked whole when read.
+import type { PageChar, PageText, PlacedImage } from "../../model/document";
+import { isPageIndex, parseBox, pointBox } from "../../model/geometry";
+import { isOffset, isPositiveNumber, isRecord, isText, parseAll } from "../../model/guards";
+import type { ImageAnchor } from "../../model/images";
+import type { Mark, MarkTarget, TextPiece } from "../../model/marks";
+import { isFingerprint, parseAppearance, parsePlacedImage } from "../../model/parse";
 import {
-  isFingerprint,
-  isOffset,
-  isPositiveNumber,
-  isPageIndex,
-  isRecord,
-  isText,
-  parseAll,
-  parseAppearance,
-  parseBox,
-  parsePlacedImage,
-  pointBox,
-  type Appearance,
-  type PageChar,
-  type PageText,
-  type PlacedImage,
-} from "../engine/contract";
-import type { ImageAnchor } from "./images";
-import type { Mark, MarkTarget, TextPiece } from "./marks";
-import type { MarkType } from "./markTypes";
-
-declare const brand: unique symbol;
-
-/** Names one document in a project. */
-export type DocumentId = string & { readonly [brand]: "DocumentId" };
-
-const isDocumentId = (value: unknown): value is DocumentId => typeof value === "string" && value !== "";
-
-export const newDocumentId = (): DocumentId => {
-  const id = crypto.randomUUID();
-  if (!isDocumentId(id)) throw new Error("No id");
-  return id;
-};
-
-const reviewStates = ["not-started", "in-review", "approved"] as const;
-/** How far the user has got in checking a document's marks. A mark puts it in review. */
-export type ReviewState = (typeof reviewStates)[number];
-
-const downloadStates = ["none", "downloaded", "changed"] as const;
-/**
- * Whether a cleaned file has been downloaded from this project, and whether its marks have
- * changed since. A browser can't tell where the download went, or whether it is still there.
- */
-export type DownloadState = (typeof downloadStates)[number];
-
-export interface ProjectDocument {
-  readonly id: DocumentId;
-  /** The original's file name in the project folder. */
-  readonly file: string;
-  readonly sha256: string;
-  readonly pages: number;
-  readonly marks: readonly Mark[];
-  readonly review: ReviewState;
-  readonly download: DownloadState;
-  /** Keys of hidden values the user chose not to hide in this document ("Don't hide here"). */
-  readonly shown: readonly string[];
-}
-
-/**
- * A value, or a part of an image, hidden in every document of the project; set when a document
- * that marks it is approved.
- */
-export interface HiddenValue {
-  /** A value's normalised form (engine/match.ts), which every spelling of it shares, or an image part's key (app/images.ts). */
-  readonly key: string;
-  /** As it was marked, to show. */
-  readonly text: string;
-  readonly type: MarkType;
-  /** The document whose approval set it. */
-  readonly from: DocumentId;
-  /** For a part of an image: the image and the part. */
-  readonly image?: ImageAnchor;
-}
-
-export interface Project {
-  readonly id: string;
-  readonly name: string;
-  readonly created: string;
-  readonly archived: boolean;
-  readonly documents: readonly ProjectDocument[];
-  readonly hidden: readonly HiddenValue[];
-}
-
-export interface Settings {
-  readonly appearance: Appearance;
-  /** Mark types the user typed in, by name, offered on every later mark. */
-  readonly customTypes: readonly string[];
-}
-
-export const defaultSettings: Settings = { appearance: { colour: "#000000", label: false }, customTypes: [] };
+  downloadStates,
+  isDocumentId,
+  reviewStates,
+  type HiddenValue,
+  type Project,
+  type ProjectDocument,
+  type Settings,
+} from "../../model/project";
 
 const PROJECT_FORMAT = "redactorator-project";
 const TEXT_FORMAT = "redactorator-text";

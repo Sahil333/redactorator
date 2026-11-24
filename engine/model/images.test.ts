@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { isPageIndex, pointBox, type Matrix, type PlacedImage } from "../engine/contract";
+import type { PlacedImage } from "./document";
+import { isPageIndex, pointBox, type Matrix } from "./geometry";
 import { anchorOf, placesOnCopies } from "./images";
 
 const page = 0;

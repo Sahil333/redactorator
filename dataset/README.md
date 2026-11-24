@@ -44,7 +44,7 @@ pixels from the top-left.
 The page text is the text MuPDF.js extracts (structured text, whitespace kept),
 with its blocks, and the lines in each block, put in reading order: top to bottom,
 with side-by-side columns kept in MuPDF's order (`readingOrder` in
-`engine/pageText.ts`). It is built as: the characters of each line in order, `\n`
+`engine/model/pageText.ts`). It is built as: the characters of each line in order, `\n`
 after each line, and one more `\n` after each block. Lines and blocks with no
 characters add nothing. Offsets count those characters, so they line up with the
 app's findings. A tool using another extractor derives its offsets from the boxes.

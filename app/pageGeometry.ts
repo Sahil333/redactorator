@@ -1,6 +1,7 @@
 // Where a page is on screen: its frame's id, its scale, and screen points as points on the page.
 import { createContext } from "react";
-import type { PageIndex, PageModel } from "../engine/contract";
+import type { PageModel } from "../engine/model/document";
+import type { PageIndex } from "../engine/model/geometry";
 import { CSS_PIXELS_PER_POINT } from "./useEngine";
 
 /** The id of a page's frame, which the page list and marks panel link to. */

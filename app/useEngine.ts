@@ -1,26 +1,19 @@
 import { useEffect, useRef, useState } from "react";
+import type { Appearance, DocumentModel, Edit, PageText, Reading, Source } from "../engine/model/document";
+import { isPageIndex, type PageIndex } from "../engine/model/geometry";
 import {
-  isAboutOlderFile,
   isFileNumber,
   isInspectionNumber,
   isMatchNumber,
-  isPageIndex,
-  parseEngineMessage,
-  type Appearance,
   type DocumentFound,
-  type DocumentModel,
-  type Edit,
-  type EngineError,
-  type EngineMessage,
-  type EngineRequest,
   type FileNumber,
   type InspectionNumber,
   type MatchNumber,
-  type PageIndex,
-  type PageText,
-  type Reading,
-  type Source,
-} from "../engine/contract";
+  type PdfError,
+  type PdfReply,
+  type PdfRequest,
+} from "../engine/pdf-protocol/messages";
+import { isAboutOlderFile, parsePdfReply } from "../engine/pdf-protocol/parse";
 
 // PDF points are 1/72 inch and CSS pixels 1/96 inch, so this shows a page at its printed size.
 export const CSS_PIXELS_PER_POINT = 96 / 72;
@@ -68,10 +61,10 @@ export interface OpenDocument extends Omit<PdfSource, "bytes"> {
 }
 
 /** What inspecting a file found: its pages' text and images, or why it cannot be added. */
-export type Inspection = Reading | { readonly error: EngineError };
+export type Inspection = Reading | { readonly error: PdfError };
 
 /** Where a search found its keys, or why it could not run. */
-export type Matches = { readonly found: readonly DocumentFound[] } | { readonly error: EngineError };
+export type Matches = { readonly found: readonly DocumentFound[] } | { readonly error: PdfError };
 
 /** A cleaned file that passed the engine's check. */
 interface Output {
@@ -105,11 +98,11 @@ const noImages = { original: new Map(), output: new Map() } satisfies Record<Sou
 class Waiting<N extends number, T> {
   private latest = 0;
   private stopped = false;
-  private readonly waiting = new Map<N, (answer: T | { readonly error: EngineError }) => void>();
+  private readonly waiting = new Map<N, (answer: T | { readonly error: PdfError }) => void>();
 
   constructor(private readonly isNumber: (value: unknown) => value is N) {}
 
-  ask(send: (number: N) => void): Promise<T | { readonly error: EngineError }> {
+  ask(send: (number: N) => void): Promise<T | { readonly error: PdfError }> {
     const number = this.latest + 1;
     // Once the engine has stopped, nothing would ever answer.
     if (this.stopped || !this.isNumber(number)) return Promise.resolve(notRunning);
@@ -120,7 +113,7 @@ class Waiting<N extends number, T> {
     });
   }
 
-  answer(number: N, result: T | { readonly error: EngineError }) {
+  answer(number: N, result: T | { readonly error: PdfError }) {
     this.waiting.get(number)?.(result);
     this.waiting.delete(number);
   }
@@ -132,17 +125,17 @@ class Waiting<N extends number, T> {
   }
 }
 
-const notRunning: { readonly error: EngineError } = { error: { code: "bad-message", message: "The PDF engine is not running. Reload the page to try again." } };
+const notRunning: { readonly error: PdfError } = { error: { code: "bad-message", message: "The PDF engine is not running. Reload the page to try again." } };
 
 /** The images with a newly drawn page in them. A finer image is kept over a coarser one that arrives after it. */
-function withImage(current: Record<Source, Images>, { source, page, image }: Extract<EngineMessage, { type: "rendered" }>) {
+function withImage(current: Record<Source, Images>, { source, page, image }: Extract<PdfReply, { type: "rendered" }>) {
   const shown = current[source].get(page);
   if (shown !== undefined && shown.width >= image.width) return current;
   return { ...current, [source]: new Map(current[source]).set(page, image) };
 }
 
 /** Sends the requests held back until the worker was ready, in the order they were made. */
-function sendHeld(worker: Worker, held: readonly [EngineRequest, Transferable[]][] | undefined) {
+function sendHeld(worker: Worker, held: readonly [PdfRequest, Transferable[]][] | undefined) {
   for (const [request, transfer] of held ?? []) worker.postMessage(request, transfer);
 }
 
@@ -154,7 +147,7 @@ function forgetRequests(requested: Set<string>, prefix: string) {
 export function useEngine(): Engine {
   const workerRef = useRef<Worker | undefined>(undefined);
   // The worker listens only once MuPDF has loaded; anything sent before it says so would be lost.
-  const beforeReady = useRef<[EngineRequest, Transferable[]][] | undefined>([]);
+  const beforeReady = useRef<[PdfRequest, Transferable[]][] | undefined>([]);
   const latestFile = useRef(0);
   const picked = useRef({ name: "", sha256: "" });
   const [{ inspections, matches }] = useState(() => ({
@@ -189,7 +182,7 @@ export function useEngine(): Engine {
     };
 
     worker.addEventListener("message", (event: MessageEvent<unknown>) => {
-      const message = parseEngineMessage(event.data);
+      const message = parsePdfReply(event.data);
       if (message === undefined) {
         stop("The PDF engine sent something unexpected. Reload the page to try again.");
         return;
@@ -238,7 +231,7 @@ export function useEngine(): Engine {
     return () => worker.terminate();
   }, []);
 
-  function post(request: EngineRequest, transfer: Transferable[] = []) {
+  function post(request: PdfRequest, transfer: Transferable[] = []) {
     if (beforeReady.current !== undefined) beforeReady.current.push([request, transfer]);
     else workerRef.current?.postMessage(request, transfer);
   }
@@ -269,7 +262,7 @@ export function useEngine(): Engine {
     post({ type: "open", file, bytes }, [bytes]);
   }
 
-  function once(key: string, request: EngineRequest) {
+  function once(key: string, request: PdfRequest) {
     if (requested.current.has(key)) return;
     requested.current.add(key);
     post(request);

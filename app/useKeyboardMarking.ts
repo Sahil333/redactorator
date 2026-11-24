@@ -1,7 +1,9 @@
 import { useState, type FocusEvent, type KeyboardEvent, type RefObject } from "react";
-import { pointBox, type Box, type PageModel } from "../engine/contract";
+import type { PageModel } from "../engine/model/document";
+import { pointBox, type Box } from "../engine/model/geometry";
 import { boxStep, newBox } from "./keyboardMarking";
-import { MIN_BOX_POINTS, type MarkTarget, type Tool } from "./marks";
+import type { MarkTarget } from "../engine/model/marks";
+import { MIN_BOX_POINTS, type Tool } from "./marks";
 import type { TextSelecting } from "./useTextSelection";
 
 /** The part of `frame`, which shows `page`, on screen, in points. */

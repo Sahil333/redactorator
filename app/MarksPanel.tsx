@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { PlacedImage } from "../engine/contract";
-import { anchorOf } from "./images";
-import { firstPage, itemKey, markKey, markName, markPages, pagesLabel, type Mark } from "./marks";
-import { markTypeLabel, type MarkTypeOption } from "./markTypes";
+import type { PlacedImage } from "../engine/model/document";
+import { anchorOf } from "../engine/model/images";
+import { firstPage, itemKey, markKey, markName, markPages, type Mark } from "../engine/model/marks";
+import { pagesLabel } from "./marks";
+import { markTypeLabel, type MarkTypeOption } from "../engine/model/markTypes";
 import { PageLink } from "./PageLink";
-import type { HiddenValue } from "./project";
-import type { Reach } from "./spread";
+import type { HiddenValue } from "../engine/model/project";
+import type { Reach } from "../engine/model/spread";
 import type { PanelWidth } from "./Splitter";
 import { TypePicker } from "./TypePicker";
 

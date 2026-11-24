@@ -1,5 +1,5 @@
 // The letters on a page, as the checks on a cleaned file compare them.
-import type { Box } from "./contract";
+import type { Box } from "./model/geometry";
 
 export type Point = readonly [number, number];
 

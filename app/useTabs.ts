@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { isRecord } from "../engine/contract";
-import type { DocumentId, ProjectDocument } from "./project";
+import { isRecord } from "../engine/model/guards";
+import type { DocumentId, ProjectDocument } from "../engine/model/project";
 
 interface OpenTabs {
   readonly tabs: readonly DocumentId[];

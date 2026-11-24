@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { firstPage, type Mark } from "./marks";
+import { firstPage, type Mark } from "../engine/model/marks";
 
 interface ReviewBannerProps {
   /** The open document's new marks, in page order. */

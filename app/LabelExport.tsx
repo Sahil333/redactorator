@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { countries, formats, splits, type DocumentFacts } from "./groundTruth";
+import { countries, formats, splits, type DocumentFacts } from "../engine/model/groundTruth";
 
 interface LabelExportProps {
   /** The facts given last time, so labelling a run of documents from one source is quick. */

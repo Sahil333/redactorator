@@ -2,7 +2,7 @@
 // writes. Each is named by what it does and checks itself: the `fakes` fixture (coverage.ts)
 // fails a test whose fake never acted, and a hold fails when it is released holding nothing.
 import { expect, type BrowserContext, type Page } from "@playwright/test";
-import type { EngineMessage, EngineRequest } from "../../engine/contract";
+import type { PdfReply, PdfRequest } from "../../engine/pdf-protocol/messages";
 
 /** A message as it crosses the wire: the same shape, with plain numbers for branded ones. */
 type Wire<T> = T extends number
@@ -15,8 +15,8 @@ type Wire<T> = T extends number
 
 /** The PDF worker's global scope, as a fake running in it sees it. */
 interface WorkerScope {
-  postMessage: (message: Wire<EngineMessage>, transfer?: Transferable[]) => void;
-  addEventListener(type: "message", listener: (event: MessageEvent<Wire<EngineRequest>>) => void): void;
+  postMessage: (message: Wire<PdfReply>, transfer?: Transferable[]) => void;
+  addEventListener(type: "message", listener: (event: MessageEvent<Wire<PdfRequest>>) => void): void;
 }
 
 /** Tells the test, through the page, that the fake `key` acted, from the page or the PDF worker. */
@@ -209,11 +209,11 @@ export async function delayApplied(page: Page, ms: number): Promise<void> {
 }
 
 /** Holds the PDF worker's replies of `type` from its next start until the returned function releases them. */
-async function holdWorkerReplies(page: Page, key: string, type: EngineMessage["type"]): Promise<() => Promise<void>> {
+async function holdWorkerReplies(page: Page, key: string, type: PdfReply["type"]): Promise<() => Promise<void>> {
   const prelude = sourceOf(
     (scope: WorkerScope, acted, key: string, type: string) => {
       const send = scope.postMessage.bind(scope);
-      const held: [Wire<EngineMessage>, Transferable[] | undefined][] = [];
+      const held: [Wire<PdfReply>, Transferable[] | undefined][] = [];
       let holding = true;
       new BroadcastChannel(`release ${key}`).onmessage = () => {
         holding = false;

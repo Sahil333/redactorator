@@ -1,7 +1,9 @@
 import { useState, type MouseEvent, type PointerEvent } from "react";
-import { pointBox, type Box, type PageModel } from "../engine/contract";
-import { contains } from "../engine/pageText";
-import { boxesOn, MIN_BOX_POINTS, type Mark, type MarkTarget, type Tool } from "./marks";
+import type { PageModel } from "../engine/model/document";
+import { pointBox, type Box } from "../engine/model/geometry";
+import { contains } from "../engine/model/pageText";
+import { boxesOn, type Mark, type MarkTarget } from "../engine/model/marks";
+import { MIN_BOX_POINTS, type Tool } from "./marks";
 import { pointOnPage } from "./pageGeometry";
 
 type Point = readonly [number, number];

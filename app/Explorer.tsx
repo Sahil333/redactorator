@@ -1,4 +1,4 @@
-import type { DocumentId, DownloadState, ProjectDocument, ReviewState } from "./project";
+import type { DocumentId, DownloadState, ProjectDocument, ReviewState } from "../engine/model/project";
 
 const reviewLabel: Record<ReviewState, string> = { "not-started": "Not started", "in-review": "In review", approved: "Approved" };
 
