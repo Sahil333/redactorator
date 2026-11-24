@@ -209,6 +209,38 @@ export async function delayApplied(page: Page, ms: number): Promise<void> {
 }
 
 /**
+ * The PDF worker fails to draw the original's page at `pageIndex` the first time it is asked, and
+ * holds that answer back until the next apply is asked, so it arrives while the apply runs. The
+ * returned function waits until the page has been asked for.
+ */
+export async function failRenderUntilApply(page: Page, pageIndex: number, message: string): Promise<() => Promise<void>> {
+  const key = "failRenderUntilApply";
+  const prelude = sourceOf(
+    (scope: WorkerScope, acted, key: string, pageIndex: number, message: string) => {
+      let failure: Wire<PdfReply> | "sent" | undefined;
+      scope.addEventListener("message", (event) => {
+        const { data } = event;
+        if (failure === undefined && data.type === "render" && data.source === "original" && data.page === pageIndex) {
+          event.stopImmediatePropagation();
+          failure = { type: "error", file: data.file, error: { code: "render-failed", message } };
+          acted(key);
+        } else if (failure !== undefined && failure !== "sent" && data.type === "apply") {
+          // Sent before the worker reads the apply, as it would answer a request asked before it.
+          scope.postMessage(failure);
+          failure = "sent";
+        }
+      });
+    },
+    key,
+    pageIndex,
+    message,
+  );
+  const fakes = await fakeWorker(page, key, { prelude });
+  fakes.expected.add(key);
+  return () => heldSomething(fakes, key);
+}
+
+/**
  * Once a document opens, and after its first pages have had time to be drawn, the PDF worker sends
  * an error about it that answers no request.
  */
