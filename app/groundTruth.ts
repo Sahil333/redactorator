@@ -2,7 +2,7 @@
 // on one PDF. Labelling mode downloads it; nothing here leaves the browser.
 import type { Box, PageIndex } from "../engine/model/geometry";
 import type { Mark } from "./marks";
-import type { MarkType } from "./markTypes";
+import type { MarkType } from "../engine/model/markTypes";
 import schema from "../dataset/ground-truth.schema.json";
 
 interface Choice {

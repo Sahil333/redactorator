@@ -1,4 +1,4 @@
-import schema from "../dataset/ground-truth.schema.json";
+import schema from "../../dataset/ground-truth.schema.json";
 
 /** A type id from the ground-truth schema, or `custom:<name>` for a type the user typed. */
 export type MarkType = string;

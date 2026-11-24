@@ -2,7 +2,7 @@ import { use, useEffect, useId, useRef, type MouseEvent, type PointerEvent, type
 import type { PageModel } from "../engine/model/document";
 import type { Box } from "../engine/model/geometry";
 import { boxesOn, type Mark, type MarkTarget, type Pending, type Tool } from "./marks";
-import { markTypeLabel } from "./markTypes";
+import { markTypeLabel } from "../engine/model/markTypes";
 import { markElementId, pageFrameId, PageScale } from "./pageGeometry";
 import { CSS_PIXELS_PER_POINT, type RenderDetail } from "./useEngine";
 import { useKeyboardMarking } from "./useKeyboardMarking";

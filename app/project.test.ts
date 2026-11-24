@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { PageText, PlacedImage } from "../engine/model/document";
 import { isPageIndex, pointBox } from "../engine/model/geometry";
-import type { ImageAnchor } from "./images";
+import type { ImageAnchor } from "../engine/model/images";
 import { imagesJson, parseImages, parseProject, parseTexts, projectJson, textsJson, type Project } from "./project";
 
 const box = pointBox(72, 99.123, 98.456, 115.6);

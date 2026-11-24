@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { customMarkType, type MarkType, type MarkTypeOption } from "./markTypes";
+import { customMarkType, type MarkType, type MarkTypeOption } from "../engine/model/markTypes";
 
 interface TypePickerProps {
   readonly options: readonly MarkTypeOption[];

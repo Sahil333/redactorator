@@ -1,8 +1,8 @@
 import type { Edit } from "../engine/model/document";
 import type { Box, PageIndex } from "../engine/model/geometry";
 import { keyOf } from "../engine/model/match";
-import { imageKey, type ImageAnchor } from "./images";
-import { markTypeLabel, type MarkType } from "./markTypes";
+import { imageKey, type ImageAnchor } from "../engine/model/images";
+import { markTypeLabel, type MarkType } from "../engine/model/markTypes";
 import type { Selection } from "./selection";
 
 export type Tool = "text" | "box";

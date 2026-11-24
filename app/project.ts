@@ -5,9 +5,9 @@ import type { Appearance, PageChar, PageText, PlacedImage } from "../engine/mode
 import { isPageIndex, parseBox, pointBox } from "../engine/model/geometry";
 import { isOffset, isPositiveNumber, isRecord, isText, parseAll } from "../engine/model/guards";
 import { isFingerprint, parseAppearance, parsePlacedImage } from "../engine/model/parse";
-import type { ImageAnchor } from "./images";
+import type { ImageAnchor } from "../engine/model/images";
 import type { Mark, MarkTarget, TextPiece } from "./marks";
-import type { MarkType } from "./markTypes";
+import type { MarkType } from "../engine/model/markTypes";
 
 declare const brand: unique symbol;
 
@@ -51,7 +51,7 @@ export interface ProjectDocument {
  * that marks it is approved.
  */
 export interface HiddenValue {
-  /** A value's normalised form (engine/model/match.ts), which every spelling of it shares, or an image part's key (app/images.ts). */
+  /** A value's normalised form (engine/model/match.ts), which every spelling of it shares, or an image part's key (engine/model/images.ts). */
   readonly key: string;
   /** As it was marked, to show. */
   readonly text: string;
