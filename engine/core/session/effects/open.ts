@@ -12,7 +12,7 @@ import { validOutput } from "../selectors";
 import { imagesOf, type ReadingSource } from "./readings";
 
 /** What the open document's commands use: the Session's state and gate, its project's store, and the PDF worker. */
-export interface ViewerHost {
+interface ViewerHost {
   readonly source: ReadingSource & { readonly client: PdfClient };
   view(): SessionView | undefined;
   allowed(command: "open" | "query", document?: DocumentId): Result<SessionView>;
