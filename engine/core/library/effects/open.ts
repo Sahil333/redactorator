@@ -6,7 +6,7 @@ import { readProject } from "../../stored/projects";
 import type { LibraryHost } from "../host";
 import { readFailed, refresh } from "./refresh";
 
-function raised(host: LibraryHost, error: EngineError): Result<never> {
+export function raised(host: LibraryHost, error: EngineError): Result<never> {
   host.dispatch({ type: "problemRaised", error });
   return { ok: false, error };
 }

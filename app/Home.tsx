@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import type { Refusal } from "../engine/api/errors";
 import type { LibraryState, ProjectSummary } from "../engine/api/state";
 import { DropZone } from "./DropZone";
-import type { Refusal } from "./importFiles";
 import { NotAdded } from "./NotAdded";
 import { PickFiles } from "./PickFiles";
 import type { Waiting } from "./useProjectsFolder";
 
 /** A project on the list that can be read. */
-export type Listed = Extract<ProjectSummary, { readonly id: string }>;
+type Listed = Extract<ProjectSummary, { readonly id: string }>;
 
 type Unreadable = Extract<ProjectSummary, { readonly unreadable: string }>;
 
@@ -22,8 +22,6 @@ interface ProjectActions {
 interface HomeProps extends ProjectActions {
   /** The engine's Library; undefined until the engine starts. */
   readonly library: LibraryState | undefined;
-  /** Whether files chosen on Home are being made into a project. */
-  readonly adding: boolean;
   /** The remembered folder, when the page can't use it until the user acts. */
   readonly waiting: Waiting | undefined;
   readonly status: string;
@@ -396,11 +394,11 @@ function DeleteDialog({ listed, onDelete, onClose }: {
 }
 
 export function Home(props: HomeProps) {
-  const { library, adding, status, error, refused, onDismissRefused, onFiles, folder } = props;
+  const { library, status, error, refused, onDismissRefused, onFiles, folder } = props;
   const projects = library?.projects;
   const where = whereabouts(library, props.waiting);
-  const canAdd = library !== undefined && library.can.create && !adding;
-  const canImport = library !== undefined && library.can.import && !adding;
+  const canAdd = library?.can.create ?? false;
+  const canImport = library?.can.import ?? false;
   const empty = projects !== undefined && projects.length === 0;
   const [deleting, setDeleting] = useState<Listed | undefined>(undefined);
   const actions: ProjectActions = { ...props, onDelete: setDeleting };

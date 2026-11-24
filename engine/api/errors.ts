@@ -22,8 +22,23 @@ export type ErrorCode =
   | "folder-not-chosen"
   | "folder-not-allowed"
   | "settings-save-failed"
+  | "change-failed"
+  | "import-projects"
+  | "import-missing"
+  | "import-damaged"
+  | "import-newer"
+  | "import-failed"
+  // Why a chosen file was not added.
+  | "not-pdf"
+  | "unreadable-file"
+  | "add-save-failed"
+  | "add-search-failed"
+  | "add-while-approving"
   // Refusals the app never shows: it disables the control from the state, or never sends the command.
   | "busy-moving"
+  | "busy-creating"
+  | "no-store"
+  | "open-here"
   | "session-open"
   | "session-closed"
   | "unknown-project";
@@ -37,3 +52,9 @@ export interface EngineError {
 }
 
 export type Result<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: EngineError };
+
+/** A chosen file that was not added, and why. DOC-4: nothing is left out silently. */
+export interface Refusal {
+  readonly file: string;
+  readonly error: EngineError;
+}

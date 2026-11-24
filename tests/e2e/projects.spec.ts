@@ -81,6 +81,20 @@ test("when no chosen file can be added, no project is made", async ({ page }) =>
   expect(await storedNames(page)).toEqual([]);
 });
 
+test("files that cannot be saved as a new project say so, still list those that were not added, and leave no project", async ({ page }) => {
+  const notes = join(await mkdtemp(join(tmpdir(), "notes-")), "notes.txt");
+  await writeFile(notes, "not a document");
+  await openApp(page);
+  await failWrites(page);
+
+  await page.getByLabel("Choose PDFs").setInputFiles([oneWordPdf, notes]);
+
+  await expect(page.getByRole("alert")).toHaveText("That change could not be saved. Check that the disk has space, then try again.");
+  await expect(page.getByRole("region", { name: "1 file not added" }).getByRole("listitem")).toHaveText(["notes.txt: This is not a PDF."]);
+  await expect(page.getByLabel("Choose PDFs")).toBeEnabled();
+  expect(await storedNames(page)).toEqual([]);
+});
+
 test("marks, custom types and appearance survive a reload", async ({ page }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf);

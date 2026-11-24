@@ -1,14 +1,9 @@
 // What the app's hooks that have not moved into the engine yet take from it, until step 6d.
 import type { EngineInterim } from "../core/createEngine";
 import {
-  createProject,
-  duplicateProject,
   findOriginal,
-  importProject,
-  nameFromFile,
   readImages,
   readOriginal,
-  readProject,
   readTexts,
   saveImages,
   saveProject,
@@ -18,19 +13,14 @@ import {
 
 export type { Applied, PdfClient, WorkerStatus } from "../core/pdf-client/client";
 export type { ClientError } from "../core/pdf-client/errors";
-export type { NewDocument, StoredProject } from "../core/stored/projects";
+export type { StoredProject } from "../core/stored/projects";
 export type { Pixels } from "../pdf-protocol/messages";
 
 /** The stored-file functions the app still calls itself. */
 const storedFiles = {
-  createProject,
-  duplicateProject,
   findOriginal,
-  importProject,
-  nameFromFile,
   readImages,
   readOriginal,
-  readProject,
   readTexts,
   saveImages,
   saveProject,

@@ -29,6 +29,8 @@ export interface LibraryState {
   /** Undefined until the first list lands. */
   readonly projects?: readonly ProjectSummary[];
   readonly settings: Settings;
+  /** Whether files chosen on Home are being made into a project. */
+  readonly creating: boolean;
   /** What the Library's gate allows now, for the controls that send each command. */
   readonly can: { readonly create: boolean; readonly open: boolean; readonly manage: boolean; readonly import: boolean };
 }
