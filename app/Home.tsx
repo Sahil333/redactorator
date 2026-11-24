@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import type { Refusal } from "../engine/api/errors";
 import type { LibraryState, ProjectSummary } from "../engine/api/state";
 import { DropZone } from "./DropZone";
-import type { Refusal } from "./importFiles";
 import { NotAdded } from "./NotAdded";
 import { PickFiles } from "./PickFiles";
 import type { Waiting } from "./useProjectsFolder";
 
 /** A project on the list that can be read. */
-export type Listed = Extract<ProjectSummary, { readonly id: string }>;
+type Listed = Extract<ProjectSummary, { readonly id: string }>;
 
 type Unreadable = Extract<ProjectSummary, { readonly unreadable: string }>;
 
@@ -22,8 +22,6 @@ interface ProjectActions {
 interface HomeProps extends ProjectActions {
   /** The engine's Library; undefined until the engine starts. */
   readonly library: LibraryState | undefined;
-  /** Whether files chosen on Home are being made into a project. */
-  readonly adding: boolean;
   /** The remembered folder, when the page can't use it until the user acts. */
   readonly waiting: Waiting | undefined;
   readonly status: string;
@@ -102,7 +100,7 @@ function Steps() {
 const card = "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-accent/25 bg-accent-wash px-4 py-3";
 
 /** Where the projects are kept, when that asks something of the user: a folder to pick, or Chrome's permission again. */
-function FolderCard({ where, later, folder }: { readonly where: Whereabouts | undefined } & Pick<HomeProps, "later" | "folder">) {
+function FolderCard({ where, later, folder, canChoose }: { readonly where: Whereabouts | undefined; readonly canChoose: boolean } & Pick<HomeProps, "later" | "folder">) {
   if (where === undefined || where.kind === "folder" || (where.kind === "browser" && later)) return null;
   if (where.kind === "moving" || where.kind === "opening") {
     return (
@@ -138,7 +136,7 @@ function FolderCard({ where, later, folder }: { readonly where: Whereabouts | un
         <p className="font-display font-semibold text-base">{title}</p>
         <p className="text-ink-muted">{text}</p>
       </div>
-      <button type="button" onClick={onAction} className="rounded-md bg-ink px-3.5 py-1.5 text-paper hover:bg-ink/85">
+      <button type="button" disabled={!canChoose} onClick={onAction} className="rounded-md bg-ink px-3.5 py-1.5 text-paper enabled:hover:bg-ink/85 disabled:opacity-50">
         {action}
       </button>
       {where.kind === "browser" && (
@@ -396,11 +394,12 @@ function DeleteDialog({ listed, onDelete, onClose }: {
 }
 
 export function Home(props: HomeProps) {
-  const { library, adding, status, error, refused, onDismissRefused, onFiles, folder } = props;
+  const { library, status, error, refused, onDismissRefused, onFiles, folder } = props;
   const projects = library?.projects;
   const where = whereabouts(library, props.waiting);
-  const canAdd = library !== undefined && library.can.create && !adding;
-  const canImport = library !== undefined && library.can.import && !adding;
+  const canAdd = library?.can.create ?? false;
+  const canImport = library?.can.import ?? false;
+  const canChoose = library?.can.switchTo ?? false;
   const empty = projects !== undefined && projects.length === 0;
   const [deleting, setDeleting] = useState<Listed | undefined>(undefined);
   const actions: ProjectActions = { ...props, onDelete: setDeleting };
@@ -425,13 +424,13 @@ export function Home(props: HomeProps) {
         <NotAdded refused={refused} onDismiss={onDismissRefused} />
         {(where?.kind === "reopen" || where?.kind === "missing") && (
           <div className="mx-auto w-full max-w-3xl p-8">
-            <FolderCard where={where} later={props.later} folder={folder} />
+            <FolderCard where={where} later={props.later} folder={folder} canChoose={canChoose} />
           </div>
         )}
         {empty && <EmptyHome canAdd={canAdd} canImport={canImport} onFiles={onFiles} folder={folder} where={where} />}
         {library?.projects !== undefined && !empty && (
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-8">
-            <FolderCard where={where} later={props.later} folder={folder} />
+            <FolderCard where={where} later={props.later} folder={folder} canChoose={canChoose} />
             <h2 className="font-display font-semibold text-2xl">Projects</h2>
             <ProjectList projects={library.projects} actions={actions} can={library.can} />
             <p className="text-ink-muted">

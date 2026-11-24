@@ -328,33 +328,42 @@ export async function holdWrites(page: Page, file?: string): Promise<() => Promi
   };
 }
 
+/** Run in the page: holds the `nth` read of a file named `file`, its bytes read at once, until `releaseRead` is called. */
+function holdReads({ file, nth, key }: { readonly file: string; readonly nth: number; readonly key: string }) {
+  const original = Blob.prototype.bytes;
+  const { promise: released, resolve } = Promise.withResolvers<void>();
+  let count = 0;
+  Reflect.set(globalThis, "releaseRead", resolve);
+  Blob.prototype.bytes = async function () {
+    const bytes = await original.call(this);
+    if (this instanceof File && this.name === file && ++count === nth) {
+      void Reflect.get(globalThis, "fakeActed")(key);
+      await released;
+    }
+    return bytes;
+  };
+}
+
+async function releaseRead(page: Page, fakes: PageFakes, key: string): Promise<void> {
+  await heldSomething(fakes, key);
+  await page.evaluate(() => Reflect.get(globalThis, "releaseRead")());
+}
+
 /**
  * Holds the `nth` read from now on (counting from 1) of a file named `file`: its bytes are read at
  * once, as the file is then, and handed over only on release.
  */
 export async function holdRead(page: Page, file: string, nth: number): Promise<() => Promise<void>> {
   const fakes = await fakesOf(page);
-  await page.evaluate(
-    ({ file, nth }) => {
-      const original = Blob.prototype.bytes;
-      const { promise: released, resolve } = Promise.withResolvers<void>();
-      let count = 0;
-      Reflect.set(globalThis, "releaseRead", resolve);
-      Blob.prototype.bytes = async function () {
-        const bytes = await original.call(this);
-        if (this instanceof File && this.name === file && ++count === nth) {
-          void Reflect.get(globalThis, "fakeActed")("holdRead");
-          await released;
-        }
-        return bytes;
-      };
-    },
-    { file, nth },
-  );
-  return async () => {
-    await heldSomething(fakes, "holdRead");
-    await page.evaluate(() => Reflect.get(globalThis, "releaseRead")());
-  };
+  await page.evaluate(holdReads, { file, nth, key: "holdRead" });
+  return () => releaseRead(page, fakes, "holdRead");
+}
+
+/** As `holdRead`, but counting from the start of each later load of the page, so a read made as the app starts can be held. */
+export async function holdReadFromStart(page: Page, file: string, nth: number): Promise<() => Promise<void>> {
+  const fakes = await fakesOf(page);
+  await page.addInitScript(holdReads, { file, nth, key: "holdReadFromStart" });
+  return () => releaseRead(page, fakes, "holdReadFromStart");
 }
 
 /** Makes every write to the browser's private storage fail from now on, or only the `nth` one (counting from 1). */

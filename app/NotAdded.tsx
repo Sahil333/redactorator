@@ -1,5 +1,6 @@
 import { useId } from "react";
-import type { Refusal } from "./importFiles";
+import type { Refusal } from "../engine/api/errors";
+import { errorText } from "./errors";
 
 interface NotAddedProps {
   readonly refused: readonly Refusal[];
@@ -24,9 +25,9 @@ export function NotAdded({ refused, onDismiss }: NotAddedProps) {
         </button>
       </div>
       <ul className="flex flex-col gap-0.5">
-        {refused.map(({ file, reason }, index) => (
+        {refused.map(({ file, error }, index) => (
           <li key={index}>
-            <span className="font-medium">{file}</span>: {reason}
+            <span className="font-medium">{file}</span>: {errorText(error)}
           </li>
         ))}
       </ul>

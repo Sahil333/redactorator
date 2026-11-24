@@ -1,7 +1,7 @@
-import type { Engine, Session } from "../api/facade";
+import type { Engine, IncomingFile, Session } from "../api/facade";
 import type { EngineState, Problem } from "../api/state";
-import type { Store } from "../storage/store";
 import { createDispatcher } from "./dispatcher";
+import { intake, type Intake } from "./intake";
 import type { LibraryChange } from "./library/changes";
 import { createLibrary, type FirstStore } from "./library/facade";
 import { can } from "./library/gate";
@@ -47,6 +47,7 @@ function publish(root: Root): EngineState {
       place: place.place,
       phase: place.phase,
       settings: settings.settings,
+      creating: settings.creating,
       can: can(root),
       ...(list.projects === undefined ? {} : { projects: list.projects }),
     },
@@ -61,8 +62,8 @@ export interface EngineInterim {
   readonly client: PdfClient;
   /** The open Session's store, folder and project as read; undefined for a Session no longer open. */
   opened(session: Session): OpenSession | undefined;
-  /** The store projects live in now, for creating, changing and importing projects on Home. */
-  store(): Store | undefined;
+  /** Reads chosen files and has the PDF worker inspect them, for adding them to the open project. */
+  intake(files: readonly IncomingFile[]): Promise<Intake>;
   addCustomType(name: string): void;
 }
 
@@ -71,7 +72,8 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
   const client = pdfClient(start.worker);
   const root: Root = { revision: 0, worker: { status: "starting" }, problems: [], library: firstLibrary, session: undefined };
   const dispatcher = createDispatcher(root, reduce);
-  const { library: facade, addCustomType } = createLibrary({ state: dispatcher.getState, dispatch: dispatcher.dispatch, lock: start.lock }, start);
+  const take = (files: readonly IncomingFile[]) => intake(files, client);
+  const { library: facade, addCustomType } = createLibrary({ state: dispatcher.getState, dispatch: dispatcher.dispatch, lock: start.lock, intake: take }, start);
   client.onStatus((status) => dispatcher.dispatch({ type: "workerChanged", worker: workerOf(status) }));
 
   let publishedFrom = dispatcher.getState();
@@ -93,5 +95,5 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
     const open = dispatcher.getState().session;
     return open?.session === session ? open : undefined;
   };
-  return { engine, interim: { client, opened, store: () => dispatcher.getState().library.place.store, addCustomType } };
+  return { engine, interim: { client, opened, intake: take, addCustomType } };
 }

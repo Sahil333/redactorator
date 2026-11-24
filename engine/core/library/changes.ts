@@ -28,5 +28,10 @@ export type LibraryChange =
   | { readonly type: "listed"; readonly projects: readonly ProjectSummary[] }
   | { readonly type: "opened"; readonly session: OpenSession }
   | { readonly type: "closed" }
+  | { readonly type: "createStarted" }
+  | { readonly type: "createEnded" }
+  /** A listed project is locked and read again, as it is stored now, to be changed. */
+  | { readonly type: "changeStarted" }
+  | { readonly type: "imported" }
   | { readonly type: "settingsChanged"; readonly settings: Settings }
   | { readonly type: "problemRaised"; readonly error: EngineError };

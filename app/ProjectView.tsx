@@ -6,13 +6,13 @@ import { DocumentTabs, DOCUMENT_PANEL_ID, tabId } from "./DocumentTabs";
 import { DropZone } from "./DropZone";
 import { Explorer } from "./Explorer";
 import { groundTruth, type DocumentFacts } from "../engine/model/groundTruth";
-import type { Refusal } from "./importFiles";
 import { LabelExport } from "./LabelExport";
 import { itemKey, markKey, toEdits, type Mark } from "../engine/model/marks";
 import type { Tool } from "./marks";
 import { NotAdded } from "./NotAdded";
 import type { DocumentId, Project, ProjectDocument, Settings } from "../engine/model/project";
-import type { StoredFiles, StoredProject } from "../engine/host-browser/interim";
+import type { Refusal } from "../engine/api/errors";
+import type { Interim, StoredFiles, StoredProject } from "../engine/host-browser/interim";
 import type { Appearance } from "../engine/model/document";
 import { newFrom, reachOf } from "../engine/model/spread";
 import type { Store } from "../engine/storage/store";
@@ -39,6 +39,7 @@ export interface ProjectHandle {
 interface ProjectViewProps {
   readonly ref: Ref<ProjectHandle>;
   readonly files: StoredFiles;
+  readonly intake: Interim["intake"];
   readonly store: Store;
   readonly initial: StoredProject;
   /** Files that could not be added when the project was made, still to be shown. */
@@ -97,8 +98,6 @@ function PanelStrip({ panels, onToggle }: { readonly panels: Panels; readonly on
     </div>
   );
 }
-
-const WAIT_FOR_APPROVAL = "This file wasn't added while a document was being approved. Add it again once the approval is done.";
 
 const SAVE_FAILED = "Your latest changes could not be saved. Check that the disk has space; the next change tries again.";
 
@@ -257,7 +256,7 @@ function DocumentPanel({ active, shown, missing, pageInView, onPageInView, ...wo
 }
 
 const addingUnless = (approving: boolean, adder: ReturnType<typeof useAddDocuments>) => (files: readonly File[]) =>
-  approving ? adder.refuse(files, WAIT_FOR_APPROVAL) : adder.add(files);
+  approving ? adder.refuse(files, "add-while-approving") : adder.add(files);
 
 function openInTabs(tabs: ReturnType<typeof useTabs>, documents: readonly ProjectDocument[]) {
   for (const document of documents) tabs.open(document.id);
@@ -274,7 +273,7 @@ export function ProjectView(props: ProjectViewProps) {
   const { active } = tabs;
   const activeDocument = documentOf(project, active);
   const { shown, missing } = useDocumentInEngine(files, store, opened.folder, activeDocument, engine);
-  const adder = useAddDocuments(files, store, { folder: opened.folder, project }, engine, props.initialRefused, (documents) => {
+  const adder = useAddDocuments({ stored: files, intake: props.intake }, store, { folder: opened.folder, project }, engine, props.initialRefused, (documents) => {
     opened.addDocuments(documents);
     openInTabs(tabs, documents);
   });

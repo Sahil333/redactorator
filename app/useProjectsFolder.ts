@@ -8,7 +8,7 @@ import type { Store } from "../engine/storage/store";
 import { pickFolder, rememberedFolder, rememberFolder, stillThere } from "./projectsFolder";
 
 // Projects are kept until the browser is told otherwise; Chrome decides without asking the user.
-export const keepStorage = () => void navigator.storage.persist().catch(() => undefined);
+const keepStorage = () => void navigator.storage.persist().catch(() => undefined);
 
 type FirstStore = Parameters<typeof createBrowserEngine>[0];
 
