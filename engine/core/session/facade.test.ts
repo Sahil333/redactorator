@@ -44,6 +44,7 @@ function sessionOver(project: Project) {
       for (const effect of effects) effect();
     },
     client,
+    intake: () => Promise.resolve({ added: [], refused: [] }),
     addCustomType: () => undefined,
   };
   open = openSession(host, { store, folder: "Letters", project }, { release: () => undefined }, () => undefined);

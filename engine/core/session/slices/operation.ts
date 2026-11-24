@@ -15,6 +15,9 @@ const changesRecord = new Set<SessionChange["type"]>(["markAdded", "markRetyped"
 
 /** What the Session does after each record that starts or ends an operation. */
 const operationAfter: Partial<Record<SessionChange["type"], SessionState["operation"]>> = {
+  addStarted: "adding",
+  documentsAdded: "idle",
+  addFailed: "idle",
   planning: "planning",
   planned: "confirming",
   approved: "idle",

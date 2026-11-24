@@ -54,6 +54,7 @@ export type ErrorCode =
   | "empty-target"
   | "empty-box"
   | "worker-not-ready"
+  | "busy-adding"
   | "busy-approving"
   | "busy-applying"
   | "no-plan";

@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useState, type Ref } from "react";
+import { useEffect, useState } from "react";
 import type { PageIndex } from "../engine/model/geometry";
 import { ApproveDialog } from "./ApproveDialog";
 import { baseName, download } from "./download";
@@ -13,36 +13,24 @@ import type { DocumentId, Project, ProjectDocument, Settings } from "../engine/m
 import type { Refusal } from "../engine/api/errors";
 import type { Session } from "../engine/api/facade";
 import type { DocumentHandle, EngineState, SessionState } from "../engine/api/state";
-import type { Interim } from "../engine/host-browser/interim";
 import type { Appearance } from "../engine/model/document";
-import type { Store } from "../engine/storage/store";
 import { TopBar, type Editing, type History } from "./TopBar";
 import { engineStatus } from "./engineStatus";
-import { useAddDocuments } from "./useAddDocuments";
 import { useDocumentInEngine } from "./useDocumentInEngine";
 import type { useEngineError } from "./useEngineError";
 import { useHandOffFocus } from "./useHandOffFocus";
 import { useImages } from "./useImages";
+import { incomingFiles } from "./incomingFiles";
 import { useMarks } from "./useMarks";
-import { useProject } from "./useProject";
 import { errorText } from "./errors";
 import { useTabs } from "./useTabs";
 import { useUndoKeys } from "./useUndoKeys";
 import { initialWidths, Workspace, type Review } from "./Workspace";
 
-/** What the app asks of the open project before leaving it. */
-export interface ProjectHandle {
-  /** Resolves once no add is under way, so it lands in the project before it closes. */
-  settled(): Promise<void>;
-}
-
 interface ProjectViewProps {
-  readonly ref: Ref<ProjectHandle>;
   readonly session: Session;
   /** The Session's part of the engine's state. */
   readonly opened: SessionState;
-  readonly interim: Interim;
-  readonly store: Store;
   /** Files that could not be added when the project was made, still to be shown. */
   readonly initialRefused: readonly Refusal[];
   readonly worker: EngineState["worker"];
@@ -130,7 +118,7 @@ function reviewOf(session: Session, { project, reach, newFrom }: SessionState, d
 
 const documentOf = (project: Project, id: DocumentId | undefined) => project.documents.find((document) => document.id === id);
 
-/** Undo and redo on the tab's record, which need no document open. `waiting`: the app has something under way. */
+/** Undo and redo on the tab's record, which need no document open. `waiting`: a mark waits for its type. */
 const historyOf = (session: Session, can: SessionState["can"], active: DocumentId, waiting: boolean): History => ({
   canUndo: !waiting && can.undo.has(active),
   canRedo: !waiting && can.redo.has(active),
@@ -140,21 +128,19 @@ const historyOf = (session: Session, can: SessionState["can"], active: DocumentI
 
 /** Marking the open document: its marks, undo and redo, approving, and the controls the top bar shows. */
 function useEditing(
-  { session, opened: { can, output }, onAppearance }: Pick<ProjectViewProps, "session" | "opened" | "onAppearance">,
-  opened: ReturnType<typeof useProject>,
+  { session, opened: { project, can, output }, onAppearance }: Pick<ProjectViewProps, "session" | "opened" | "onAppearance">,
   { active, shown }: { readonly active: DocumentId | undefined; readonly shown: DocumentHandle | undefined },
   settings: Settings,
-  { adding, onFailure }: { readonly adding: boolean; readonly onFailure: ReturnType<typeof useEngineError> },
+  onFailure: ReturnType<typeof useEngineError>,
 ) {
   const [tool, setTool] = useState<Tool>("text");
   const [exporting, setExporting] = useState(false);
   const [lastFacts, setLastFacts] = useState<DocumentFacts | undefined>(undefined);
   const focus = useHandOffFocus(output !== undefined);
-  const activeDocument = documentOf(opened.project, active);
+  const activeDocument = documentOf(project, active);
   const images = useImages(session, active);
   const marking = useMarks(session, shown, activeDocument?.marks ?? [], settings.customTypes);
-  // Adding and approving each change the whole project, so Approve waits for an add.
-  const waiting = marking.pending !== undefined || adding;
+  const waiting = marking.pending !== undefined;
   const busy = waiting || !can.apply || !can.approve;
   const history = active && historyOf(session, can, active, waiting);
   useUndoKeys(history);
@@ -236,21 +222,31 @@ function DocumentPanel({ active, shown, missing, pageInView, onPageInView, ...wo
   );
 }
 
-const addingUnless = (approving: boolean, adder: ReturnType<typeof useAddDocuments>) => (files: readonly File[]) =>
-  approving ? adder.refuse(files, "add-while-approving") : adder.add(files);
-
-/** Whether approval is working out what spreads, or waits for its heads-up. */
-const isApproving = ({ operation }: SessionState) => operation === "planning" || operation === "confirming";
-
-/** What may start now. Adding and approving each change the whole project, so neither starts while the other runs. */
-function allowed({ worker, opened }: Pick<ProjectViewProps, "worker" | "opened">, adding: boolean) {
-  return { canAdd: !adding && !isApproving(opened) && worker.status !== "stopped", canSwitch: opened.can.switchDocument && !adding };
+/**
+ * Adds chosen files to the project, and keeps the "files not added" notice: an add replaces it
+ * with its own refusals, and one refused as a whole lists each file under the notice already shown.
+ * `onAdded` gets the documents that joined.
+ */
+function useAddFiles(session: Session, initialRefused: readonly Refusal[], onAdded: (added: readonly DocumentId[]) => void) {
+  const [refused, setRefused] = useState(initialRefused);
+  function add(files: readonly File[]) {
+    void session.documents.add(incomingFiles(files)).then((result) => {
+      if (result.ok) {
+        setRefused(result.value.refused);
+        onAdded(result.value.added);
+      } else if (errorText(result.error) !== undefined) {
+        // A refusal the app shows no sentence for came from a control it had disabled.
+        setRefused((current) => [...current, ...files.map(({ name }) => ({ file: name, error: result.error }))]);
+      }
+    });
+  }
+  return { refused, add, dismiss: () => setRefused([]) };
 }
 
-function openInTabs(tabs: ReturnType<typeof useTabs>, documents: readonly ProjectDocument[]) {
-  for (const document of documents) tabs.open(document.id);
+function openInTabs(tabs: ReturnType<typeof useTabs>, documents: readonly DocumentId[]) {
+  for (const document of documents) tabs.open(document);
   const [first] = documents;
-  if (first !== undefined) tabs.open(first.id);
+  if (first !== undefined) tabs.open(first);
 }
 
 /** Saves every change so far when the page is left. */
@@ -267,29 +263,18 @@ function useFlushOnLeave(session: Session) {
 
 /** An open project: its documents in the explorer and tabs, the open document's pages and marks. */
 export function ProjectView(props: ProjectViewProps) {
-  const { session, interim, store, worker, failure, settings, labelling, onClose } = props;
-  const { output, save } = props.opened;
-  const opened = useProject(session, props.opened, interim);
+  const { session, worker, failure, settings, labelling, onClose } = props;
+  const { project, output, save, can } = props.opened;
   useFlushOnLeave(session);
-  const { project } = opened;
   const tabs = useTabs(project.id, project.documents);
   const { active } = tabs;
   const activeDocument = documentOf(project, active);
-  const { shown, missing } = useDocumentInEngine(session, props.opened.open, activeDocument, props.opened.can.switchDocument, failure);
-  const adder = useAddDocuments(interim, store, { folder: opened.folder, project }, worker.status === "stopped", props.initialRefused, (documents) => {
-    opened.addDocuments(documents);
-    openInTabs(tabs, documents);
-  });
-  const { marking, history, editing, tool, focus, labels, images } = useEditing(props, opened, { active, shown }, settings, {
-    adding: adder.adding,
-    onFailure: failure,
-  });
-  useImperativeHandle(props.ref, () => ({ settled: adder.settled }));
+  const { shown, missing } = useDocumentInEngine(session, props.opened.open, activeDocument, can.switchDocument, failure);
+  const adder = useAddFiles(session, props.initialRefused, (added) => openInTabs(tabs, added));
+  const { marking, history, editing, tool, focus, labels, images } = useEditing(props, { active, shown }, settings, failure);
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });
   const [pageInView, setPageInView] = useState<PageInView | undefined>(undefined);
   const [widths, setWidths] = useState(initialWidths);
-  const addFiles = addingUnless(isApproving(props.opened), adder);
-  const { canAdd, canSwitch } = allowed(props, adder.adding);
   const byId = new Map(project.documents.map((document) => [document.id, document]));
   const openDocuments = tabs.tabs.flatMap((id) => byId.get(id) ?? []);
 
@@ -301,8 +286,8 @@ export function ProjectView(props: ProjectViewProps) {
         onProjects={onClose}
         saveState={save}
         status={statusText(worker, shown, pageOf(pageInView, active))}
-        canAdd={canAdd}
-        onAdd={addFiles}
+        canAdd={can.add}
+        onAdd={adder.add}
         history={history}
         editing={shown !== undefined && output === undefined ? editing : undefined}
       />
@@ -310,11 +295,11 @@ export function ProjectView(props: ProjectViewProps) {
       <ApproveDialog session={session} approval={props.opened.approval} documents={project.documents} />
       <div className="flex min-h-0">
         <PanelStrip panels={panels} onToggle={(id) => setPanels((current) => ({ ...current, [id]: !current[id] }))} />
-        {panels.documents && <Explorer documents={project.documents} active={active} canOpen={canSwitch} onOpen={tabs.open} />}
+        {panels.documents && <Explorer documents={project.documents} active={active} canOpen={can.switchDocument} onOpen={tabs.open} />}
         <div className="flex min-w-0 flex-1 flex-col">
           <Alerts saveFailed={save === "failed"} problems={[props.problem]} />
           <NotAdded refused={adder.refused} onDismiss={adder.dismiss} />
-          <DocumentTabs documents={openDocuments} active={active} canSwitch={canSwitch} onSelect={tabs.open} onClose={tabs.close} />
+          <DocumentTabs documents={openDocuments} active={active} canSwitch={can.switchDocument} onSelect={tabs.open} onClose={tabs.close} />
           <DocumentPanel
             active={active}
             shown={shown}
@@ -324,7 +309,7 @@ export function ProjectView(props: ProjectViewProps) {
             session={session}
             output={output}
             ready={worker.status === "ready"}
-            canMark={props.opened.can.mark}
+            canMark={can.mark}
             error={failure.error}
             onFailure={failure.failed}
             marks={marking}
@@ -332,7 +317,7 @@ export function ProjectView(props: ProjectViewProps) {
             images={images}
             tool={tool}
             labelling={labelling}
-            onFiles={addFiles}
+            onFiles={adder.add}
             showPages={panels.pages}
             widths={widths}
             onWidths={setWidths}

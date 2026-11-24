@@ -1,5 +1,5 @@
 import type { ErrorCode } from "../../api/errors";
-import type { EngineState } from "../../api/state";
+import type { EngineState, SessionState } from "../../api/state";
 import type { DocumentId, Settings } from "../../model/project";
 import type { SessionParts } from "./slices";
 
@@ -12,34 +12,22 @@ export interface SessionView {
 
 /**
  * The Session's commands, by what the gate asks of each. `add` is `marks.add`; `mark` is the other
- * mark commands and `labelling.link`; `history` is undo and redo; `change` is a change the app's
- * hooks worked out, landed through `interim`; `approve` is `approval.plan`, and `confirm` its
- * `confirm` and `cancel`; `addDocuments` runs in the app until step 6d, and the gate only fills `can`
- * for it; `query` is the queries, and Back to editing.
+ * mark commands and `labelling.link`; `history` is undo and redo; `approve` is `approval.plan`, and
+ * `confirm` its `confirm` and `cancel`; `addDocuments` is `documents.add`; `query` is the queries,
+ * and Back to editing.
  */
-type SessionCommand =
-  | "add"
-  | "mark"
-  | "history"
-  | "markDownloaded"
-  | "change"
-  | "open"
-  | "apply"
-  | "approve"
-  | "confirm"
-  | "addDocuments"
-  | "query"
-  | "close";
+type SessionCommand = "add" | "mark" | "history" | "markDownloaded" | "open" | "apply" | "approve" | "confirm" | "addDocuments" | "query" | "close";
 
 /** Refused while the PDF worker is starting or stopped. */
 const needsWorker = new Set<SessionCommand>(["history", "apply", "approve"]);
-/** Refused while an apply runs. */
-const waitsForApply = new Set<SessionCommand>(["history", "open", "apply", "approve", "addDocuments"]);
+/** Refused while an apply runs, or documents are being added, with the code each gives. */
+const oneOperation = new Set<SessionCommand>(["history", "open", "apply", "approve", "addDocuments"]);
+const busy: Partial<Record<SessionState["operation"], ErrorCode>> = { applying: "busy-applying", adding: "busy-adding" };
 /**
  * Refused while approval plans or its heads-up is open: every command that changes the project
  * record, and every other operation, so the plan always lands on the record it was made from.
  */
-const waitsForApproval = new Set<SessionCommand>(["add", "mark", "history", "markDownloaded", "change", "apply", "approve", "addDocuments"]);
+const waitsForApproval = new Set<SessionCommand>(["add", "mark", "history", "markDownloaded", "apply", "approve", "addDocuments"]);
 
 /** Why `command` is refused while approval works out what spreads, or waits for its heads-up. */
 function approving({ operation }: SessionView["parts"]["operation"], command: SessionCommand): ErrorCode | undefined {
@@ -56,7 +44,8 @@ export function gate({ worker, parts }: SessionView, command: SessionCommand, do
   if (document !== undefined && !parts.record.present.project.documents.some(({ id }) => id === document)) return "unknown-document";
   const approval = approving(parts.operation, command);
   if (approval !== undefined) return approval;
-  if (waitsForApply.has(command) && parts.operation.operation === "applying") return "busy-applying";
+  const running = busy[parts.operation.operation];
+  if (running !== undefined && oneOperation.has(command)) return running;
   if (needsWorker.has(command) && (worker.status === "starting" || worker.status === "stopped")) return "worker-not-ready";
   if (command === "addDocuments" && worker.status === "stopped") return "worker-not-ready";
   // A mark needs only the page text the Session holds: it is taken during an apply, whose output
