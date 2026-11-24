@@ -1,4 +1,4 @@
-import type { PageText, Pixels, PlacedImage } from "../model/document";
+import type { PageText, Pixels, PlacedImage, Source } from "../model/document";
 import type { Box, PageIndex } from "../model/geometry";
 import type { DocumentFacts, GroundTruth } from "../model/groundTruth";
 import type { MarkType } from "../model/markTypes";
@@ -74,7 +74,7 @@ export interface Session {
   readonly viewer: {
     /** Opens `document` in the PDF worker, in place of the one open before. */
     open(document: DocumentId): Promise<Result<DocumentHandle>>;
-    render(handle: DocumentHandle, source: "original" | "output", page: PageIndex, scale: number): Promise<Result<Pixels>>;
+    render(handle: DocumentHandle, source: Source, page: PageIndex, scale: number): Promise<Result<Pixels>>;
     /** Fetched once per page; `marks.add` needs the text of each page a mark is on. */
     pageText(handle: DocumentHandle, page: PageIndex): Promise<Result<PageText>>;
     /** The document's images a box can spread over; undefined when they can't be known. */
