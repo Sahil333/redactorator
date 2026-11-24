@@ -1,8 +1,7 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { PageModel } from "../engine/model/document";
-import { fittingScale } from "./pageGeometry";
+import { CSS_PIXELS_PER_POINT, fittingScale } from "./pageGeometry";
 import { PAGE_LIST_PADDING } from "./PageList";
-import { CSS_PIXELS_PER_POINT } from "./useEngine";
 
 
 /** How large pages are shown: fitted to the pane, or a share of their printed size. */

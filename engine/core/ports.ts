@@ -13,3 +13,14 @@ export interface LockPort {
 export interface LockHold {
   release(): void;
 }
+
+/** Messages to and from one worker the host started. It carries them without reading them. */
+export interface WorkerChannel {
+  post(message: unknown, transfer?: ArrayBuffer[]): void;
+  onMessage(listener: (data: unknown) => void): void;
+  /** A message arrived that could not be read. */
+  onMessageError(listener: () => void): void;
+  /** The worker failed, or could not start. */
+  onError(listener: () => void): void;
+  terminate(): void;
+}

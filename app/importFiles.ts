@@ -1,6 +1,7 @@
 import { newDocumentId } from "../engine/model/project";
 import type { NewDocument } from "./projects";
-import type { Inspection } from "./useEngine";
+import type { PdfClient } from "../engine/core/pdf-client/client";
+import { errorText } from "./errors";
 
 /** A file the user chose that was not added, and why. DOC-4: nothing is left out silently. */
 export interface Refusal {
@@ -23,7 +24,7 @@ async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
 /** Reads each chosen file and has the engine inspect it, in the order a folder lists them. */
 export async function prepareFiles(
   files: readonly File[],
-  inspect: (bytes: Uint8Array) => Promise<Inspection>,
+  inspect: PdfClient["inspect"],
 ): Promise<{ readonly added: NewDocument[]; readonly refused: Refusal[] }> {
   const added: NewDocument[] = [];
   const refused: Refusal[] = [];
@@ -41,8 +42,8 @@ export async function prepareFiles(
       continue;
     }
     const inspection = await inspect(bytes);
-    if ("error" in inspection) refused.push({ file: file.name, reason: inspection.error.message });
-    else added.push({ id: newDocumentId(), file: file.name, bytes, sha256: await sha256(bytes), reading: inspection });
+    if ("code" in inspection) refused.push({ file: file.name, reason: errorText(inspection) ?? "" });
+    else added.push({ id: newDocumentId(), file: file.name, bytes, sha256: await sha256(bytes), reading: inspection.reading });
   }
   return { added, refused };
 }

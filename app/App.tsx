@@ -4,6 +4,7 @@ import { Home } from "./Home";
 import { prepareFiles, type Refusal } from "./importFiles";
 import { createProject, duplicateProject, nameFromFile, saveProject, type ProjectEntries, type StoredProject } from "./projects";
 import { ProjectView, type ProjectHandle } from "./ProjectView";
+import { errorText } from "./errors";
 import { engineStatus, useEngine } from "./useEngine";
 import { keepStorage, useProjectStore } from "./useProjectStore";
 
@@ -163,7 +164,7 @@ export function App() {
       projects={projects}
       canAdd={store !== undefined && engine.state === "ready" && !adding && !settling}
       status={engineStatus(engine) ?? ""}
-      error={engine.error ?? problem}
+      error={errorText(engine.error) ?? problem}
       refused={refused}
       onDismissRefused={() => setRefused([])}
       onFiles={(files) => void startProject(files)}

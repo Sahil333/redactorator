@@ -72,6 +72,13 @@ export interface DocumentFound extends Found {
   readonly page: PageIndex;
 }
 
+/** A drawn page: `width` by `height` pixels, row by row, four bytes each (red, green, blue, alpha). */
+export interface Pixels {
+  readonly width: number;
+  readonly height: number;
+  readonly rgba: Uint8ClampedArray<ArrayBuffer>;
+}
+
 export type PdfReply =
   | { readonly type: "ready" }
   | { readonly type: "inspected"; readonly inspection: InspectionNumber; readonly reading: Reading }
@@ -83,7 +90,7 @@ export type PdfReply =
       readonly file: FileNumber;
       readonly source: Source;
       readonly page: PageIndex;
-      readonly image: ImageData;
+      readonly image: Pixels;
     }
   | { readonly type: "text"; readonly file: FileNumber; readonly page: PageIndex; readonly text: PageText }
   // Sent only when the output passed every check; otherwise an error with code check-failed.

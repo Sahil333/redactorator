@@ -264,6 +264,8 @@ function render(file: FileNumber, source: Source, index: PageIndex, scale: numbe
     const height = pixmap.getHeight();
     const stride = pixmap.getStride();
     const rgb = pixmap.getPixels();
+    // An empty page has no pixels to draw; the reply's parser refuses one, as ImageData did.
+    if (width === 0 || height === 0) throw new RangeError("The page is empty");
     const rgba = new Uint8ClampedArray(width * height * 4);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -275,8 +277,7 @@ function render(file: FileNumber, source: Source, index: PageIndex, scale: numbe
         rgba[to + 3] = 255;
       }
     }
-    const image = new ImageData(rgba, width, height);
-    post({ type: "rendered", file, source, page: index, image }, [rgba.buffer]);
+    post({ type: "rendered", file, source, page: index, image: { width, height, rgba } }, [rgba.buffer]);
   } catch {
     fail(file, "render-failed", `Page ${index + 1} could not be drawn. Open the PDF again.`);
   } finally {

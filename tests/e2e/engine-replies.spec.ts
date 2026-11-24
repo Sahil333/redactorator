@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "./coverage";
 import { oneWordPdf, openApp, openPdf, twoPagePdf } from "./app";
-import { failWorkerStart, replyWith, staleOpenReply } from "./fakes";
+import { errorAfterOpen, failWorkerStart, replyWith, staleOpenReply } from "./fakes";
 
 test("an engine that fails to start says so and disables the picker", async ({ page }) => {
   await failWorkerStart(page);
@@ -23,6 +23,15 @@ test("an engine reply the app cannot read stops the engine", async ({ page }) =>
   await expect(page.getByLabel("Choose PDFs")).toBeDisabled();
 });
 
+test("a request the engine could not read is reported with the engine's own sentence, and the engine keeps running", async ({ page }) => {
+  const sentence = "The engine got a message it does not know. Reload the page to try again.";
+  await replyWith(page, { type: "error", error: { code: "bad-message", message: sentence } });
+  await page.goto("/");
+
+  await expect(page.getByRole("alert")).toHaveText(sentence);
+  await expect(page.getByLabel("Choose PDFs")).toBeEnabled();
+});
+
 test("a reply about a document the user has since left is ignored", async ({ page }) => {
   await staleOpenReply(page);
   await openApp(page);
@@ -34,4 +43,13 @@ test("a reply about a document the user has since left is ignored", async ({ pag
   // The first document's late answer shows none of its pages, which the fake never draws.
   await expect(page.getByRole("status")).not.toHaveText(/^Page \d+ of \d+$/);
   await expect(page.getByRole("img", { name: "Page 1" })).toHaveCount(0);
+});
+
+test("an error about the open document that answers no request is still shown", async ({ page }) => {
+  await errorAfterOpen(page, "Something went wrong with this document.");
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveText("Something went wrong with this document.");
 });

@@ -19,15 +19,16 @@ async function readingOf(store: Store, folder: string, document: ProjectDocument
   const original = await findOriginal(store, folder, document);
   if (original === undefined) return undefined;
   const inspection = await engine.inspect(original);
-  if ("error" in inspection) throw new ReadingUnavailable();
+  if ("code" in inspection) throw new ReadingUnavailable();
+  const { reading } = inspection;
   // Kept so the next search needn't read the original again; a newer version's file is left for
   // that version. A failed save costs only that, so it doesn't stop the search.
   const keep = (save: Promise<void>) => save.catch(() => undefined);
   await Promise.all([
-    texts === "newer" ? undefined : keep(saveTexts(store, folder, document.id, inspection.texts)),
-    images === "newer" ? undefined : keep(saveImages(store, folder, document.id, inspection.images)),
+    texts === "newer" ? undefined : keep(saveTexts(store, folder, document.id, reading.texts)),
+    images === "newer" ? undefined : keep(saveImages(store, folder, document.id, reading.images)),
   ]);
-  return inspection;
+  return reading;
 }
 
 /**
@@ -62,9 +63,9 @@ export async function findPlaces(
   documents: readonly { readonly id: DocumentId; readonly texts: readonly PageText[] }[],
 ): Promise<TextPlace[]> {
   if (keys.length === 0 || documents.length === 0) return [];
-  const result = await engine.match(keys, documents.map(({ texts }) => texts.map((text) => text.chars.map((char) => char.c))));
-  if ("error" in result) throw new ReadingUnavailable();
-  return result.found.flatMap(({ document, key, page, start, end }) => {
+  const found = await engine.match(keys, documents);
+  if ("code" in found) throw new ReadingUnavailable();
+  return found.flatMap(({ document, key, page, start, end }) => {
     const id = documents[document]?.id;
     const value = keys[key];
     return id === undefined || value === undefined ? [] : [{ document: id, key: value, page, start, end }];

@@ -1,22 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import type { Appearance, DocumentModel, Edit, PageText, Reading, Source } from "../engine/model/document";
+import type { Appearance, DocumentModel, Edit, PageText, Source } from "../engine/model/document";
 import { isPageIndex, type PageIndex } from "../engine/model/geometry";
-import {
-  isFileNumber,
-  isInspectionNumber,
-  isMatchNumber,
-  type DocumentFound,
-  type FileNumber,
-  type InspectionNumber,
-  type MatchNumber,
-  type PdfError,
-  type PdfReply,
-  type PdfRequest,
-} from "../engine/pdf-protocol/messages";
-import { isAboutOlderFile, parsePdfReply } from "../engine/pdf-protocol/parse";
-
-// PDF points are 1/72 inch and CSS pixels 1/96 inch, so this shows a page at its printed size.
-export const CSS_PIXELS_PER_POINT = 96 / 72;
+import type { Pixels } from "../engine/pdf-protocol/messages";
+import { pdfClient, type Applied, type PdfClient, type WorkerStatus } from "../engine/core/pdf-client/client";
+import type { ClientError } from "../engine/core/pdf-client/errors";
+import { notRunning } from "../engine/core/pdf-client/waiting";
+import { startPdfWorker } from "../engine/host-browser/workerChannel";
+import { CSS_PIXELS_PER_POINT } from "./pageGeometry";
 
 /** What the engine is doing when that is all there is to say, or undefined while it is ready. */
 export function engineStatus(engine: Pick<Engine, "state">): string | undefined {
@@ -46,8 +36,6 @@ function makeRoom(fine: PageOf[], page: PageOf): PageOf | undefined {
   return fine.length > MAX_FINE_PAGES ? fine.shift() : undefined;
 }
 
-type EngineState = "starting" | "ready" | "applying" | "stopped";
-
 /** A PDF to open: its name, its bytes and their SHA-256, for labelling mode's ground truth. */
 export interface PdfSource {
   readonly name: string;
@@ -56,36 +44,23 @@ export interface PdfSource {
 }
 
 export interface OpenDocument extends Omit<PdfSource, "bytes"> {
-  readonly file: FileNumber;
-  readonly model: DocumentModel;
-}
-
-/** What inspecting a file found: its pages' text and images, or why it cannot be added. */
-export type Inspection = Reading | { readonly error: PdfError };
-
-/** Where a search found its keys, or why it could not run. */
-export type Matches = { readonly found: readonly DocumentFound[] } | { readonly error: PdfError };
-
-/** A cleaned file that passed the engine's check. */
-interface Output {
-  readonly bytes: ArrayBuffer;
   readonly model: DocumentModel;
 }
 
 type Images = ReadonlyMap<PageIndex, ImageData>;
 
 export interface Engine {
-  readonly state: EngineState;
+  readonly state: WorkerStatus["state"];
   readonly document: OpenDocument | undefined;
   readonly images: Readonly<Record<Source, Images>>;
   readonly texts: ReadonlyMap<PageIndex, PageText>;
-  readonly output: Output | undefined;
-  readonly error: string | undefined;
+  readonly output: Applied | undefined;
+  readonly error: ClientError | undefined;
   open(source: PdfSource): void;
   /** Whether the engine can work on `bytes`. */
-  inspect(bytes: Uint8Array): Promise<Inspection>;
-  /** Where each key is in each document, given as each page's characters. */
-  match(keys: readonly string[], documents: readonly (readonly (readonly string[])[])[]): Promise<Matches>;
+  inspect: PdfClient["inspect"];
+  /** Where each key is in each document's text. */
+  match: PdfClient["match"];
   /** Asks for a page's image from `source` at `detail`, and for the original's text, once each. */
   show(source: Source, page: PageIndex, detail?: RenderDetail): void;
   apply(edits: readonly Edit[], appearance: Appearance): void;
@@ -94,49 +69,11 @@ export interface Engine {
 
 const noImages = { original: new Map(), output: new Map() } satisfies Record<Source, Images>;
 
-/** Requests the engine answers in turn, each waiting for its answer. */
-class Waiting<N extends number, T> {
-  private latest = 0;
-  private stopped = false;
-  private readonly waiting = new Map<N, (answer: T | { readonly error: PdfError }) => void>();
-
-  constructor(private readonly isNumber: (value: unknown) => value is N) {}
-
-  ask(send: (number: N) => void): Promise<T | { readonly error: PdfError }> {
-    const number = this.latest + 1;
-    // Once the engine has stopped, nothing would ever answer.
-    if (this.stopped || !this.isNumber(number)) return Promise.resolve(notRunning);
-    this.latest = number;
-    return new Promise((resolve) => {
-      this.waiting.set(number, resolve);
-      send(number);
-    });
-  }
-
-  answer(number: N, result: T | { readonly error: PdfError }) {
-    this.waiting.get(number)?.(result);
-    this.waiting.delete(number);
-  }
-
-  stop(message: string) {
-    this.stopped = true;
-    for (const answer of this.waiting.values()) answer({ error: { code: "bad-message", message } });
-    this.waiting.clear();
-  }
-}
-
-const notRunning: { readonly error: PdfError } = { error: { code: "bad-message", message: "The PDF engine is not running. Reload the page to try again." } };
-
 /** The images with a newly drawn page in them. A finer image is kept over a coarser one that arrives after it. */
-function withImage(current: Record<Source, Images>, { source, page, image }: Extract<PdfReply, { type: "rendered" }>) {
+function withImage(current: Record<Source, Images>, source: Source, page: PageIndex, { width, height, rgba }: Pixels) {
   const shown = current[source].get(page);
-  if (shown !== undefined && shown.width >= image.width) return current;
-  return { ...current, [source]: new Map(current[source]).set(page, image) };
-}
-
-/** Sends the requests held back until the worker was ready, in the order they were made. */
-function sendHeld(worker: Worker, held: readonly [PdfRequest, Transferable[]][] | undefined) {
-  for (const [request, transfer] of held ?? []) worker.postMessage(request, transfer);
+  if (shown !== undefined && shown.width >= width) return current;
+  return { ...current, [source]: new Map(current[source]).set(page, new ImageData(rgba, width, height)) };
 }
 
 /** Forgets every request whose key starts with `prefix`, so each is made again when next wanted. */
@@ -145,129 +82,79 @@ function forgetRequests(requested: Set<string>, prefix: string) {
 }
 
 export function useEngine(): Engine {
-  const workerRef = useRef<Worker | undefined>(undefined);
-  // The worker listens only once MuPDF has loaded; anything sent before it says so would be lost.
-  const beforeReady = useRef<[PdfRequest, Transferable[]][] | undefined>([]);
-  const latestFile = useRef(0);
+  const client = useRef<PdfClient | undefined>(undefined);
   const picked = useRef({ name: "", sha256: "" });
-  const [{ inspections, matches }] = useState(() => ({
-    inspections: new Waiting<InspectionNumber, Extract<Inspection, { texts: unknown }>>(isInspectionNumber),
-    matches: new Waiting<MatchNumber, Extract<Matches, { found: unknown }>>(isMatchNumber),
-  }));
+  // The client acts on the document opened last, so a request from a render made before then
+  // must not reach it: it would ask the new document about the old one's pages or marks.
+  const opened = useRef<OpenDocument | undefined>(undefined);
   const requested = useRef(new Set<string>());
   // The pages drawn at detail 2, oldest first. One can take some 55 MB at a pixel ratio of 2,
   // so only the latest few are kept; an older one is drawn again if it is shown again.
   const fine = useRef<PageOf[]>([]);
   // False once the marks change while an apply is under way: its output would not match them.
   const outputWanted = useRef(false);
-  const [state, setState] = useState<EngineState>("starting");
+  const [state, setState] = useState<WorkerStatus["state"]>("starting");
   const [document, setDocument] = useState<OpenDocument | undefined>(undefined);
   const [images, setImages] = useState<Record<Source, Images>>(noImages);
   const [texts, setTexts] = useState<ReadonlyMap<PageIndex, PageText>>(new Map());
-  const [output, setOutput] = useState<Output | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
+  const [output, setOutput] = useState<Applied | undefined>(undefined);
+  const [error, setError] = useState<ClientError | undefined>(undefined);
 
   useEffect(() => {
-    const worker = new Worker(new URL("../engine/worker.ts", import.meta.url), { type: "module" });
-    workerRef.current = worker;
-    const stop = (message: string) => {
-      // Fail closed: no later reply can redraw a page or re-enable the picker,
-      // and the worker's copy of the document is freed.
-      worker.terminate();
-      setState("stopped");
-      setOutput(undefined);
-      setError(message);
-      inspections.stop(message);
-      matches.stop(message);
-    };
-
-    worker.addEventListener("message", (event: MessageEvent<unknown>) => {
-      const message = parsePdfReply(event.data);
-      if (message === undefined) {
-        stop("The PDF engine sent something unexpected. Reload the page to try again.");
-        return;
-      }
-      if (isAboutOlderFile(message, latestFile.current)) return;
-      switch (message.type) {
-        case "ready":
-          setState("ready");
-          sendHeld(worker, beforeReady.current);
-          beforeReady.current = undefined;
-          break;
-        case "inspected":
-          inspections.answer(message.inspection, message.reading);
-          break;
-        case "matched":
-          matches.answer(message.match, { found: message.found });
-          break;
-        case "refused":
-          inspections.answer(message.inspection, { error: message.error });
-          break;
-        case "opened":
-          setDocument({ file: message.file, ...picked.current, model: message.document });
-          break;
-        case "rendered":
-          // A page forgotten while its image was on its way, to make room, stays forgotten.
-          if (!DETAILS.some((detail) => requested.current.has(renderKey(message.source, message.page, detail)))) break;
-          setImages((current) => withImage(current, message));
-          break;
-        case "text":
-          setTexts((current) => new Map(current).set(message.page, message.text));
-          break;
-        case "applied":
-          setState("ready");
-          if (outputWanted.current) setOutput({ bytes: message.bytes, model: message.output });
-          break;
-        case "error":
-          setState((current) => (current === "applying" ? "ready" : current));
-          setError(message.error.message);
-          break;
-      }
+    const channel = startPdfWorker();
+    const started = pdfClient(channel);
+    client.current = started;
+    const unsubscribe = started.onStatus((status) => {
+      setState(status.state);
+      // Once stopped, no output can be trusted to match what is shown.
+      if (status.state === "stopped") setOutput(undefined);
+      if (status.error !== undefined) setError(status.error);
     });
-    worker.addEventListener("messageerror", () =>
-      stop("The PDF engine sent something unreadable. Reload the page to try again."),
-    );
-    worker.addEventListener("error", () => stop("The PDF engine stopped. Reload the page to try again."));
-    return () => worker.terminate();
+    return () => {
+      unsubscribe();
+      channel.terminate();
+    };
   }, []);
 
-  function post(request: PdfRequest, transfer: Transferable[] = []) {
-    if (beforeReady.current !== undefined) beforeReady.current.push([request, transfer]);
-    else workerRef.current?.postMessage(request, transfer);
-  }
-
-  function inspect(bytes: Uint8Array): Promise<Inspection> {
-    const copy = bytes.slice().buffer;
-    return inspections.ask((inspection) => post({ type: "inspect", inspection, bytes: copy }, [copy]));
-  }
-
-  function match(keys: readonly string[], documents: readonly (readonly (readonly string[])[])[]): Promise<Matches> {
-    return matches.ask((number) => post({ type: "match", match: number, keys, documents }));
+  // Only a sentence the worker wrote about the request is shown: a stale answer, or one after the
+  // worker stopped, has nothing to add to what the status already says.
+  function showFailure(failure: ClientError) {
+    if (failure.message !== undefined) setError(failure);
   }
 
   function open({ name, bytes, sha256 }: PdfSource) {
-    if (state === "stopped") return;
-    const file = latestFile.current + 1;
-    if (!isFileNumber(file)) return;
-    latestFile.current = file;
+    if (client.current === undefined || state === "stopped") return;
     picked.current = { name, sha256 };
+    opened.current = undefined;
     requested.current = new Set();
     fine.current = [];
-    // An apply still under way was for the document being left: its reply will be dropped.
-    setState((current) => (current === "applying" ? "ready" : current));
     setDocument(undefined);
     setImages(noImages);
     setTexts(new Map());
     setOutput(undefined);
     setError(undefined);
-    const copy = bytes.slice().buffer;
-    post({ type: "open", file, bytes: copy }, [copy]);
+    void client.current.open(bytes).then((model) => {
+      if ("code" in model) showFailure(model);
+      else {
+        opened.current = { ...picked.current, model };
+        setDocument(opened.current);
+      }
+    });
   }
 
-  function once(key: string, request: PdfRequest) {
+  function once(key: string, ask: () => void) {
     if (requested.current.has(key)) return;
     requested.current.add(key);
-    post(request);
+    ask();
+  }
+
+  function fetchText(started: PdfClient, page: PageIndex) {
+    once(`text:${page}`, () =>
+      void started.text(page).then((text) => {
+        if ("code" in text) showFailure(text);
+        else setTexts((current) => new Map(current).set(page, text));
+      }),
+    );
   }
 
   /** Forgets a page's image and that it was asked for, so it is drawn again when next shown. */
@@ -281,26 +168,34 @@ export function useEngine(): Engine {
   }
 
   function show(source: Source, page: PageIndex, detail: RenderDetail = 1) {
-    if (document === undefined) return;
-    const { file } = document;
+    const started = client.current;
+    if (started === undefined || document === undefined || document !== opened.current) return;
     const evicted = detail === 2 && !requested.current.has(renderKey(source, page, 2)) ? makeRoom(fine.current, { source, page }) : undefined;
     if (evicted !== undefined) forget(evicted.source, evicted.page);
     const scale = CSS_PIXELS_PER_POINT * window.devicePixelRatio * detail;
-    once(renderKey(source, page, detail), { type: "render", file, source, page, scale });
+    once(renderKey(source, page, detail), () =>
+      void started.render(source, page, scale).then((pixels) => {
+        if ("code" in pixels) showFailure(pixels);
+        // A page forgotten while its image was on its way, to make room, stays forgotten.
+        else if (DETAILS.some((each) => requested.current.has(renderKey(source, page, each)))) setImages((current) => withImage(current, source, page, pixels));
+      }),
+    );
     if (source !== "original") return;
-    once(`text:${page}`, { type: "text", file, page });
+    fetchText(started, page);
     // The next page's text too, so a selection made with the keys can carry onto it at once.
     const next = page + 1;
-    if (isPageIndex(next) && next < document.model.pages.length) once(`text:${next}`, { type: "text", file, page: next });
+    if (isPageIndex(next) && next < document.model.pages.length) fetchText(started, next);
   }
 
   function apply(edits: readonly Edit[], appearance: Appearance) {
-    if (document === undefined || state !== "ready") return;
+    if (client.current === undefined || document === undefined || document !== opened.current || state !== "ready") return;
     discardOutput();
     setError(undefined);
-    setState("applying");
     outputWanted.current = true;
-    post({ type: "apply", file: document.file, edits, appearance });
+    void client.current.apply(edits, appearance).then((applied) => {
+      if ("code" in applied) showFailure(applied);
+      else if (outputWanted.current) setOutput(applied);
+    });
   }
 
   function discardOutput() {
@@ -311,5 +206,19 @@ export function useEngine(): Engine {
     setOutput(undefined);
   }
 
-  return { state, document, images, texts, output, error, open, inspect, match, show, apply, discardOutput };
+  return {
+    state,
+    document,
+    images,
+    texts,
+    output,
+    error,
+    open,
+    // Asked before the worker starts, which React's order of effects rules out, nothing would answer.
+    inspect: (bytes) => client.current?.inspect(bytes) ?? Promise.resolve(notRunning),
+    match: (keys, documents) => client.current?.match(keys, documents) ?? Promise.resolve(notRunning),
+    show,
+    apply,
+    discardOutput,
+  };
 }

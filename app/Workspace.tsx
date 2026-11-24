@@ -15,6 +15,7 @@ import type { Reach } from "../engine/model/spread";
 import { Splitter } from "./Splitter";
 import { Thumbnails, thumbnailsWidth } from "./Thumbnails";
 import type { Engine } from "./useEngine";
+import { errorText } from "./errors";
 import { useZoom } from "./useZoom";
 import { ZoomControls } from "./ZoomControls";
 import type { Marks } from "./useMarks";
@@ -114,7 +115,7 @@ export function Workspace(props: WorkspaceProps) {
       <div className="relative flex min-w-0 flex-1">
         <DropZone
           ref={zoom.ref}
-          error={engine.error}
+          error={errorText(engine.error)}
           onFiles={props.onFiles}
           onScroll={(event) => props.onCurrentPage(pageInMiddle(event.currentTarget, pages))}
         >

@@ -2,7 +2,9 @@
 import { createContext } from "react";
 import type { PageModel } from "../engine/model/document";
 import type { PageIndex } from "../engine/model/geometry";
-import { CSS_PIXELS_PER_POINT } from "./useEngine";
+
+// PDF points are 1/72 inch and CSS pixels 1/96 inch, so this shows a page at its printed size.
+export const CSS_PIXELS_PER_POINT = 96 / 72;
 
 /** The id of a page's frame, which the page list and marks panel link to. */
 export const pageFrameId = (page: PageIndex) => `page-${page + 1}`;

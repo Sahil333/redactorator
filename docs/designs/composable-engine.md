@@ -997,11 +997,11 @@ method per worker request, plus status:
 interface PdfClient {
   onStatus(listener: (status: WorkerStatus) => void): () => void;  // called at once with the current status
   inspect(bytes: Uint8Array): Promise<{ reading: Reading; pages: number } | ClientError>;  // reads a newly added PDF
-  match(keys: readonly string[], documents: readonly { id: string; texts: readonly PageText[] }[]): Promise<Found[] | ClientError>;  // every place the values appear
+  match(keys: readonly string[], documents: readonly { texts: readonly PageText[] }[]): Promise<DocumentFound[] | ClientError>;  // every place the values appear, each naming its document by index
   open(bytes: Uint8Array): Promise<DocumentModel | ClientError>;   // becomes the open document
   render(source: Source, page: PageIndex, scale: number): Promise<Pixels | ClientError>;  // the open document, or its output
   text(page: PageIndex): Promise<PageText | ClientError>;          // the open document's page
-  apply(edits: readonly Edit[], appearance: Appearance): Promise<{ bytes: Uint8Array; model: DocumentModel } | ClientError>;  // writes, checks and keeps the output open
+  apply(edits: readonly Edit[], appearance: Appearance): Promise<{ bytes: Uint8Array<ArrayBuffer>; model: DocumentModel } | ClientError>;  // writes, checks and keeps the output open
 }
 type WorkerStatus = { state: "starting" | "ready" | "applying" | "stopped"; error?: ClientError };
 type ClientError = { code: PdfErrorCode | ClientErrorCode; message?: string };  // message: a worker-composed sentence
@@ -1018,11 +1018,22 @@ type ClientErrorCode = "worker-stopped" | "worker-not-running" | "unexpected-rep
 *   **Matching replies.** The worker answers in the order it receives
     requests, because its handler is synchronous (`worker.ts:732-762`); the
     handler must stay synchronous. A reply about the open document settles
-    its oldest waiting request of that kind. An `error` that names the open
-    document's file settles its oldest waiting request. A reply or error
-    about a document opened earlier settles that request with
-    `stale-handle`, as `isAboutOlderFile` filters today. An `error` with no
-    file (`unknown-request`) settles nothing and goes to the status.
+    the oldest waiting request it answers: of its kind, and for `rendered`
+    and `text` also of its page (and source), which the reply names, since a
+    test fake can delay one page's text past the next one's. An `error` that
+    names the open document's file settles its oldest waiting request; when
+    none is waiting, it goes to the status, so it is still shown, as today.
+    A reply or error about a document opened earlier settles that request
+    with `stale-handle`, as `isAboutOlderFile` filtered (the filter now
+    lives only in the client). An `error` with no file (`unknown-request`)
+    settles nothing and goes to the status; like today's `error` handler, it
+    also ends `applying`.
+*   **Limit: a request the worker cannot read is never settled.** The
+    worker answers it with an `error` that names no file, so nothing says
+    which request it was, and that request stays waiting. A later reply
+    about the same file can then settle it in place of the request the
+    reply answers. Only a client bug can send such a request, since the
+    client builds every request from typed values.
 *   **Stopping.** When the worker stops, every waiting request settles with
     the stop's code (`worker-stopped`, `unexpected-reply` or
     `unreadable-reply`), and a request made after the stop settles with
@@ -1048,8 +1059,14 @@ and forgets a page whose render was still on the way (`useEngine.ts:43-54,
 today (issue #13).
 
 **Wire changes.** One: `rendered` carries `{width, height, rgba}` instead of
-an `ImageData` (`worker.ts:286`, `contract.ts:166, 334`); `app/usePageImages.ts`
-wraps it in an `ImageData` to draw. `bad-message` stays one code on the wire;
+an `ImageData` (`worker.ts:286`, `contract.ts:166, 334`), in its `image`
+field, typed `Pixels` in `engine/pdf-protocol/messages.ts` until step 5a's
+api types; `app/usePageImages.ts` (`useEngine` until step 6b) wraps it in an
+`ImageData` to draw. The parser keeps what `ImageData` guaranteed: `rgba`
+is a `Uint8ClampedArray` over an `ArrayBuffer`, of width × height × 4
+bytes, with both sizes positive integers. The worker refuses an empty
+pixmap as `render-failed` for that page, as building the `ImageData` did,
+since the parser would refuse the reply and stop the worker. `bad-message` stays one code on the wire;
 the client reports it as `worker-stopped`, `worker-not-running`,
 `unexpected-reply`, `unreadable-reply` or `unknown-request` by where it
 arose, each keeping today's sentence.
@@ -1994,6 +2011,18 @@ project and folder tests are green.
     codes including `unknown-request`, plus `stale-handle`. Until step 6b,
     `useEngine` keeps the page-text cache and early fetch (164, 173, 221-223,
     272-276, 297-299) and `outputWanted` (168-169, 226) as React state.
+*   **As built**: `match` takes each document's page texts and turns them
+    into the wire's page characters itself (the conversion moves from
+    `documentReadings.ts:65`); it returns the wire's `DocumentFound`
+    entries, which name each document by index, and `findPlaces` maps the
+    index to the id as before. Replies are matched by page as well as kind,
+    an `error` about the open document that no waiting request matches goes
+    to the status, and an unreadable request is never settled (Technical
+    Plan section 9).
+    `isAboutOlderFile` is deleted from `pdf-protocol/parse.ts`, since its
+    one check now lives in the client. `apply`'s bytes are
+    `Uint8Array<ArrayBuffer>`, which the download's `Blob` and `writeWhole`
+    take.
 
 #### 28. `engine/core/ports.ts` (Modify); `engine/host-browser/workerChannel.ts` (Create)
 
@@ -2015,6 +2044,16 @@ project and folder tests are green.
     starts with the client codes. `CSS_PIXELS_PER_POINT` (25-26) moves
     to `app/pageGeometry.ts`; `PageView.tsx` and `useZoom.ts` import it
     from there.
+*   **As built**: `error` is the client's `ClientError` until step 5a adds
+    `EngineError`. Since the client acts on the document opened last,
+    `useEngine` keeps that document in a ref and sends `show` and `apply`
+    only while the rendered `document` is it, as the file number in each
+    request did before. It names the opened document from the latest pick
+    when the open settles, as today, so the stale-reply test still sees
+    the client's filter. An inspection refusal's reason is
+    `errorText(error) ?? ""`; `stale-handle`, the one code with no
+    sentence, cannot come from `inspect`, and step 5b's refusals carry
+    codes.
 
 #### 30. `engine/worker.ts`, `engine/pdf-protocol/messages.ts`, `engine/pdf-protocol/parse.ts` (Modify)
 
@@ -2024,6 +2063,11 @@ project and folder tests are green.
     `contract.ts:166`); the parser checks `rgba instanceof
     Uint8ClampedArray` instead of `instanceof ImageData` (`contract.ts:334`),
     so the protocol names no DOM type.
+*   **As built**: the field stays `image`, typed `Pixels`. The parser also
+    checks what `ImageData` guaranteed (an `ArrayBuffer` underneath, width ×
+    height × 4 bytes, positive integer sizes), and the worker refuses an
+    empty pixmap as `render-failed` (Technical Plan section 9, "Wire
+    changes").
 
 #### 31. `engine/pdf-protocol/tsconfig.json` (Create); `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify)
 

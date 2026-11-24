@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": { "types": ["vitest"] },
-  "include": ["model/**/*.test.ts", "storage/**/*.test.ts"],
+  "include": ["model/**/*.test.ts", "storage/**/*.test.ts", "pdf-protocol/**/*.test.ts"],
   "exclude": []
 }

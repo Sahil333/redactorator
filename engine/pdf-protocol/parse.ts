@@ -12,6 +12,7 @@ import {
   type PdfError,
   type PdfReply,
   type PdfRequest,
+  type Pixels,
 } from "./messages";
 
 const isSource = (value: unknown): value is Source => value === "original" || value === "output";
@@ -66,6 +67,19 @@ function parseEngineError(value: unknown): PdfError | undefined {
   return code && { code, message: value.message };
 }
 
+const isPixelCount = (value: unknown): value is number => isPositiveNumber(value) && Number.isInteger(value);
+
+const isRgba = (value: unknown): value is Uint8ClampedArray<ArrayBuffer> =>
+  value instanceof Uint8ClampedArray && value.buffer instanceof ArrayBuffer;
+
+function parsePixels(value: unknown): Pixels | undefined {
+  if (!isRecord(value)) return undefined;
+  const { width, height, rgba } = value;
+  return isPixelCount(width) && isPixelCount(height) && isRgba(rgba) && rgba.length === width * height * 4
+    ? { width, height, rgba }
+    : undefined;
+}
+
 /** A reply about one open file: everything but `ready` and `error`. */
 function parseFileMessage(data: Record<string, unknown>, file: FileNumber): PdfReply | undefined {
   switch (data.type) {
@@ -73,10 +87,12 @@ function parseFileMessage(data: Record<string, unknown>, file: FileNumber): PdfR
       const document = parseDocumentModel(data.document);
       return document && { type: "opened", file, document };
     }
-    case "rendered":
-      return isSource(data.source) && isPageIndex(data.page) && data.image instanceof ImageData
-        ? { type: "rendered", file, source: data.source, page: data.page, image: data.image }
+    case "rendered": {
+      const image = parsePixels(data.image);
+      return image && isSource(data.source) && isPageIndex(data.page)
+        ? { type: "rendered", file, source: data.source, page: data.page, image }
         : undefined;
+    }
     case "text": {
       const text = parsePageText(data.text);
       return text && isPageIndex(data.page) ? { type: "text", file, page: data.page, text } : undefined;
@@ -119,6 +135,3 @@ export function parsePdfReply(data: unknown): PdfReply | undefined {
   }
   return isFileNumber(file) ? parseFileMessage(data, file) : undefined;
 }
-
-export const isAboutOlderFile = (message: PdfReply, latestFile: number): boolean =>
-  "file" in message && message.file !== undefined && message.file !== latestFile;
