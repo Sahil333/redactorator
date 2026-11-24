@@ -459,11 +459,14 @@ Each rule's mechanism:
 
 **Every source file in a zone, from step 8.** Because a file in no zone is
 not checked, step 8 (item 55) turns on
-`"boundaries": { "coverage": { "requireAllFiles": true, "allowUnmatched": ["*.config.ts"] } }`
+`"boundaries": { "coverage": { "requireAllFiles": true, "allowUnmatched": ["*.config.ts", "engine/globals.ts"] } }`
 in `.fallowrc.json`: fallow then reports every source file that matches no
 zone, so a new folder cannot import around a rule. The root
 `playwright.config.ts`, `vite.config.ts` and `vitest.config.ts` stay
-unzoned; the spike showed fallow reports them otherwise.
+unzoned; the spike showed fallow reports them otherwise. So does
+`engine/globals.ts`, which only the typecheck configs load: with
+`requireAllFiles` on and only `*.config.ts` allowed, fallow reports it (step
+2 checked).
 
 `engine/boundaries.test.ts` (item 56) is not needed: no rule falls back to
 it.
@@ -2465,8 +2468,8 @@ pass; the redaction, spreading and page tests are green with `judge`; after
     `// fallow-ignore-next-line boundary-violation` on the line above it, the
     one allowed edge into `pdf`; `.fallowrc.json` turns on
     `boundaries.coverage.requireAllFiles`, with `allowUnmatched` listing only
-    `*.config.ts`, so every other source file must be in a zone (Technical
-    Plan section 3); `pnpm typecheck` runs every config.
+    `*.config.ts` and `engine/globals.ts`, so every other source file must
+    be in a zone (Technical Plan section 3); `pnpm typecheck` runs every config.
 
 #### 56. `engine/boundaries.test.ts` (Create or extend, only for rules fallow cannot express)
 
@@ -2494,7 +2497,7 @@ pass; the redaction, spreading and page tests are green with `judge`; after
 
 **Done when:** `pnpm test` runs every typecheck config and every zone, and is
 green; `pnpm exec fallow architecture --boundaries` reports no file outside a
-zone, apart from the root `*.config.ts` files.
+zone, apart from the root `*.config.ts` files and `engine/globals.ts`.
 
 ### Verification Plan
 
