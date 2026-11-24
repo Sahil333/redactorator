@@ -29,7 +29,7 @@ interface Inspected {
 }
 
 /** A cleaned file that passed the worker's check. */
-export interface Applied {
+interface Applied {
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly model: DocumentModel;
 }
