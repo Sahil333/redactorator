@@ -1,7 +1,7 @@
 # Composable engine refactor
 
 *   **Author:** Sahil Chaddha
-*   **Status:** Proposed
+*   **Status:** Implemented (steps −1 to 8, PRs #15 to #33)
 *   **Date:** 2026-11-24
 
 --------------------------------------------------------------------------------
@@ -32,6 +32,9 @@ stay as they are (section 12).
 The refactor changes no behaviour except the deliberate changes listed under
 Non-Goals. It comes before phase 3 (the PDF leak suite) and phase 4
 (detection), which will plug into the seams it creates.
+
+Built in steps −1 to 8; the Detailed Implementation Plan records what each
+step changed.
 
 The full reasoning, three review rounds and 51 owner decisions are in
 [the brief](./composable-engine-brief.md). Decision numbers below refer to it.
@@ -393,9 +396,11 @@ and `exclude` each replace the parent's when set, so the layout is:
 *   `engine/pdf/tsconfig.worker.json` adds the `WebWorker` library and sets
     `files` to the entry alone. That library already declares `crypto` and
     `TextDecoder`, so it does not take `engine/globals.ts`.
-*   The root config excludes each engine folder once that folder's config is
-    on, and always excludes `engine/globals.ts`, so the declarations never
-    meet the DOM library.
+*   Until step 8 the root config excludes each engine folder once that
+    folder's config is on, and always excludes `engine/globals.ts`, so the
+    declarations never meet the DOM library. Step 8 narrows its `include` to
+    `app`, `engine/host-browser`, `tests` and `*.config.ts`, which leaves
+    those paths out, and drops the `exclude` list.
 
 `pnpm typecheck` runs `tsc -p` once per config; item 21 gives the literal
 files and the script line, and each later step appends its config.
@@ -2827,7 +2832,7 @@ pass; the redaction, spreading and page tests are green with `judge`; after
 
 ### Step 8: every boundary on, and the change list (decisions 16, 23)
 
-#### 55. `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify)
+#### 55. `tsconfig.json`, `.fallowrc.json`, `engine/host-browser/workerChannel.ts` (Modify)
 
 *   **Type / Scope**: build configuration.
 *   **Proposed Changes**: the root config covers only `app`,
@@ -2841,6 +2846,9 @@ pass; the redaction, spreading and page tests are green with `judge`; after
     `boundaries.coverage.requireAllFiles`, with `allowUnmatched` listing only
     `*.config.ts` and `engine/globals.ts`, so every other source file must
     be in a zone (Technical Plan section 3); `pnpm typecheck` runs every config.
+    It already runs every config after step 7, so `package.json` is
+    unchanged. The root config's `exclude` list goes: the narrowed `include`
+    already leaves out every path it named.
 
 #### 56. `engine/boundaries.test.ts` (Create or extend, only for rules fallow cannot express)
 
@@ -2852,7 +2860,7 @@ pass; the redaction, spreading and page tests are green with `judge`; after
     `node:fs`, so `engine/tsconfig.test.json` gives it Node's types. This
     step checks it covers every such rule. Step 0 found no such rule
     (Technical Plan section 3), so the file is not created unless a later
-    rule needs it.
+    rule needs it. Step 8 found none; the file was not created.
 
 #### 57. HLD and Implementation Plan change list (in the PR description)
 
