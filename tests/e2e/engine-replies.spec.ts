@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "./coverage";
 import { oneWordPdf, openApp, openPdf, twoPagePdf } from "./app";
-import { errorAfterOpen, failWorkerStart, replyWith, staleOpenReply } from "./fakes";
+import { errorAfterOpen, errorAfterReady, failWorkerStart, replyWith, staleOpenReply } from "./fakes";
 
 test("an engine that fails to start says so and disables the picker", async ({ page }) => {
   await failWorkerStart(page);
@@ -30,6 +30,21 @@ test("a request the engine could not read is reported with the engine's own sent
 
   await expect(page.getByRole("alert")).toHaveText(sentence);
   await expect(page.getByLabel("Choose PDFs")).toBeEnabled();
+});
+
+test("an error the engine reports about no document goes once a document opens, and stays gone on the projects page", async ({ page }) => {
+  const sentence = "The engine got a message it does not know. Reload the page to try again.";
+  await errorAfterReady(page, sentence);
+  await openApp(page);
+  await expect(page.getByRole("alert")).toHaveText(sentence);
+
+  await openPdf(page, oneWordPdf);
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Projects" }).click();
+
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 test("a reply about a document the user has since left is ignored", async ({ page }) => {

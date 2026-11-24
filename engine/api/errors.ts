@@ -34,6 +34,8 @@ export type ErrorCode =
   | "add-save-failed"
   | "add-search-failed"
   | "add-while-approving"
+  // The open document's original is not in the project's folder.
+  | "original-missing"
   // The project's latest changes could not be saved: `close`'s result while the Session stays open.
   | "save-failed"
   // Refusals the app never shows: it disables the control from the state, or never sends the command.
@@ -45,6 +47,10 @@ export type ErrorCode =
   | "session-closed"
   | "unknown-project"
   | "unknown-document"
+  | "unknown-mark"
+  | "page-text-missing"
+  | "empty-target"
+  | "empty-box"
   | "worker-not-ready"
   | "busy-applying";
 

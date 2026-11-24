@@ -1,13 +1,14 @@
 import type { PageText } from "../engine/model/document";
 import { isPageIndex, type Box, type PageIndex } from "../engine/model/geometry";
-import type { TextPiece, TextTarget } from "../engine/model/marks";
-import { rangeBoxes, rangeText, sharesColumns, wordAt } from "../engine/model/pageText";
+import type { TextTarget } from "../engine/model/marks";
+import { rangeBoxes, sharesColumns, wordAt } from "../engine/model/pageText";
 import {
   lines,
   pageText,
-  pieceRange,
+  selectionPieces,
   shown,
   sorted,
+  textTarget,
   type Position,
   type Run,
   type Selection,
@@ -28,24 +29,9 @@ export function missingPages(selection: Selection, texts: Texts): PageIndex[] {
 
 /** The selection as a text mark: one piece per page. Undefined when it holds no text, or a page's text is missing. */
 export function selectionTarget(selection: Selection, texts: Texts): TextTarget | undefined {
-  const [first, last] = sorted(selection);
-  const pieces: TextPiece[] = [];
-  const parts: string[] = [];
-  for (let number = first.page; number <= last.page; number++) {
-    const found = pageText(texts, number);
-    if (found === undefined) return undefined;
-    const [page, text] = found;
-    let [start, end] = pieceRange(texts, page, text, first, last);
-    // Line and block ends at either side are not part of the marked text.
-    while (start < end && !shown(text, start)) start++;
-    while (end > start && !shown(text, end - 1)) end--;
-    const boxes = start < end ? rangeBoxes(text, start, end) : [];
-    if (boxes.length === 0) continue;
-    pieces.push({ page, start, end, boxes });
-    parts.push(rangeText(text, start, end));
-  }
-  const [one, ...more] = pieces;
-  return one && { kind: "text", text: parts.join(" "), pieces: [one, ...more] };
+  const pieces = selectionPieces(texts, ...sorted(selection));
+  const target = typeof pieces === "string" ? pieces : textTarget(texts, pieces);
+  return typeof target === "string" ? undefined : target;
 }
 
 /** The first character from `from` onwards (or before it, going back) that is `wanted`, on any page after (or before). */

@@ -77,3 +77,5 @@ export function groundTruth(marks: readonly Mark[], facts: DocumentFacts, sha256
     hidden_occurrences: [],
   };
 }
+
+export type GroundTruth = ReturnType<typeof groundTruth>;

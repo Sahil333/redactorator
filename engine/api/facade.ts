@@ -1,7 +1,12 @@
+import type { PageText, Pixels, PlacedImage, Source } from "../model/document";
+import type { Box, PageIndex } from "../model/geometry";
+import type { DocumentFacts, GroundTruth } from "../model/groundTruth";
+import type { MarkType } from "../model/markTypes";
 import type { DocumentId, Settings } from "../model/project";
+import type { TextPieceRange } from "../model/selection";
 import type { Store } from "../storage/store";
 import type { Refusal, Result } from "./errors";
-import type { EngineState } from "./state";
+import type { DocumentHandle, EngineState } from "./state";
 
 /** The one object the app, or a script, uses: commands by role, and the state. */
 export interface Engine {
@@ -45,6 +50,17 @@ export interface Library {
 /** One open, locked project. */
 export interface Session {
   readonly projectId: string;
+  /** Each changes the project before it returns. */
+  readonly marks: {
+    /** Refused with `stale-handle` once `handle` is no longer the open document's. */
+    add(input: { readonly handle: DocumentHandle; readonly type: MarkType; readonly target: TargetInput }): Result<{ readonly markId: number }>;
+    /** Retypes every mark of the value, since a value has one type. */
+    retype(document: DocumentId, markId: number, type: MarkType): Result<void>;
+    /** Stops hiding the mark's value here, every place of it. */
+    remove(document: DocumentId, markId: number): Result<void>;
+    /** "Don't hide here": keeps a value hidden across the project visible in this document only. */
+    keepHere(document: DocumentId, markId: number): Result<void>;
+  };
   /** Each document's own undo and redo; changing nothing when there is nothing to go back to. */
   readonly history: {
     undo(document: DocumentId): Result<void>;
@@ -54,11 +70,39 @@ export interface Session {
     /** The document's cleaned file was downloaded. */
     markDownloaded(document: DocumentId): Result<void>;
   };
+  /** The open document. Results never enter the state. */
+  readonly viewer: {
+    /** Opens `document` in the PDF worker, in place of the one open before. */
+    open(document: DocumentId): Promise<Result<DocumentHandle>>;
+    render(handle: DocumentHandle, source: Source, page: PageIndex, scale: number): Promise<Result<Pixels>>;
+    /** Fetched once per page; `marks.add` needs the text of each page a mark is on. */
+    pageText(handle: DocumentHandle, page: PageIndex): Promise<Result<PageText>>;
+    /** The document's images a box can spread over; undefined when they can't be known. */
+    images(document: DocumentId): Promise<Result<readonly PlacedImage[] | undefined>>;
+  };
+  readonly output: {
+    /** Writes and checks the open document's cleaned file, from its marks and the current appearance. */
+    apply(): Promise<Result<void>>;
+    /** The valid output's bytes, for Download. */
+    bytes(): Result<Uint8Array<ArrayBuffer>>;
+    /** Back to editing. */
+    discard(): Result<void>;
+  };
+  readonly labelling: {
+    /** Not undoable. */
+    link(document: DocumentId, markId: number, linkId: string): Result<void>;
+    exportGroundTruth(document: DocumentId, facts: DocumentFacts): Result<GroundTruth>;
+  };
   /** Saves now. Resolves once every change so far is written: true if they all landed. */
   flush(): Promise<boolean>;
   /** Saves every change, then lets the project go and lists the projects again; stays open, with `save-failed`, when the save fails. */
   close(): Promise<Result<void>>;
 }
+
+/** What a new mark covers: the text of the selection's pieces, from `selectionPieces`, or a drawn box. */
+export type TargetInput =
+  | { readonly kind: "text"; readonly pieces: readonly TextPieceRange[] }
+  | { readonly kind: "box"; readonly page: PageIndex; readonly box: Box };
 
 /** The settings the user edits directly. */
 export type SettingsChange = Partial<Pick<Settings, "appearance">>;

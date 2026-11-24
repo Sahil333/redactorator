@@ -1,6 +1,6 @@
 // The messages between the UI and the PDF worker.
 import type { Brand } from "../model/brand";
-import type { Appearance, DocumentModel, Edit, PageText, Reading, Source } from "../model/document";
+import type { Appearance, DocumentModel, Edit, PageText, Pixels, Reading, Source } from "../model/document";
 import type { ReaderErrorCode, WriterErrorCode } from "../model/errors";
 import type { PageIndex } from "../model/geometry";
 import type { Found } from "../model/match";
@@ -71,13 +71,6 @@ export interface PdfError {
 export interface DocumentFound extends Found {
   readonly document: number;
   readonly page: PageIndex;
-}
-
-/** A drawn page: `width` by `height` pixels, row by row, four bytes each (red, green, blue, alpha). */
-export interface Pixels {
-  readonly width: number;
-  readonly height: number;
-  readonly rgba: Uint8ClampedArray<ArrayBuffer>;
 }
 
 export type PdfReply =

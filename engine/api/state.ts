@@ -1,4 +1,6 @@
+import type { Reach } from "../model/spread";
 import type { DocumentId, Project, Settings } from "../model/project";
+import type { PageModel } from "../model/document";
 import type { EngineError } from "./errors";
 
 /** The engine's state: one immutable value, the same object until something changes. */
@@ -53,6 +55,30 @@ export interface SessionState {
   readonly folder: string;
   /** `failed` until the next write lands: the next change, or a flush, tries again. */
   readonly save: "saved" | "saving" | "failed";
-  /** The documents undo and redo can act on now, from the Session's gate. */
-  readonly can: { readonly undo: ReadonlySet<DocumentId>; readonly redo: ReadonlySet<DocumentId> };
+  /** Adding, approving and applying run one at a time. */
+  readonly operation: "idle" | "adding" | "planning" | "confirming" | "applying";
+  /** The document open in the PDF worker. */
+  readonly open?: DocumentHandle;
+  /** The open document's cleaned file, only while it still matches its marks and the appearance; its bytes stay inside. */
+  readonly output?: DocumentHandle;
+  /** What the Session's gate allows now: for the open document, and for undo and redo, the documents each can act on. */
+  readonly can: {
+    readonly mark: boolean;
+    readonly undo: ReadonlySet<DocumentId>;
+    readonly redo: ReadonlySet<DocumentId>;
+    readonly apply: boolean;
+    readonly approve: boolean;
+    readonly add: boolean;
+    readonly switchDocument: boolean;
+  };
+  /** How far each hidden value reaches, by its key: the places marked, and the documents they are in. */
+  readonly reach: ReadonlyMap<string, Reach>;
+  /** The files whose approval brought the open document's new marks. */
+  readonly newFrom: readonly string[];
+}
+
+/** The document open in the PDF worker, and its pages' sizes. */
+export interface DocumentHandle {
+  readonly document: DocumentId;
+  readonly pages: readonly [PageModel, ...PageModel[]];
 }

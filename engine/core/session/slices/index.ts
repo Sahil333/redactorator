@@ -3,21 +3,46 @@ import type { SessionChange } from "../changes";
 import { history, withNoHistory, type HistoryPart } from "./history";
 import { firstMarks, marks, type MarksPart } from "./marks";
 import { firstOperation, operation, type OperationPart } from "./operation";
+import { output, type OutputPart } from "./output";
+import { firstViewer, viewer, type ViewerPart } from "./viewer";
 
 export interface SessionParts {
   /** The project record and its edit counters, with each document's undo and redo. */
   readonly record: HistoryPart<MarksPart>;
   readonly operation: OperationPart;
+  readonly viewer: ViewerPart;
+  readonly output: OutputPart | undefined;
 }
 
-export const firstParts = (project: Project): SessionParts => ({ record: withNoHistory(firstMarks(project)), operation: firstOperation });
+export const firstParts = (project: Project): SessionParts => ({
+  record: withNoHistory(firstMarks(project)),
+  operation: firstOperation,
+  viewer: firstViewer,
+  output: undefined,
+});
 
 /** The document an undoable record changes. A label change is not undone. */
-const isUndoable = (change: SessionChange): DocumentId | undefined => (change.type === "replaced" && change.kind === "edit" ? change.document : undefined);
+function isUndoable(change: SessionChange): DocumentId | undefined {
+  switch (change.type) {
+    case "markAdded":
+    case "markRetyped":
+    case "markRemoved":
+    case "keptHere":
+      return change.document;
+    default:
+      return undefined;
+  }
+}
 
 const record = history(marks, isUndoable);
 
 export function session(parts: SessionParts, change: SessionChange): SessionParts {
-  const next = { record: record(parts.record, change), operation: operation(parts.operation, change) };
-  return next.record === parts.record && next.operation === parts.operation ? parts : next;
+  const next = {
+    record: record(parts.record, change),
+    operation: operation(parts.operation, change),
+    viewer: viewer(parts.viewer, change),
+    output: output(parts.output, change),
+  };
+  const same = next.record === parts.record && next.operation === parts.operation && next.viewer === parts.viewer && next.output === parts.output;
+  return same ? parts : next;
 }

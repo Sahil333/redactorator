@@ -188,6 +188,7 @@ the code, not reproduced.
     | `bad-message` is split into five codes, each keeping today's sentence | 28 | No |
     | While approval works out what spreads, the page and the marks panel take no edits. Today they do, and approval works it out again (`useApproval.ts:42-46`) | 48 | Yes: marking waits for the approval search |
     | Adding documents is refused while a document is being applied, or while the heads-up is open. Today an add can start during an apply (`ProjectView.tsx:281, 295`) | 49 | Yes: Add is disabled during an apply |
+    | From step 6b until 6d, a document added while an apply runs opens in its tab once the apply is done. Today it opens at once and the apply's output is dropped (owner, step 6b) | 49 | Yes: the new tab is blank until the apply ends |
     | A closing Session takes no changes: while the save that leaving starts runs, Undo and Redo are disabled and a mark made then is dropped. Today it is kept, and saved perhaps after the lock is let go (owner, step 6a) | 4 | Yes, only while a slow save runs on leaving |
 
 *   **Changes to stored files.** No format version bump, no migration; the
@@ -543,7 +544,7 @@ interface Session {
     open(document: DocumentId): Promise<Result<DocumentHandle>>;
     render(handle: DocumentHandle, source: "original" | "output", page: PageIndex, scale: number): Promise<Result<Pixels>>;
     pageText(handle: DocumentHandle, page: PageIndex): Promise<Result<PageText>>;
-    images(document: DocumentId): Promise<Result<readonly PlacedImage[]>>;
+    images(document: DocumentId): Promise<Result<readonly PlacedImage[] | undefined>>;  // undefined: unknown (a newer version's file) or unreadable
   };
   output: {
     apply(): Promise<Result<void>>;            // the open document, with the current appearance
@@ -583,7 +584,11 @@ type SettingsChange = Partial<Pick<Settings, "appearance">>;  // the only settin
 
 **Open-document handle.** The PDF worker holds one open document at a time.
 `viewer.open(document)` opens it and returns a handle: the document's id and
-its page sizes. The client tracks which document is open; no file number
+its page sizes. It dispatches `opening` at once (rule 8), which drops the
+handle, the page texts and the output of the document open before, and
+`opened` with the new handle once the worker answers; an open overtaken by a
+newer one, or whose original can't be read (`original-missing`, for any read
+failure, as today), never lands. The client tracks which document is open; no file number
 crosses the facade. `render`, `pageText` and `marks.add` carry the handle and are
 refused with `stale-handle` once it is not the Session's current handle
 object (compared by identity), as `isAboutOlderFile` does today
@@ -593,10 +598,13 @@ object (compared by identity), as `isAboutOlderFile` does today
 `selectionPieces` (decision 41). It does not trim again: it calls only
 `textTarget`, which works out each piece's boxes and the joined text from the
 page texts the `viewer` slice holds for the handle (section 9). It is refused with
-`page-text-missing` when a page in the target has no text yet; the app offers
+`page-text-missing` when a page in the target has no text yet (`textTarget`
+returns that code too); the app offers
 marks only on pages whose text it shows, so this does not happen in the UI,
 and a headless caller fetches each page's text with `viewer.pageText` first. It is also refused with
-`empty-target` or `empty-box`. A mark whose type is `custom:<name>` with a
+`empty-target` (no text left, or a piece whose offsets do not lie within its
+page's text) or `empty-box` (a box with no area, or on a page the document does
+not have). A mark whose type is `custom:<name>` with a
 name not yet in the settings adds the name to `settings.customTypes` after
 the project change, through the Library's settings, as today
 (`useMarks.ts:36-45`); `marks.retype` does the same.
@@ -738,8 +746,8 @@ The rules:
 | `marks` | The project record (documents, marks, kept-visible lists, hidden values) and per-document edit counters | `markAdded`, `markRetyped`, `markRemoved`, `keptHere`, `linked`, `restored`, `approved`, `documentsAdded`, `downloaded` |
 | `history` (wraps `marks`) | Per-document undo and redo snapshots, at most 100 | every undoable record (keeps the snapshot before it, clears redo), `undo`, `redo`, `approved` (clears the documents it changed), `documentsAdded` (starts empty histories for the new documents) |
 | `approval` | The plan waiting for confirmation | `planned`, `approved`, `approvalCancelled` |
-| `viewer` | The open-document handle, and the open document's page texts (internal) | `opened`, `pageTextLoaded` |
-| `output` | The cleaned file's bytes (internal) and its tag: document, edit counter, appearance | `applied`, `outputDiscarded`, `opened` |
+| `viewer` | The open-document handle, and the open document's page texts (internal) | `opening`, `opened`, `pageTextLoaded` |
+| `output` | The cleaned file's bytes (internal) and its tag: document, edit counter, appearance | `applied`, `applyStarted`, `outputDiscarded`, `opening` |
 | `operation` | `idle`, `adding`, `planning`, `confirming` or `applying`, the save state, and whether the Session is closing | the start and end record of each operation, every record that changes the project record (the save state becomes `saving`), `saved`, `saveFailed`, `closeStarted`, `closeFailed` |
 
 `worker.status` is `applying` while the Session's `operation` is `applying`;
@@ -783,16 +791,19 @@ interface SessionState {
   open?: DocumentHandle;
   output?: { document: DocumentId; pages: readonly PageModel[] };  // only while valid; the bytes stay internal
   // selectors, computed once per change
-  can: { mark: boolean; undo: boolean; redo: boolean; apply: boolean; approve: boolean; add: boolean; switchDocument: boolean };  // for the open document
+  can: {                               // for the open document, but undo and redo, which need none open
+    mark: boolean; apply: boolean; approve: boolean; add: boolean; switchDocument: boolean;
+    undo: ReadonlySet<DocumentId>; redo: ReadonlySet<DocumentId>;  // the documents each may act on now
+  };
   reach: ReadonlyMap<string, { places: number; documents: number }>;  // keyed by value key: marked places
   newFrom: readonly string[];          // file names of the documents whose approval brought the open document's new marks
 }
 ```
 
-Until step 6b the engine knows no open document, so from 6a to 6b `can` is
-`{ undo: ReadonlySet<DocumentId>; redo: ReadonlySet<DocumentId> }`: the
-documents undo, or redo, may act on now (the gate allows it and there is a
-snapshot to go back to). Step 6b gives `can` its shape above.
+`can.undo` and `can.redo` are the documents undo, or redo, may act on now
+(the gate allows it and there is a snapshot to go back to), so they work on
+the tab's record before its document opens, and while its original is
+missing, as today (owner, step 6b).
 
 **Problems** keep today's rules (`App.tsx:138, 149`, `ProjectView.tsx:306`,
 `useProjectStore.ts:131-132, 199, 278`, `useApproval.ts:39`):
@@ -824,8 +835,10 @@ rises on any record that changes a document's marks or kept-visible list (a
 mark edit, keep-here, undo, redo, and an approval or add that spreads into
 it), and not on a link change or `markDownloaded`; the list sequence (read by
 the Library to keep only the newest refresh). An output is tagged with the
-appearance it was written with, so a settings change unrelated to output
-never drops it. Before it lands, an approval compares the project record the
+appearance it was written with, compared by identity: a settings change
+unrelated to output never drops it, and choosing an appearance again drops it,
+as today's `discardOutput` did. No output is valid once the PDF worker has
+stopped, as today. Before it lands, an approval compares the project record the
 plan was made from with the current one, by identity (decision 45).
 
 ### 7. What may run together (the Session)
@@ -855,10 +868,13 @@ These rows keep today's gates, `busy` (`ProjectView.tsx:161`), `quiet` and
 (`ProjectView.tsx:252-253`) and leaving after adds and approvals settle
 (`ProjectView.tsx:276`), with the two deliberate changes listed in
 Non-Goals: no edits while planning or confirming, and no add while applying
-or confirming. `marks.add`, `history.undo`, `history.redo`, `output.apply`
+or confirming. `history.undo`, `history.redo`, `output.apply`
 and `approval.plan` are also refused while the worker is starting or stopped
 (`worker-not-ready`), as `busy` does today (`ProjectView.tsx:161`), and
-`documents.add` while it is stopped (`ProjectView.tsx:295`). Undo while the
+`documents.add` while it is stopped (`ProjectView.tsx:295`). `marks.add` is
+refused only while the worker is starting: it needs only the page text the
+Session already holds, so a mark whose type is picked after the worker has
+stopped is kept and saved, as today (owner, step 6b). Undo while the
 app has a pending (untyped) mark is refused by the app. Undo or redo with
 nothing to go back to is allowed and changes nothing, as today
 (`useProject.ts:104-128`).
@@ -1112,9 +1128,13 @@ dispatcher (section 7).
 
 **Render bookkeeping.** The Session's `viewer` slice keeps the open
 document's page texts as they arrive, so `marks.add` reads them at once; the
-open effect fetches each page's text once and the next page's text early
-(`useEngine.ts:272-276, 296-299`). Once the output is out of date, the
-Session stops asking for its renders and drops late ones, as `outputWanted`
+open effect fetches each page's text once per open document. The app keeps
+the texts it asked for with `viewer.pageText` for its own selection, and
+asks for the next page's text early, as `show` does today
+(`useEngine.ts:272-276, 296-299`), so a selection made with the keys can carry
+onto it at once; the Session's once-only fetch keeps the requests as today's.
+Once the output is out of date, the
+Session refuses its renders and drops late ones with `stale-handle`, as `outputWanted`
 does today (`useEngine.ts:168-169, 226`). The app's image cache keeps at most six
 finely drawn pages, keeps a finer render over a coarser one that lands later,
 and forgets a page whose render was still on the way (`useEngine.ts:43-54,
@@ -2346,7 +2366,7 @@ are green.
     `downloaded` also land now, because the adapter (item 40) dispatches them
     before their commands arrive.
 *   **As built** (owner, step 6a): `can.undo` and `can.redo` are the sets of
-    documents each may act on, until 6b's open document (section 6).
+    documents each may act on, and stay so (owner, step 6b; section 6).
     Undo and redo reach `marks` as a `restored` record built by `history`;
     keeping link ids is the marks slice's rule. `operation` also holds
     whether the Session is closing (`closeStarted`, `closeFailed`), which
@@ -2430,6 +2450,13 @@ green.
     stored text is the one the preview showed (decision 41). Ledger row with
     a negative control: the golden test's cross-page mark, and the
     running-header tests `pages.spec.ts:18-67, 105-139`.
+*   **As built** (owner, step 6b): `textTarget` also returns
+    `"page-text-missing"` for a piece whose page has no text, so `marks.add`
+    takes that refusal from one place. `TextPieceRange` lives in
+    `engine/model/selection.ts`; `pieceRange` is no longer exported.
+    `useTextSelection.ts` needed no change. No test was rewritten, so there
+    is no ledger row; the negative control (the running-header rule taken
+    out of `selectionPieces`) turns the golden test and three page tests red.
 
 #### 43. `engine/core/session/` (Create): `slices/viewer.ts`, `slices/output.ts`, `effects/open.ts`, `effects/apply.ts`, `effects/readings.ts`; `changes.ts`, `gate.ts`, `selectors.ts`, `facade.ts` (Modify)
 
@@ -2461,6 +2488,23 @@ green.
         marks from the state (today `ProjectView.tsx:186`); `bytes` and
         `discard`; the `reach`, `newFrom` and remaining `can` selectors.
     *   The temporary `replaced` record and `interim.replace` go.
+*   **As built** (owner, step 6b): `viewer.open` dispatches `opening` at
+    once and `opened` when the worker answers (section 4). The output's
+    appearance tag is compared by identity, and no output is valid once the
+    worker stops (section 6). `viewer.images` resolves with `undefined` when
+    the images can't be known or read, as `useImages` treated both. The
+    Session fetches each page's text once; the next page's early fetch stays
+    in the app (section 9). `can.undo` and `can.redo` stay the sets of
+    documents each may act on (section 6). `marks.add` is refused only while
+    the worker is starting (section 7), and also refuses offsets outside a
+    page's text and a box on a page the document does not have (section 4).
+    A refused `output.bytes()`, and `output.apply()` with no document open,
+    use `stale-handle`. `SessionState` gains `operation`, filled from here
+    with `idle` and `applying`, and `can`'s `mark`, `approve` and `add`,
+    which the app reads from 6c and 6d. `SessionHost` gains the PDF-worker
+    client and the Library's `addCustomType`, and `SessionView` the settings.
+    `Pixels` moves to `engine/model/document.ts`, so the facade and the wire
+    share it.
 
 #### 44. App side (Create, Modify, Delete)
 
@@ -2491,6 +2535,23 @@ green.
         `ProjectView.tsx:121, 154, 164, 180` go (output validity is a
         selector); the one at `ProjectView.tsx:328` (`onBack`) becomes
         `output.discard()`.
+*   **As built** (owner, step 6b): `app/useEngineError.ts` (Create) keeps
+    `useEngine`'s error slot in `App`: the worker's latest error, or a
+    failure the worker explained, cleared when a document opens or an apply
+    starts, and shown on Home and in the project, as today.
+    `usePageImages.ts` also keeps the page texts the app asked for.
+    `interim.stored` keeps only `writeOriginals`. A newly shown document whose
+    open the gate refuses (an add during an apply switches tabs) opens once
+    `can.switchDocument` is true again (Non-Goals). A refused
+    `output.bytes()` shows the download banner's failure sentence.
+    `MarksPanel.tsx`, `CheckedBanner.tsx` and `LabelExport.tsx` needed no
+    change. New browser tests: a document added during an apply opens once
+    it is done (`redact.spec.ts`); undo works before a document's pages open
+    (`history.spec.ts`); a mark being typed when the worker stops is kept
+    (`saving.spec.ts`); an error about no document goes once one opens, and
+    stays gone on Home (`engine-replies.spec.ts`, with the new
+    `errorAfterReady` fake). Unit test: `marks.add`'s bounds
+    (`engine/core/session/facade.test.ts`).
 
 #### 45. `tests/e2e/spreading.spec.ts` (Modify)
 
@@ -2498,6 +2559,12 @@ green.
 *   **Proposed Changes**: a new test: with a document's cleaned output
     showing, approving another document that spreads into it drops the
     output, and the document shows its marks again.
+*   **As built** (owner, step 6b): a Vitest test of the Session's slices and
+    selector (`engine/core/session/output.test.ts`), since no UI path reaches
+    the case: the heads-up is modal, Approve is hidden while an output shows,
+    and switching tabs drops the output. Stale outputs a user can reach are
+    covered by oracle-judged browser tests (#23's test, and a change made
+    while an apply runs).
 
 **Done when:** the golden test, marking, redaction (with `judge`) and
 labelling tests are green; the new output test is green.

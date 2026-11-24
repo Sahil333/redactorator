@@ -1,4 +1,4 @@
-import type { Source } from "../model/document";
+import type { Pixels, Source } from "../model/document";
 import { isPageIndex } from "../model/geometry";
 import { isOffset, isPositiveNumber, isRecord, isText, parseAll } from "../model/guards";
 import { parseAppearance, parseDocumentModel, parseEdit, parsePageText, parseReading } from "../model/parse";
@@ -12,7 +12,6 @@ import {
   type PdfError,
   type PdfReply,
   type PdfRequest,
-  type Pixels,
 } from "./messages";
 
 const isSource = (value: unknown): value is Source => value === "original" || value === "output";

@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "./coverage";
 import {
+  addDocuments,
   applyAndDownload,
   dear,
   drawBox,
@@ -18,6 +19,7 @@ import {
   printTypes,
   rotatedCroppedPdf,
   tjStringsPdf,
+  twoPagePdf,
   type PointBox,
   downloadButton,
 } from "./app";
@@ -275,6 +277,21 @@ test("changing a mark while apply runs drops the output that arrives after", asy
   await expect(page.getByRole("status")).toHaveText("Page 1 of 1");
   await expect(page.getByText("Checked:")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Apply and check" })).toBeEnabled();
+});
+
+test("a document added while apply runs opens in its tab once the apply is done", async ({ page }) => {
+  await delayApplied(page, 1500);
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await markText(page, 1, janeRoe, "Person");
+  await page.getByRole("button", { name: "Apply and check" }).click();
+  await expect(page.getByRole("status")).toHaveText("Applying and checking…");
+
+  await addDocuments(page, twoPagePdf);
+
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/two-pages\.pdf/);
+  await expect(page.getByRole("status")).toHaveText("Page 1 of 2");
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
 });
 
 test("an error about another request while apply runs leaves the apply running, and the output shown has every mark", async ({ page }) => {

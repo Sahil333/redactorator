@@ -1,40 +1,45 @@
-import { useEffect, useEffectEvent, useState } from "react";
-import type { ProjectDocument } from "../engine/model/project";
-import type { StoredFiles } from "../engine/host-browser/interim";
-import type { Store } from "../engine/storage/store";
-import type { PdfEngine, OpenDocument } from "./useEngine";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import type { EngineError } from "../engine/api/errors";
+import type { Session } from "../engine/api/facade";
+import type { DocumentHandle } from "../engine/api/state";
+import type { DocumentId, ProjectDocument } from "../engine/model/project";
+import { errorText } from "./errors";
 
 /**
- * Opens the shown tab's document in the engine. `shown` is the engine's document once it is
- * that tab's, and undefined until then; `missing` says why its original could not be read.
+ * Opens the shown tab's document in the PDF worker. `shown` is the open document once it is that
+ * tab's, and undefined until then; `missing` says why its original could not be read. While
+ * `canOpen` is false (an apply runs), a newly shown document waits to open.
  */
-export function useDocumentInEngine(files: StoredFiles, store: Store, folder: string, document: ProjectDocument | undefined, engine: PdfEngine) {
+export function useDocumentInEngine(
+  session: Session,
+  open: DocumentHandle | undefined,
+  document: ProjectDocument | undefined,
+  canOpen: boolean,
+  onFailure: { readonly failed: (error: EngineError) => void; readonly clear: () => void },
+) {
   const [missing, setMissing] = useState<string | undefined>(undefined);
-  const opened = engine.document;
-  const shown: OpenDocument | undefined =
-    opened !== undefined && opened.name === document?.file && opened.sha256 === document.sha256 ? opened : undefined;
+  const asked = useRef<DocumentId | undefined>(undefined);
+  const shown = document !== undefined && open?.document === document.id ? open : undefined;
 
-  const open = useEffectEvent((isCurrent: () => boolean) => {
+  const ask = useEffectEvent(() => {
+    if (document === undefined) {
+      asked.current = undefined;
+      setMissing(undefined);
+      return;
+    }
+    if (!canOpen || asked.current === document.id) return;
+    const { id } = document;
+    asked.current = id;
     setMissing(undefined);
-    if (document === undefined) return;
-    const { file, sha256 } = document;
-    files.readOriginal(store, folder, document).then(
-      (bytes) => {
-        if (isCurrent()) engine.open({ name: file, bytes, sha256 });
-      },
-      () => {
-        if (isCurrent()) setMissing(`${file} is missing from the project's folder, so it can't be shown. Add the file again with Add documents.`);
-      },
-    );
+    onFailure.clear();
+    void session.viewer.open(id).then((result) => {
+      if (result.ok || asked.current !== id) return;
+      if (result.error.code === "original-missing") setMissing(errorText(result.error));
+      else onFailure.failed(result.error);
+    });
   });
 
-  useEffect(() => {
-    let current = true;
-    open(() => current);
-    return () => {
-      current = false;
-    };
-  }, [document?.id]);
+  useEffect(() => ask(), [document?.id, canOpen]);
 
   return { shown, missing };
 }

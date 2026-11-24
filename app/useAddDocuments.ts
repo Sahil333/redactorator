@@ -4,18 +4,17 @@ import type { Interim, StoredProject } from "../engine/host-browser/interim";
 import type { ProjectDocument } from "../engine/model/project";
 import { hiddenTextKeys, spreadToAdded } from "../engine/model/spread";
 import type { Store } from "../engine/storage/store";
-import { findPlaces } from "./documentReadings";
 import { incomingFiles } from "./incomingFiles";
-import type { PdfEngine } from "./useEngine";
 
 const refusals = (files: readonly string[], code: ErrorCode): Refusal[] => files.map((file) => ({ file, error: { code } }));
 
 /** Adds chosen files to the open project, and keeps the list of those that could not be added. */
 export function useAddDocuments(
-  interim: Pick<Interim, "stored" | "intake">,
+  interim: Pick<Interim, "stored" | "intake" | "readings">,
   store: Store,
   project: StoredProject,
-  engine: PdfEngine,
+  /** Whether the PDF worker has stopped, so nothing can be added. */
+  stopped: boolean,
   initialRefused: readonly Refusal[],
   onAdded: (documents: readonly ProjectDocument[]) => void,
 ) {
@@ -28,9 +27,9 @@ export function useAddDocuments(
     const refuseAll = (code: ErrorCode) => setRefused([...prepared.refused, ...refusals(prepared.added.map(({ file }) => file), code)]);
     setRefused(prepared.refused);
     // Searched before anything is written, so no document joins without the project's hidden values.
-    let places: Awaited<ReturnType<typeof findPlaces>>;
+    let places: Awaited<ReturnType<Interim["readings"]["findPlaces"]>>;
     try {
-      places = await findPlaces(engine, hiddenTextKeys(project.project), prepared.added.map(({ id, reading }) => ({ id, texts: reading.texts })));
+      places = await interim.readings.findPlaces(hiddenTextKeys(project.project), prepared.added.map(({ id, reading }) => ({ id, texts: reading.texts })));
     } catch {
       refuseAll("add-search-failed");
       return;
@@ -50,7 +49,7 @@ export function useAddDocuments(
     dismiss: () => setRefused([]),
     refuse: (files: readonly File[], code: ErrorCode) => setRefused((current) => [...current, ...refusals(files.map(({ name }) => name), code)]),
     add: (files: readonly File[]) => {
-      if (adding || engine.state === "stopped") return;
+      if (adding || stopped) return;
       setAdding(true);
       underWay.current = add(files)
         .catch(() => setRefused(refusals(files.map(({ name }) => name), "add-save-failed")))

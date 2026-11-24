@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { addDocuments, dear, drawBox, janeRoe, markText, oneWordPdf, openApp, openPdf, saved, storedJson, storedText, twoPagePdf } from "./app";
+import { addDocuments, dear, drawBox, janeRoe, markText, oneWordPdf, openApp, openPdf, pickType, saved, selectText, storedJson, storedText, twoPagePdf } from "./app";
 import { countWrites, failWrites, holdWrites, stopWorkerAfter } from "./fakes";
 
 /** The project made from one-word.pdf, as stored. */
@@ -48,6 +48,19 @@ test("after the PDF engine stops, a mark removed from the open document is still
   await expect(page.getByRole("region", { name: "1 file not added" })).toBeVisible();
 
   await page.getByRole("button", { name: "Remove mark Dear on page 1" }).click();
+
+  await saved(page);
+  expect(await storedProject(page)).toHaveProperty(markCount, 1);
+});
+
+test("a mark being typed when the PDF engine stops is still added and saved", async ({ page }) => {
+  await stopWorkerAfter(page);
+  await openOneWord(page);
+  await selectText(page, 1, janeRoe);
+  await addDocuments(page, twoPagePdf);
+  await expect(page.getByRole("region", { name: "1 file not added" })).toBeVisible();
+
+  await pickType(page, "Person");
 
   await saved(page);
   expect(await storedProject(page)).toHaveProperty(markCount, 1);

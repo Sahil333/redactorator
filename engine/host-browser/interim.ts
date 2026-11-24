@@ -1,42 +1,26 @@
 // What the app's hooks that have not moved into the engine yet take from it, until step 6d.
 import type { Session } from "../api/facade";
 import type { EngineInterim } from "../core/createEngine";
-import type { EditKind, Edits } from "../core/session/changes";
-import {
-  findOriginal,
-  readImages,
-  readOriginal,
-  readTexts,
-  saveImages,
-  saveTexts,
-  writeOriginals,
-} from "../core/stored/projects";
+import { documentReadings, findPlaces } from "../core/session/effects/readings";
+import { writeOriginals } from "../core/stored/projects";
+import type { PageText, Reading } from "../model/document";
 import type { DocumentId, ProjectDocument } from "../model/project";
-import type { Approval } from "../model/spread";
+import type { Approval, TextPlace } from "../model/spread";
+import type { Store } from "../storage/store";
 
-export type { Applied, PdfClient, WorkerStatus } from "../core/pdf-client/client";
-export type { ClientError } from "../core/pdf-client/errors";
-export type { EditKind, Edits } from "../core/session/changes";
 export type { StoredProject } from "../core/stored/projects";
-export type { Pixels } from "../pdf-protocol/messages";
 
-/** The stored-file functions the app still calls itself. */
-const storedFiles = {
-  findOriginal,
-  readImages,
-  readOriginal,
-  readTexts,
-  saveImages,
-  saveTexts,
-  writeOriginals,
-};
-
-export type StoredFiles = typeof storedFiles;
+/** What spreading searches: each document's reading as the project keeps it, and where values are in the text. */
+interface Readings {
+  documentReadings(store: Store, folder: string, documents: readonly ProjectDocument[]): Promise<Map<DocumentId, Reading>>;
+  findPlaces(keys: readonly string[], documents: readonly { readonly id: DocumentId; readonly texts: readonly PageText[] }[]): Promise<TextPlace[]>;
+}
 
 export interface Interim extends EngineInterim {
-  readonly stored: StoredFiles;
-  /** Until step 6b: a document's marks and kept-visible list as the app's marking left them. */
-  replace(session: Session, document: DocumentId, marks: Edits["marks"], shown: Edits["shown"], kind: EditKind): void;
+  /** The stored-file function the app still calls itself. */
+  readonly stored: { readonly writeOriginals: typeof writeOriginals };
+  /** Until step 6d. */
+  readonly readings: Readings;
   /** Until step 6c: an approval the app worked out lands. */
   approve(session: Session, approval: Approval): void;
   /** Until step 6d: documents the app added, with the project's hidden values spread into them. */
@@ -46,8 +30,11 @@ export interface Interim extends EngineInterim {
 // Each lands only in `session`, so a late call from a project already left never lands in the next.
 export const interimOf = (core: EngineInterim): Interim => ({
   ...core,
-  stored: storedFiles,
-  replace: (session, document, marks, shown, kind) => core.opened(session)?.commit({ type: "replaced", document, marks, shown, kind }),
+  stored: { writeOriginals },
+  readings: {
+    documentReadings: (store, folder, documents) => documentReadings({ store, folder, client: core.client }, documents),
+    findPlaces: (keys, documents) => findPlaces(core.client, keys, documents),
+  },
   approve: (session, { project, here, changes }) =>
     core.opened(session)?.commit({ type: "approved", project, changedDocuments: [here, ...changes].map(({ document }) => document) }),
   addDocuments: (session, documents) => core.opened(session)?.commit({ type: "documentsAdded", documents }),
