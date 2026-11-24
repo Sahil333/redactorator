@@ -3,11 +3,10 @@ import type { LibraryState } from "../../api/state";
 import type { LibraryView } from "./host";
 
 /** The Library's commands, by what the gate asks of each. */
-type LibraryCommand = "refresh" | "open" | "create" | "manage" | "import" | "check" | "switchTo" | "settings";
+type LibraryCommand = "open" | "create" | "manage" | "import" | "check" | "switchTo" | "settings";
 
 /** Why `command` is refused now, or undefined when it may run. */
 export function gate({ library, worker, session }: LibraryView, command: LibraryCommand): ErrorCode | undefined {
-  if (command === "refresh") return undefined;
   // A project opened or changed while projects move could be left behind in the old store.
   const { phase } = library.place;
   if (phase === "moving" || phase === "opening") return "busy-moving";

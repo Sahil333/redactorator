@@ -19,6 +19,9 @@ export function list(part: ListPart, change: LibraryChange): ListPart {
     case "listed":
     case "storeLoaded":
       return { ...part, projects: change.projects };
+    // The list still shown is the store's that was left.
+    case "storeLoadFailed":
+      return { ...part, projects: undefined };
     default:
       return part;
   }

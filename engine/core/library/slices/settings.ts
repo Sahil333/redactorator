@@ -11,6 +11,9 @@ export const firstSettings: SettingsPart = { settings: defaultSettings, writable
 
 export function settings(part: SettingsPart, change: LibraryChange): SettingsPart {
   switch (change.type) {
+    // Nothing is written into a store before its own settings are read: they may be a newer version's.
+    case "storeChanged":
+      return { ...part, writable: false };
     case "storeLoaded":
       // Settings that can't be read leave those in use as they are.
       return typeof change.settings === "string" ? { ...part, writable: change.settings !== "newer" } : { settings: change.settings, writable: true };

@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Appearance, DocumentModel, Edit, PageText, Source } from "../engine/model/document";
 import { isPageIndex, type PageIndex } from "../engine/model/geometry";
 import type { EngineError } from "../engine/api/errors";
-import type { Pixels } from "../engine/api/facade";
-import type { Applied, ClientError, PdfClient, WorkerStatus } from "../engine/host-browser/interim";
+import type { Applied, ClientError, PdfClient, Pixels, WorkerStatus } from "../engine/host-browser/interim";
 import { CSS_PIXELS_PER_POINT } from "./pageGeometry";
 
 /** What the engine is doing when that is all there is to say, or undefined while it is ready. */

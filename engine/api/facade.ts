@@ -42,10 +42,3 @@ export interface Session {
 
 /** The settings the user edits directly. */
 export type SettingsChange = Partial<Pick<Settings, "appearance">>;
-
-/** A drawn page: `width` by `height` pixels, row by row, four bytes each (red, green, blue, alpha). */
-export interface Pixels {
-  readonly width: number;
-  readonly height: number;
-  readonly rgba: Uint8ClampedArray<ArrayBuffer>;
-}

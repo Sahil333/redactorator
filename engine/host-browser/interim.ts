@@ -19,6 +19,7 @@ import {
 export type { Applied, PdfClient, WorkerStatus } from "../core/pdf-client/client";
 export type { ClientError } from "../core/pdf-client/errors";
 export type { NewDocument, StoredProject } from "../core/stored/projects";
+export type { Pixels } from "../pdf-protocol/messages";
 
 /** The stored-file functions the app still calls itself. */
 const storedFiles = {

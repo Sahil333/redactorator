@@ -25,10 +25,12 @@ export async function openProject(host: LibraryHost, listed: { readonly folder: 
     hold.release();
     return raised(host, readFailed);
   }
-  // Projects began to move into another store while this one was read: it would be left behind.
-  if (host.state().library.place.store !== store) {
+  // While this one was read, projects began to move into another store, where it would be left
+  // behind, or another project opened, whose lock would never be let go once this one replaced it.
+  const { library, session } = host.state();
+  if (library.place.store !== store || session !== undefined) {
     hold.release();
-    return { ok: false, error: { code: "busy-moving" } };
+    return { ok: false, error: { code: library.place.store === store ? "session-open" : "busy-moving" } };
   }
   if (current !== undefined && "project" in current && current.project.id === listed.id) {
     const opened = openSession({ store, folder: listed.folder, project: current.project }, hold, async () => {

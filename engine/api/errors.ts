@@ -1,18 +1,15 @@
 import type { ReaderErrorCode, WriterErrorCode } from "../model/errors";
 
+/** Codes the PDF-worker client gives on its own; the worker never sends them. The first five are where the wire's `bad-message` arose. */
+export type PdfClientErrorCode = "worker-stopped" | "worker-not-running" | "unexpected-reply" | "unreadable-reply" | "unknown-request" | "stale-handle";
+
 /** Why a command failed, or what went wrong: the app maps each code, with its data, to a sentence (app/errors.ts). */
 export type ErrorCode =
   | ReaderErrorCode
   | WriterErrorCode
   // The PDF worker could not read a request, passed on with the worker's own sentence.
   | "bad-message"
-  // The PDF-worker client's own.
-  | "worker-stopped"
-  | "worker-not-running"
-  | "unexpected-reply"
-  | "unreadable-reply"
-  | "unknown-request"
-  | "stale-handle"
+  | PdfClientErrorCode
   // The Library's.
   | "projects-read-failed"
   | "open-elsewhere"

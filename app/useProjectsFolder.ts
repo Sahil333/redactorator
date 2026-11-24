@@ -70,11 +70,10 @@ export function useProjectsFolder(
   }, []);
 
   // A folder on disk keeps its files whatever the browser does.
-  const listed = library?.projects;
-  const inBrowser = library?.place.kind === "browser";
+  const keptInBrowser = library?.place.kind === "browser" && (library.projects?.length ?? 0) > 0;
   useEffect(() => {
-    if (inBrowser && listed !== undefined && listed.length > 0) keepStorage();
-  }, [inBrowser, listed]);
+    if (keptInBrowser) keepStorage();
+  }, [keptInBrowser]);
 
   /** Projects now live in `folder`; those still inside Chrome move in. */
   async function moveInto(library: Library, folder: FileSystemDirectoryHandle) {
@@ -106,9 +105,16 @@ export function useProjectsFolder(
     reopenFolder: async (library: Library) => {
       const folder = folderRef.current;
       if (folder === undefined) return;
-      if ((await folder.requestPermission({ mode: "readwrite" })) !== "granted") onProblem({ code: "folder-not-allowed", data: { name: folder.name } });
-      else if (!(await stillThere(folder))) setWaiting({ kind: "missing", name: folder.name });
-      else await moveInto(library, folder);
+      if ((await folder.requestPermission({ mode: "readwrite" })) !== "granted") {
+        onProblem({ code: "folder-not-allowed", data: { name: folder.name } });
+        return;
+      }
+      try {
+        if (await stillThere(folder)) await moveInto(library, folder);
+        else setWaiting({ kind: "missing", name: folder.name });
+      } catch {
+        onProblem({ code: "projects-read-failed" });
+      }
     },
     /** Asks for one project's folder, say one copied from another computer, to import. */
     pickProjectToImport: async (): Promise<Store | undefined> => {
