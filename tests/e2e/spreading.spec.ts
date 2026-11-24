@@ -32,7 +32,7 @@ import {
   toScreen,
   type PointBox,
 } from "./app";
-import { holdApprovalSearch, holdInspection, refuseReadings } from "./fakes";
+import { holdApprovalSearch, holdInspection, refuseReadings, stopWorkerOnSearch } from "./fakes";
 import { judge } from "./oracle";
 
 const lineFeedGlyph = new URL("../../fixtures/line-feed-glyph.pdf", import.meta.url).pathname;
@@ -160,6 +160,24 @@ test("a document added later gets the approved values, and opens in review with 
     { check: "positions", words: ["Jane Roe"] },
     { check: "metadata" },
   ]);
+});
+
+test("a document that can't be searched for the approved values isn't added, and says why", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await markText(page, 1, janeRoe, "Person");
+  await approve(page, undefined);
+  await saved(page);
+  await stopWorkerOnSearch(page);
+  await page.reload();
+  await expect(marks(page)).toHaveText([/Jane Roe/]);
+
+  await addDocuments(page, letterB);
+
+  await expect(page.getByRole("region", { name: "1 file not added" }).getByRole("listitem")).toHaveText([
+    "letter-b.pdf: This file could not be searched for the project's hidden values, so it wasn't added. Reload the page, then add it again.",
+  ]);
+  await expect(inExplorer(page, "letter-b.pdf")).toHaveCount(0);
 });
 
 test("Don't hide here keeps a value in one document only", async ({ page }) => {
@@ -499,7 +517,7 @@ test("a file dropped while an approval is worked out isn't added, and says why",
   await expect(inExplorer(page, "letter-b.pdf")).toHaveCount(0);
 });
 
-test("a document can't be approved while files are being added, and can once they're in", async ({ page }) => {
+test("a document can't be approved or switched while files are being added, and can once they're in", async ({ page }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
@@ -511,10 +529,24 @@ test("a document can't be approved while files are being added, and can once the
 
   await addDocuments(page, letterB);
   await expect(approveButton(page)).toBeDisabled();
+  // No other document opens while the add runs either.
+  await expect(inExplorer(page, "one-word.pdf")).toBeDisabled();
   await release();
   await expect(inExplorer(page, "letter-b.pdf")).toBeVisible();
   await show(page, "one-word.pdf");
   await approve(page, /hides 2 places in letter-b\.pdf/);
+});
+
+test("no document can be added while the approval heads-up is open, and one can once it is answered", async ({ page }) => {
+  await openLetters(page);
+  await markText(page, 1, aJaneRoe, "Person");
+  await approveButton(page).click();
+  const dialog = page.getByRole("dialog", { name: /^Approve/ });
+  await expect(dialog).toContainText(/hides 2 places in letter-b\.pdf/);
+
+  await expect(page.getByLabel("Add documents")).toBeDisabled();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByLabel("Add documents")).toBeEnabled();
 });
 
 test("cancelling the approval heads-up approves nothing and changes no other document", async ({ page }) => {

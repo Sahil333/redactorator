@@ -39,7 +39,12 @@ export type SessionChange =
   /** Nothing was approved: the readings could not be had or searched, or the record changed since the plan. */
   | { readonly type: "approvalFailed" }
   | { readonly type: "approvalCancelled" }
+  /** Chosen files are being added to the project. */
+  | { readonly type: "addStarted" }
+  /** Documents joined the project, with its hidden values spread into them. */
   | { readonly type: "documentsAdded"; readonly documents: readonly ProjectDocument[] }
+  /** No chosen file joined the project. */
+  | { readonly type: "addFailed" }
   | { readonly type: "downloaded"; readonly document: DocumentId }
   /** The PDF worker is asked to open `document`: what was open, and its output, are gone. */
   | { readonly type: "opening"; readonly document: DocumentId }
@@ -57,6 +62,3 @@ export type SessionChange =
   | { readonly type: "closeStarted" }
   /** Closing stopped, as the save failed: the Session stays open. */
   | { readonly type: "closeFailed" };
-
-/** The change the app's hooks still work out themselves, landed through `interim` until step 6d. */
-export type InterimChange = Extract<SessionChange, { readonly type: "documentsAdded" }>;

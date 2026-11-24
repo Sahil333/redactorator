@@ -187,9 +187,9 @@ the code, not reproduced.
     | `marks.add` refuses invalid targets with typed codes | 33 | No |
     | `bad-message` is split into five codes, each keeping today's sentence | 28 | No |
     | While approval works out what spreads, or its heads-up is open, the page and the marks panel take no edits: the marking surface is gone and the panel's controls, the link-id field included, are disabled. Today they do, and approval works it out again (`useApproval.ts:42-46`) | 48 | Yes: marking waits for the approval search |
-    | Adding documents is refused while a document is being applied, or while the heads-up is open. Today an add can start during an apply (`ProjectView.tsx:281, 295`) | 49 | Yes: Add is disabled during an apply |
+    | Adding documents is refused while a document is being applied, or while the heads-up is open. Today an add can start during an apply (`ProjectView.tsx:281, 295`). A file dropped during an apply is listed as not added, with its own sentence (`add-while-applying`, owner, step 6d) | 49 | Yes: Add is disabled during an apply, and a file dropped then is listed as not added |
     | From step 6b until 6d, a document added while an apply runs opens in its tab once the apply is done. Today it opens at once and the apply's output is dropped (owner, step 6b) | 49 | Yes: the new tab is blank until the apply ends |
-    | A closing Session takes no changes: while the save that leaving starts runs, Undo and Redo are disabled, from step 6c the marking tools and the marks panel are off too (they read `can.mark`), and a mark whose type is picked then is dropped. Today it is kept, and saved perhaps after the lock is let go (owner, steps 6a and 6c) | 4 | Yes, only while a slow save runs on leaving |
+    | A closing Session takes no changes: while leaving waits for an add to finish (from step 6d) and while the save that leaving starts runs, Undo and Redo are disabled, from step 6c the marking tools and the marks panel are off too (they read `can.mark`), and a mark whose type is picked then is dropped. Today it is kept, and saved perhaps after the lock is let go; before step 6d, leaving waited for an add before closing began (owner, steps 6a, 6c and 6d) | 4 | Yes, only while a slow add or save runs on leaving |
 
 *   **Changes to stored files.** No format version bump, no migration; the
     existing v1 and v2 migrations stay (decision 6).
@@ -624,9 +624,13 @@ problem), so the app still lists the files that were not added, as today.
 The "files not added" notice, its dismissal, and carrying it from Home into
 the new project are the app's state (`NotAdded.tsx`, `App.tsx:72, 133, 151`).
 When the gate refuses a whole `documents.add` (for example
-`add-while-approving`), the app adds one notice entry per file to the notice
-already shown; a completed add replaces the notice with its own refusals, as
-today (`useAddDocuments.ts:28, 50`).
+`add-while-approving` or `add-while-applying`), the app adds one notice entry
+per file to the notice already shown; a completed add replaces the notice with
+its own refusals, as today (`useAddDocuments.ts:28, 50`), once the whole add
+ends, where before step 6d it was replaced as soon as the files were read
+(owner, step 6d). A refusal whose code has no sentence (`busy-adding`,
+`worker-not-ready`, `session-closed`) adds nothing: it comes from a control
+the app has disabled.
 
 **Unknown ids.** A command that names a document or mark the project does
 not hold is refused with `unknown-document` or `unknown-mark`.
@@ -855,7 +859,7 @@ plan.
 | --- | --- | --- | --- | --- | --- |
 | `marks.*`, `labelling.link` | allowed | allowed | refused (`busy-approving`) | refused (`busy-approving`) | allowed; the arriving output is stale and dropped (`redact.spec.ts:267-286`) |
 | `history.undo`, `history.redo` | allowed | refused (`busy-adding`) | refused (`busy-approving`) | refused (`busy-approving`) | refused (`busy-applying`) |
-| `documents.add` | allowed | refused (`busy-adding`) | refused (`add-while-approving`, today's "wasn't added while a document was being approved") | refused (`add-while-approving`) | refused (`busy-applying`) |
+| `documents.add` | allowed | refused (`busy-adding`) | refused (`add-while-approving`, today's "wasn't added while a document was being approved") | refused (`add-while-approving`) | refused (`add-while-applying`, a sentence of its own; owner, step 6d) |
 | `approval.plan` | allowed | refused (`busy-adding`) | refused (`busy-approving`) | refused (`busy-approving`) | refused (`busy-applying`) |
 | `approval.confirm`, `approval.cancel` | refused (`no-plan`) | refused (`no-plan`) | refused (`no-plan`) | allowed | refused (`no-plan`) |
 | `viewer.open` (switch document) | allowed | refused (`busy-adding`) | refused (`busy-approving`) | allowed | refused (`busy-applying`) |
@@ -976,8 +980,8 @@ next can never be navigated away from by a leave that finished after it.
 A closed Session refuses every command with `session-closed`. The dispatcher
 drops records from the effects of a Session that is no longer the open one,
 so work a closed Session started can never land in the next project.
-`interim`'s `replace`, `approve` and `addDocuments` (steps 6a to 6d) named,
-or name, their Session for the same reason.
+`interim`'s `replace`, `approve` and `addDocuments` (steps 6a to 6d) named
+their Session for the same reason.
 
 ### 8. The Library
 
@@ -1514,10 +1518,11 @@ command's error.
 | `import-projects`, `import-missing`, `import-damaged`, `import-newer`, `import-failed` | none | `app/useProjectStore.ts:64-68` | result, shown as an app problem | 5b |
 | `settings-save-failed` | none | `app/useProjectStore.ts:229` | problem | 5a |
 | `add-while-approving` | none | `app/ProjectView.tsx:95` | `documents.add` result; the app adds one notice entry per file | 5b (as a refusal the app makes until 6d) |
+| `add-while-applying` | none | none today: new in step 6d (owner), in `app/errors.ts` | `documents.add` result; the app adds one notice entry per file | 6d |
 | `save-failed` | none | `app/ProjectView.tsx:97` | problem, and `close`'s result | 6a |
 | `approval-failed` | none | `app/useApproval.ts:9` | problem | 6c |
-| `add-save-failed` | none | `app/useAddDocuments.ts:10` | refusal, for every file | 5b (made by the app until 6d) |
-| `add-search-failed` | none | `app/useAddDocuments.ts:11` | refusal, for every file | 5b (made by the app until 6d) |
+| `add-save-failed` | none | `app/useAddDocuments.ts:10` | refusal, for every file | 5b (made by the app until 6d, then by the Session) |
+| `add-search-failed` | none | `app/useAddDocuments.ts:11` | refusal, for every file | 5b (made by the app until 6d, then by the Session) |
 | `original-missing` | `file` | `app/useDocumentInEngine.ts:28` | `viewer.open` result | 6b |
 | `not-pdf` | none | `app/importFiles.ts:33` | refusal | 5b |
 | `unreadable-file` | none | `app/importFiles.ts:40` | refusal | 5b |
@@ -2682,6 +2687,17 @@ labelling tests are green; the new output test is green.
     An unexpected failure refuses every file with `add-save-failed`
     (`useAddDocuments.ts:55`). The gate refuses an add while planning or
     confirming (`add-while-approving`) and while applying (`busy-applying`).
+*   **As built** (owner, step 6d): `effects/add.ts` (`adderOf`, as `plan.ts`
+    holds approval) runs the add from the project record as it was when Add
+    was pressed, as the hook did. Records: `addStarted` (operation `adding`),
+    `documentsAdded` (the add's end, as before, even when no file was taken)
+    and `addFailed` (an add that took nothing). The Session gets intake from
+    the root (`SessionHost.intake`). The gate refuses an add while applying
+    with `add-while-applying`, which has its own sentence, rather than
+    `busy-applying` (owner, step 6d); while adding, undo and redo,
+    `approval.plan`, `viewer.open`, `output.apply` and another add give
+    `busy-adding` (section 7). `close` dispatches `closeStarted`, then waits
+    for an add and a plan under way (the Non-Goals row for decision 4).
 
 #### 50. Deletes and app side
 
@@ -2693,6 +2709,13 @@ labelling tests are green; the new output test is green.
     reads `can.add` and calls `documents.add`; its refusals feed the "files
     not added" notice by the rule of Technical Plan section 4; the app drops
     the add half of its own flags.
+*   **As built** (owner, step 6d): `createEngine` returns the engine alone
+    too, and `OpenSession.commit`, `InterimChange` and the gate's `change`
+    command go. `NotAdded.tsx` needed no change: `ProjectView`'s
+    `useAddFiles` keeps the notice, replacing it once an add ends and listing
+    each file of an add refused with a sentence (section 4). Tabs and the
+    explorer read `can.switchDocument`; `App` drops `ProjectHandle` and
+    awaiting the add, since `close` waits for it.
 
 #### 51. `tests/e2e/spreading.spec.ts`, `tests/e2e/redact.spec.ts` (Modify)
 
@@ -2702,6 +2725,14 @@ labelling tests are green; the new output test is green.
     earlier refusal stays in the notice (`spreading.spec.ts:482`). New
     tests: Add is disabled during an apply (`delayApplied`), and while the
     heads-up is open. Ledger row for the deliberate change (decision 49).
+*   **As built** (owner, step 6d): the ledger row replaces
+    `redact.spec.ts` "a document added while apply runs opens in its tab once
+    the apply is done" with "while apply runs, no document can be added, a
+    dropped one says why, and once it is done one can". New tests in
+    `spreading.spec.ts`: Add disabled while the heads-up is open; a document
+    that can't be searched for the approved values isn't added and says why
+    (new fake `stopWorkerOnSearch`); no other document opens while files are
+    being added.
 
 **Done when:** the project, add and spreading tests and the golden test are
 green; nothing in `app/` imports `engine/core`.

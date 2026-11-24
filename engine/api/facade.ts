@@ -77,6 +77,8 @@ export interface Session {
     cancel(planId: number): Result<void>;
   };
   readonly documents: {
+    /** Adds the files that can be added, with the project's hidden values spread into them; the rest are refused. */
+    add(files: readonly IncomingFile[]): Promise<Result<{ readonly added: readonly DocumentId[]; readonly refused: readonly Refusal[] }>>;
     /** The document's cleaned file was downloaded. */
     markDownloaded(document: DocumentId): Result<void>;
   };

@@ -8,7 +8,7 @@ import { errorText } from "./errors";
 /**
  * Opens the shown tab's document in the PDF worker. `shown` is the open document once it is that
  * tab's, and undefined until then; `missing` says why its original could not be read. While
- * `canOpen` is false (an apply runs), a newly shown document waits to open.
+ * `canOpen` is false (another operation runs), a newly shown document waits to open.
  */
 export function useDocumentInEngine(
   session: Session,

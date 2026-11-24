@@ -1,5 +1,5 @@
 import type { Result } from "../../api/errors";
-import type { Session, TargetInput } from "../../api/facade";
+import type { IncomingFile, Session, TargetInput } from "../../api/facade";
 import type { DocumentHandle, EngineState } from "../../api/state";
 import { groundTruth } from "../../model/groundTruth";
 import { markKey, nextId, type Mark, type MarkTarget } from "../../model/marks";
@@ -7,9 +7,11 @@ import { customTypeName, type MarkType } from "../../model/markTypes";
 import type { DocumentId, Project, Settings } from "../../model/project";
 import { textTarget, type TextPieceRange, type Texts } from "../../model/selection";
 import type { Store } from "../../storage/store";
+import type { Intake } from "../intake";
 import type { PdfClient } from "../pdf-client/client";
 import type { LockHold } from "../ports";
-import type { InterimChange, SessionChange } from "./changes";
+import type { SessionChange } from "./changes";
+import { adderOf } from "./effects/add";
 import { applyOutput } from "./effects/apply";
 import { staleHandle, viewerOf } from "./effects/open";
 import { approvalOf } from "./effects/plan";
@@ -24,18 +26,18 @@ export interface OpenSession {
   readonly store: Store;
   readonly folder: string;
   readonly parts: SessionParts;
-  /** Until step 6d: lands documents the app added, and saves them, unless the gate refuses it. */
-  commit(change: InterimChange): void;
 }
 
 /**
  * What the engine root gives a Session: the state, the root dispatcher, which drops a change once
- * its Session is no longer the open one, the PDF worker, and the Library's custom types.
+ * its Session is no longer the open one, the PDF worker, intake, and the Library's custom types.
  */
 export interface SessionHost {
   state(): { readonly worker: EngineState["worker"]; readonly settings: Settings; readonly session: OpenSession | undefined };
   dispatch(from: Session, change: SessionChange, ...effects: (() => void)[]): void;
   readonly client: PdfClient;
+  /** Reads chosen files and has the PDF worker inspect them. */
+  intake(files: readonly IncomingFile[]): Promise<Intake>;
   /** Adds a type the user typed to the settings, once. */
   addCustomType(name: string): void;
 }
@@ -100,6 +102,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
 
   const source = { store, folder, client: host.client };
   const approval = approvalOf({ source, view, allowed, dispatch, change });
+  const adder = adderOf({ ...source, intake: host.intake, allowed, dispatch, change });
 
   const step = (direction: "undo" | "redo") => (document: DocumentId) => {
     const at = allowed("history", document);
@@ -140,6 +143,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
     history: { undo: step("undo"), redo: step("redo") },
     approval: { plan: approval.plan, confirm: approval.confirm, cancel: approval.cancel },
     documents: {
+      add: adder.add,
       markDownloaded(document) {
         const at = allowed("markDownloaded", document);
         if (!at.ok) return at;
@@ -185,7 +189,8 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
       const at = allowed("close");
       if (!at.ok) return at;
       dispatch({ type: "closeStarted" });
-      // An approval being worked out lands first; one waiting for its heads-up is cancelled.
+      // An add or an approval being worked out lands first; one waiting for its heads-up is cancelled.
+      await adder.settled();
       await approval.settled();
       if (view()?.parts.operation.operation === "confirming") dispatch({ type: "approvalCancelled" });
       if (!(await saving.flush())) {
@@ -202,8 +207,5 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
     store,
     folder,
     parts: firstParts(opening.project),
-    commit(record) {
-      if (allowed("change").ok) change(record);
-    },
   };
 }

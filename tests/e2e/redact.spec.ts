@@ -22,6 +22,8 @@ import {
   twoPagePdf,
   type PointBox,
   downloadButton,
+  dropFiles,
+  inExplorer,
 } from "./app";
 import { delayApplied, failRenderUntilApply, tamperApply } from "./fakes";
 import { judge } from "./oracle";
@@ -279,7 +281,7 @@ test("changing a mark while apply runs drops the output that arrives after", asy
   await expect(page.getByRole("button", { name: "Apply and check" })).toBeEnabled();
 });
 
-test("a document added while apply runs opens in its tab once the apply is done", async ({ page }) => {
+test("while apply runs, no document can be added, a dropped one says why, and once it is done one can", async ({ page }) => {
   await delayApplied(page, 1500);
   await openApp(page);
   await openPdf(page, oneWordPdf);
@@ -287,8 +289,15 @@ test("a document added while apply runs opens in its tab once the apply is done"
   await page.getByRole("button", { name: "Apply and check" }).click();
   await expect(page.getByRole("status")).toHaveText("Applying and checking…");
 
-  await addDocuments(page, twoPagePdf);
+  await expect(page.getByLabel("Add documents")).toBeDisabled();
+  await dropFiles(page, page.locator("#page-1"), [twoPagePdf]);
+  await expect(page.getByRole("region", { name: "1 file not added" }).getByRole("listitem")).toHaveText([
+    "two-pages.pdf: This file wasn't added while a document was being applied and checked. Add it again once the check is done.",
+  ]);
+  await expect(page.getByText("Checked:")).toBeVisible();
+  await expect(inExplorer(page, "two-pages.pdf")).toHaveCount(0);
 
+  await addDocuments(page, twoPagePdf);
   await expect(page.getByRole("tab", { selected: true })).toHaveText(/two-pages\.pdf/);
   await expect(page.getByRole("status")).toHaveText("Page 1 of 2");
   await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();

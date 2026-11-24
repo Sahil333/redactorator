@@ -7,7 +7,7 @@ import type { Store } from "../engine/storage/store";
 import { errorText } from "./errors";
 import { Home } from "./Home";
 import { incomingFiles } from "./incomingFiles";
-import { ProjectView, type ProjectHandle } from "./ProjectView";
+import { ProjectView } from "./ProjectView";
 import { engineStatus } from "./engineStatus";
 import { useEngineError } from "./useEngineError";
 import { useEngineState } from "./useEngineState";
@@ -85,7 +85,6 @@ function useOpenProject(facade: Engine | undefined, state: EngineState | undefin
   const openFromAddress = useAddressedProject(library?.projects, library?.phase === "ready", (projectId) => void open(projectId, "none"));
   // Set together with what the project takes as it starts, so it never starts without them.
   const [shown, setShown] = useState<Shown | undefined>(undefined);
-  const projectRef = useRef<ProjectHandle>(null);
   const session = state?.session !== undefined && facade?.session() === shown?.session ? shown?.session : undefined;
 
   function show(opened: Session, how: Navigation, carried: readonly Refusal[]) {
@@ -104,7 +103,6 @@ function useOpenProject(facade: Engine | undefined, state: EngineState | undefin
   const leaving = useRef<Promise<boolean>>(undefined);
 
   async function close(opened: Session, how: Navigation): Promise<boolean> {
-    await projectRef.current?.settled();
     if (!(await opened.close()).ok) return false;
     navigate(how, homeAddress());
     return true;
@@ -128,7 +126,7 @@ function useOpenProject(facade: Engine | undefined, state: EngineState | undefin
   }
   useHistoryMoves(() => void followAddress());
 
-  return { session, carried: shown?.carried ?? [], projectRef, openFromAddress, open, show, leave };
+  return { session, carried: shown?.carried ?? [], openFromAddress, open, show, leave };
 }
 
 /** Makes chosen files into a project and opens it; the files that could not be added are listed on Home, or carried into the project. */
@@ -157,9 +155,7 @@ async function importProject(library: Library, pick: () => Promise<Store | undef
 }
 
 export function App() {
-  const [started, setStarted] = useState<ReturnType<typeof createBrowserEngine> | undefined>(undefined);
-  const facade = started?.engine;
-  const interim = started?.interim;
+  const [facade, setFacade] = useState<Engine | undefined>(undefined);
   const state = useEngineState(facade);
   const library = state?.library;
   const failure = useEngineError(state?.worker);
@@ -167,7 +163,7 @@ export function App() {
   const projectsFolder = useProjectsFolder(
     library,
     (first) => {
-      setStarted(createBrowserEngine(first));
+      setFacade(createBrowserEngine(first));
       project.openFromAddress();
     },
     (error) => (error === undefined ? problem.drop() : problem.raise(errorText(error))),
@@ -180,7 +176,6 @@ export function App() {
     problem.drop();
     setRefused([]);
   });
-  const opened = project.session && interim?.opened(project.session);
 
   const withLibrary = (act: (library: Library) => Promise<void>) => () => {
     if (facade !== undefined) void act(facade.library);
@@ -189,15 +184,12 @@ export function App() {
   // A change that went through clears the app's own problem too; one that failed has a newer problem of the engine's.
   const changed = (change: Promise<unknown> | undefined) => void change?.then(problem.drop);
 
-  if (opened !== undefined && state?.session !== undefined && started !== undefined) {
+  if (project.session !== undefined && state?.session !== undefined) {
     return (
       <ProjectView
-        key={opened.folder}
-        ref={project.projectRef}
-        session={opened.session}
+        key={state.session.folder}
+        session={project.session}
         opened={state.session}
-        interim={started.interim}
-        store={opened.store}
         initialRefused={project.carried}
         worker={state.worker}
         failure={failure}

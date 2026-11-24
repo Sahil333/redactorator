@@ -1,12 +1,12 @@
 import type { Engine, IncomingFile, Session } from "../api/facade";
 import type { EngineState, Problem } from "../api/state";
 import { createDispatcher } from "./dispatcher";
-import { intake, type Intake } from "./intake";
+import { intake } from "./intake";
 import type { LibraryChange } from "./library/changes";
 import { createLibrary, type FirstStore } from "./library/facade";
 import { can } from "./library/gate";
 import { firstLibrary, library, type LibraryParts } from "./library/slices";
-import { pdfClient, type PdfClient, type WorkerStatus } from "./pdf-client/client";
+import { pdfClient, type WorkerStatus } from "./pdf-client/client";
 import type { LockPort, WorkerChannel } from "./ports";
 import { approvalProblems, problems } from "./problems";
 import type { SessionChange } from "./session/changes";
@@ -76,17 +76,8 @@ function publish(root: Root): EngineState {
 
 const workerOf = ({ state, error }: WorkerStatus): EngineState["worker"] => (error === undefined ? { status: state } : { status: state, error });
 
-/** What the app's hooks that have not moved into the engine yet take from it (engine/host-browser/interim.ts). */
-export interface EngineInterim {
-  readonly client: PdfClient;
-  /** The open Session's store and folder, and how the app's hooks land their changes; undefined for a Session no longer open. */
-  opened(session: Session): OpenSession | undefined;
-  /** Reads chosen files and has the PDF worker inspect them, for adding them to the open project. */
-  intake(files: readonly IncomingFile[]): Promise<Intake>;
-}
-
 /** Builds the engine root: the PDF-worker client over `worker`, and the Library over the first store. No Session is open. */
-export function createEngine(start: FirstStore & { readonly worker: WorkerChannel; readonly lock: LockPort }): { readonly engine: Engine; readonly interim: EngineInterim } {
+export function createEngine(start: FirstStore & { readonly worker: WorkerChannel; readonly lock: LockPort }): Engine {
   const client = pdfClient(start.worker);
   const root: Root = { revision: 0, worker: { status: "starting" }, problems: [], library: firstLibrary, session: undefined };
   const dispatcher = createDispatcher(root, reduce);
@@ -98,6 +89,7 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
     },
     dispatch: (from, change, ...effects) => dispatcher.dispatch({ type: "session", from, change }, ...effects),
     client,
+    intake: take,
     addCustomType: (name) => addCustomType(name),
   };
   const { library: facade, addCustomType } = createLibrary({ state: dispatcher.getState, dispatch: dispatcher.dispatch, lock: start.lock, intake: take, session }, start);
@@ -105,7 +97,7 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
 
   let publishedFrom = dispatcher.getState();
   let published = publish(publishedFrom);
-  const engine: Engine = {
+  return {
     getState() {
       const now = dispatcher.getState();
       if (now !== publishedFrom) {
@@ -118,9 +110,4 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
     library: facade,
     session: () => dispatcher.getState().session?.session,
   };
-  const opened = (session: Session) => {
-    const open = dispatcher.getState().session;
-    return open?.session === session ? open : undefined;
-  };
-  return { engine, interim: { client, opened, intake: take } };
 }

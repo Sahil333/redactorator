@@ -160,6 +160,19 @@ export async function stopWorkerAfter(page: Page): Promise<void> {
   await workerFake(page, "stopWorkerAfter", { prelude });
 }
 
+/** From the PDF worker's next start, it throws on the first search for values instead of answering it. */
+export async function stopWorkerOnSearch(page: Page): Promise<void> {
+  const prelude = sourceOf((scope: WorkerScope, acted) => {
+    scope.addEventListener("message", (event) => {
+      if (event.data.type !== "match") return;
+      event.stopImmediatePropagation();
+      acted("stopWorkerOnSearch");
+      throw new Error("The fake stopped the PDF worker");
+    });
+  });
+  await workerFake(page, "stopWorkerOnSearch", { prelude });
+}
+
 /** The PDF worker sends the text of the page at `pageIndex` `ms` late. */
 export async function delayPageText(page: Page, pageIndex: number, ms: number): Promise<void> {
   const prelude = sourceOf(
