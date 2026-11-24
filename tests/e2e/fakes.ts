@@ -341,6 +341,7 @@ export async function connectionsMade(page: Page): Promise<() => string[]> {
   const watch = sourceOf(watchConnections);
   const fakes = await fakeWorker(page, "connectionsMade", { prelude: watch });
   await page.addInitScript(watch);
+  if (page.url().startsWith("http")) await page.evaluate(watch);
   return () => [...fakes.acted.keys()].filter((key) => key.startsWith("connection "));
 }
 

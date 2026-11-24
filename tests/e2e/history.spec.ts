@@ -20,7 +20,7 @@ import {
   openPdf,
   saved,
   show,
-  storedText,
+  storedJson,
   twoPagePdf,
 } from "./app";
 import { delayApplied, holdApprovalSearch, holdInspection } from "./fakes";
@@ -65,7 +65,8 @@ test("undo and redo mark a downloaded document as changed since its download, an
 
 test("undoing Don't hide here brings the value back, and marking the value again stops keeping it visible", async ({ page }) => {
   const keepHere = page.getByRole("button", { name: "Don't hide Jane Roe on page 1 here" });
-  const storedDocument = async () => JSON.parse(await storedText(page, "one-word/.redactorator/project.json")).documents[0];
+  const storedProject = () => storedJson(page, "one-word/.redactorator/project.json");
+  const shown = ["documents", "0", "shown"];
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
@@ -76,14 +77,14 @@ test("undoing Don't hide here brings the value back, and marking the value again
   await undoButton(page).click();
   await expect(marks(page)).toHaveText([/Jane Roe/]);
   await saved(page);
-  expect(await storedDocument()).toMatchObject({ shown: [] });
+  expect(await storedProject()).toHaveProperty(shown, []);
 
   await keepHere.click();
   await saved(page);
-  expect((await storedDocument()).shown).toHaveLength(1);
+  expect(await storedProject()).toHaveProperty([...shown, "length"], 1);
   await markText(page, 1, janeRoe, "Person");
   await saved(page);
-  expect(await storedDocument()).toMatchObject({ shown: [] });
+  expect(await storedProject()).toHaveProperty(shown, []);
 });
 
 test("approval ends undo only in the documents it changed", async ({ page }) => {

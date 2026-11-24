@@ -1,14 +1,11 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { addDocuments, dear, drawBox, janeRoe, markText, oneWordPdf, openApp, openPdf, saved, storedText, twoPagePdf } from "./app";
+import { addDocuments, dear, drawBox, janeRoe, markText, oneWordPdf, openApp, openPdf, saved, storedJson, twoPagePdf } from "./app";
 import { countWrites, failWrites, holdWrites, stopWorkerAfter } from "./fakes";
 
-/** The marks stored for one-word.pdf in the project made from it. */
-const storedMarks = async (page: Page): Promise<unknown[]> =>
-  JSON.parse(await storedText(page, "one-word/.redactorator/project.json")).documents[0].marks;
-
-const storedColour = async (page: Page): Promise<unknown> =>
-  JSON.parse(await storedText(page, ".redactorator/settings.json")).appearance.colour;
+/** The project made from one-word.pdf, as stored. */
+const storedProject = (page: Page) => storedJson(page, "one-word/.redactorator/project.json");
+const markCount = ["documents", "0", "marks", "length"];
 
 async function openOneWord(page: Page): Promise<void> {
   await openApp(page);
@@ -27,7 +24,7 @@ test("changes made while a save is under way are saved together in one more writ
 
   await saved(page);
   expect(await writes()).toBeLessThanOrEqual(2);
-  expect(await storedMarks(page)).toHaveLength(10);
+  expect(await storedProject(page)).toHaveProperty(markCount, 10);
 });
 
 test("after a save fails, the next change saves both", async ({ page }) => {
@@ -39,7 +36,7 @@ test("after a save fails, the next change saves both", async ({ page }) => {
   await markText(page, 1, dear, "Other");
 
   await saved(page);
-  expect(await storedMarks(page)).toHaveLength(2);
+  expect(await storedProject(page)).toHaveProperty(markCount, 2);
 });
 
 test("after the PDF engine stops, a mark removed from the open document is still saved", async ({ page }) => {
@@ -53,7 +50,7 @@ test("after the PDF engine stops, a mark removed from the open document is still
   await page.getByRole("button", { name: "Remove mark Dear on page 1" }).click();
 
   await saved(page);
-  expect(await storedMarks(page)).toHaveLength(1);
+  expect(await storedProject(page)).toHaveProperty(markCount, 1);
 });
 
 test("settings changed while one is being saved are stored in the order they were made", async ({ page }) => {
@@ -65,5 +62,5 @@ test("settings changed while one is being saved are stored in the order they wer
   await page.getByLabel("Custom colour").fill("#336699");
   await release();
 
-  await expect.poll(() => storedColour(page)).toBe("#336699");
+  await expect.poll(() => storedJson(page, ".redactorator/settings.json")).toHaveProperty(["appearance", "colour"], "#336699");
 });

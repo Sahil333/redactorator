@@ -331,15 +331,16 @@ export async function dropFiles(page: Page, target: Locator, paths: readonly str
   await target.dispatchEvent("drop", { dataTransfer: transfer });
 }
 
-/** The text of the file at `path` in the browser's private storage. */
-export async function storedText(page: Page, path: string): Promise<string> {
-  return page.evaluate(async (path) => {
+/** The JSON file at `path` in the browser's private storage, unchecked. */
+export async function storedJson(page: Page, path: string): Promise<unknown> {
+  const text = await page.evaluate(async (path) => {
     const names = path.split("/");
     const name = names.pop() ?? "";
     let folder = await navigator.storage.getDirectory();
     for (const each of names) folder = await folder.getDirectoryHandle(each);
     return (await (await folder.getFileHandle(name)).getFile()).text();
   }, path);
+  return JSON.parse(text);
 }
 
 /** The names of the entries in the folder at `path` in the browser's private storage. */
