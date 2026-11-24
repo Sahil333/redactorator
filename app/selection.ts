@@ -2,7 +2,7 @@
 // characters of a page's text, so a selection can start on one page and end on another.
 import type { PageText } from "../engine/model/document";
 import { isPageIndex, type Box, type PageIndex } from "../engine/model/geometry";
-import { bounds, rangeBoxes, rangeText, sharesColumns, wordAt } from "../engine/pageText";
+import { bounds, rangeBoxes, rangeText, sharesColumns, wordAt } from "../engine/model/pageText";
 import type { TextPiece, TextTarget } from "./marks";
 
 /** Before character `offset` of a page's text; from 0 to the text's length. */

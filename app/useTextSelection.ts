@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import type { PageModel } from "../engine/model/document";
 import type { Box, PageIndex } from "../engine/model/geometry";
-import { charAt } from "../engine/pageText";
+import { charAt } from "../engine/model/pageText";
 import { boxesOn, type Pending, type Tool } from "./marks";
 import {
   extend,

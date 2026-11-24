@@ -3,7 +3,7 @@
 // where the engine found each value in their text; nothing spreads until a document is approved.
 import type { PageText, Reading } from "../engine/model/document";
 import type { Box, PageIndex } from "../engine/model/geometry";
-import { rangeBoxes, rangeText } from "../engine/pageText";
+import { rangeBoxes, rangeText } from "../engine/model/pageText";
 import { anchorOf, placesOnCopies } from "./images";
 import { markKey, markName, nextId, type Mark } from "./marks";
 import type { DocumentId, HiddenValue, Project, ProjectDocument } from "./project";

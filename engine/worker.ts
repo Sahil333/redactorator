@@ -13,8 +13,8 @@ import { isPageIndex, isPoints, pointBox, type Box, type PageIndex } from "./mod
 import type { FileNumber, InspectionNumber, MatchNumber, PdfError, PdfReply } from "./pdf-protocol/messages";
 import { parsePdfRequest } from "./pdf-protocol/parse";
 import { centre, inside, overlap, textMoved, type PageGlyph, type Point } from "./glyphs";
-import { findAll } from "./match";
-import { bounds, rangeBoxes, readingOrder } from "./pageText";
+import { findAll } from "./model/match";
+import { bounds, rangeBoxes, readingOrder } from "./model/pageText";
 
 interface Opened {
   readonly file: FileNumber;

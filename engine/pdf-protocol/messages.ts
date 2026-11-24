@@ -2,7 +2,7 @@
 import type { Brand } from "../model/brand";
 import type { Appearance, DocumentModel, Edit, PageText, Reading, Source } from "../model/document";
 import type { PageIndex } from "../model/geometry";
-import type { Found } from "../match";
+import type { Found } from "../model/match";
 
 /** Numbers each file the UI opens, starting at 1. */
 export type FileNumber = Brand<number, "FileNumber">;
@@ -25,7 +25,7 @@ export const isMatchNumber = (value: unknown): value is MatchNumber =>
 // `file` numbers each file the UI opens; the worker echoes it in every reply so
 // the UI can drop a reply about a file the user has since replaced.
 // An inspection opens a file only to say whether it can be added and to read its text and
-// images, and keeps nothing. A match searches documents' text for keys (engine/match.ts), each document
+// images, and keeps nothing. A match searches documents' text for keys (engine/model/match.ts), each document
 // given as each page's characters.
 export type PdfRequest =
   | { readonly type: "inspect"; readonly inspection: InspectionNumber; readonly bytes: ArrayBuffer }

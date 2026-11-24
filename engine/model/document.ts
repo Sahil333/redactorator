@@ -18,7 +18,7 @@ export interface DocumentModel {
 
 /**
  * One character of a page's text: MuPDF's structured-text blocks and lines, put in
- * reading order by `readingOrder` (engine/pageText.ts). A line ends with a "\n"
+ * reading order by `readingOrder` (engine/model/pageText.ts). A line ends with a "\n"
  * entry and a block with a second one; those have no box. Lines and blocks with no
  * characters add nothing. A character's
  * index in `PageText.chars` is its offset, as the ground-truth schema counts them.

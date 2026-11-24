@@ -51,7 +51,7 @@ export interface ProjectDocument {
  * that marks it is approved.
  */
 export interface HiddenValue {
-  /** A value's normalised form (engine/match.ts), which every spelling of it shares, or an image part's key (app/images.ts). */
+  /** A value's normalised form (engine/model/match.ts), which every spelling of it shares, or an image part's key (app/images.ts). */
   readonly key: string;
   /** As it was marked, to show. */
   readonly text: string;

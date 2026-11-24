@@ -1,7 +1,7 @@
 // Pure functions over a page's text model, shared by the UI and the worker so a
 // text mark is boxed the same way on screen and in the file.
-import type { PageText } from "./model/document";
-import type { Box } from "./model/geometry";
+import type { PageText } from "./document";
+import type { Box } from "./geometry";
 
 const min = <T extends number>(a: T, b: T): T => (a < b ? a : b);
 const max = <T extends number>(a: T, b: T): T => (a > b ? a : b);
