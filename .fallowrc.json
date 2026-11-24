@@ -5,6 +5,7 @@
     "coverage": "coverage/coverage-final.json"
   },
   "boundaries": {
+    "coverage": { "requireAllFiles": true, "allowUnmatched": ["*.config.ts", "engine/globals.ts"] },
     "zones": [
       { "name": "model", "patterns": ["engine/model/**"] },
       { "name": "storage", "patterns": ["engine/storage/**"] },
@@ -27,6 +28,8 @@
       { "from": "pdf-apply", "allow": ["model", "pdf-protocol", "pdf", "pdf-write"] },
       { "from": "pdf-write", "allow": ["model", "pdf"] },
       { "from": "pdf", "allow": ["model", "pdf-protocol", "pdf-apply"] },
+      { "from": "host-browser", "allow": ["model", "storage", "pdf-protocol", "api", "core"] },
+      { "from": "app", "allow": ["model", "storage", "api", "host-browser"] },
       { "from": "tests", "allow": ["model", "storage", "pdf-protocol", "api", "core", "pdf-apply", "pdf", "host-browser", "app"] }
     ]
   }
