@@ -24,7 +24,6 @@ export type ErrorCode =
   | "settings-save-failed"
   // Refusals the app never shows: it disables the control from the state, or never sends the command.
   | "busy-moving"
-  | "worker-not-ready"
   | "session-open"
   | "session-closed"
   | "unknown-project";
