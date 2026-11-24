@@ -149,7 +149,10 @@ export function pdfClient(channel: WorkerChannel): PdfClient {
   function failAboutFile(file: FileNumber, error: PdfError) {
     const stale = isStale(file);
     if (!stale) doneApplying();
-    takeOldest(file)?.settle(stale ? staleHandle : error);
+    const request = takeOldest(file);
+    if (request !== undefined) request.settle(stale ? staleHandle : error);
+    // It answers nothing asked, but it is about the open document, so it is still shown.
+    else if (!stale) setStatus({ state: status.state, error });
   }
 
   /** The worker could not read a request, so it cannot say which one failed. */

@@ -208,6 +208,29 @@ export async function delayApplied(page: Page, ms: number): Promise<void> {
   await workerFake(page, "delayApplied", { prelude });
 }
 
+/**
+ * Once a document opens, and after its first pages have had time to be drawn, the PDF worker sends
+ * an error about it that answers no request.
+ */
+export async function errorAfterOpen(page: Page, message: string): Promise<void> {
+  const prelude = sourceOf(
+    (scope: WorkerScope, acted, message: string) => {
+      const send = scope.postMessage.bind(scope);
+      scope.postMessage = (reply, transfer) => {
+        send(reply, transfer);
+        if (reply.type !== "opened") return;
+        const { file } = reply;
+        setTimeout(() => {
+          acted("errorAfterOpen");
+          send({ type: "error", file, error: { code: "render-failed", message } });
+        }, 1000);
+      };
+    },
+    message,
+  );
+  await workerFake(page, "errorAfterOpen", { prelude });
+}
+
 /** Holds the PDF worker's replies of `type` from its next start until the returned function releases them. */
 async function holdWorkerReplies(page: Page, key: string, type: PdfReply["type"]): Promise<() => Promise<void>> {
   const prelude = sourceOf(
