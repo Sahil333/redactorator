@@ -36,6 +36,7 @@ const sentences: Partial<Record<ErrorCode, (data: (key: string) => string) => st
   "add-while-approving": () => "This file wasn't added while a document was being approved. Add it again once the approval is done.",
   "original-missing": (data) => `${data("file")} is missing from the project's folder, so it can't be shown. Add the file again with Add documents.`,
   "save-failed": () => "Your latest changes could not be saved. Check that the disk has space; the next change tries again.",
+  "approval-failed": () => "The documents' text could not be read, so nothing was approved. Reload the page and approve again.",
 };
 
 /** What to tell the user about `error`: the worker's own sentence, or the app's; undefined for one the app never shows. */

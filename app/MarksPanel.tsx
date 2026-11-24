@@ -16,6 +16,8 @@ interface MarksPanelProps {
   readonly id: string;
   readonly width: number;
   readonly marks: readonly Mark[];
+  /** Whether the marks can be changed: removed, retyped, kept visible here or linked. */
+  readonly canMark: boolean;
   /** The values hidden in the whole project, and how far each reaches. */
   readonly hidden: readonly HiddenValue[];
   readonly reach: ReadonlyMap<string, Reach>;
@@ -106,7 +108,7 @@ function ProjectList({ hidden, reach }: Pick<MarksPanelProps, "hidden" | "reach"
   );
 }
 
-interface ItemRowProps extends Pick<MarksPanelProps, "typeOptions" | "onHighlight" | "onRetype" | "onLink"> {
+interface ItemRowProps extends Pick<MarksPanelProps, "canMark" | "typeOptions" | "onHighlight" | "onRetype" | "onLink"> {
   readonly item: Item;
   readonly highlighted: boolean;
   /** Whether it is a box that no approval will spread, being mostly on no image. */
@@ -116,19 +118,25 @@ interface ItemRowProps extends Pick<MarksPanelProps, "typeOptions" | "onHighligh
   readonly onKeepHere: (() => void) | undefined;
 }
 
-function ItemRow({ item, highlighted, stays, typeOptions, onHighlight, onRetype, onLink, onRemove, onKeepHere }: ItemRowProps) {
+/** A row's background: the highlight over the new-mark tint. */
+const tintOf = (highlighted: boolean, isNew: boolean) => (highlighted ? "bg-mark-wash" : isNew ? "bg-accent-wash" : "");
+
+/** Delete removes the item while the marks can be changed, unless it is pressed in a field. */
+function removeOnDelete(event: KeyboardEvent, canMark: boolean, remove: () => void) {
+  if (event.key !== "Delete" || event.target instanceof HTMLInputElement || !canMark) return;
+  event.preventDefault();
+  remove();
+}
+
+function ItemRow({ item, highlighted, stays, canMark, typeOptions, onHighlight, onRetype, onLink, onRemove, onKeepHere }: ItemRowProps) {
   const [retyping, setRetyping] = useState(false);
   const [mark] = item;
   const where = `${markName(mark)} on ${placesLabel(item)}`;
   const isNew = item.some((each) => each.isNew);
-  const tint = highlighted ? "bg-mark-wash" : isNew ? "bg-accent-wash" : "";
+  const tint = tintOf(highlighted, isNew);
   return (
     <li
-      onKeyDown={(event: KeyboardEvent) => {
-        if (event.key !== "Delete" || event.target instanceof HTMLInputElement) return;
-        event.preventDefault();
-        onRemove();
-      }}
+      onKeyDown={(event) => removeOnDelete(event, canMark, onRemove)}
       onPointerEnter={() => onHighlight(mark.id)}
       onPointerLeave={(event) => {
         if (!event.currentTarget.contains(document.activeElement)) onHighlight(undefined);
@@ -149,8 +157,9 @@ function ItemRow({ item, highlighted, stays, typeOptions, onHighlight, onRetype,
         <button
           type="button"
           aria-label={`Change type of ${where}`}
+          disabled={!canMark}
           onClick={() => setRetyping(true)}
-          className="min-h-6 rounded text-left text-xs text-ink-muted hover:text-ink hover:underline"
+          className="min-h-6 rounded text-left text-xs text-ink-muted enabled:hover:text-ink enabled:hover:underline"
         >
           {markTypeLabel(mark.type)} · {placesLabel(item)}
         </button>
@@ -159,8 +168,9 @@ function ItemRow({ item, highlighted, stays, typeOptions, onHighlight, onRetype,
           <button
             type="button"
             aria-label={`Don't hide ${where} here`}
+            disabled={!canMark}
             onClick={onKeepHere}
-            className="block min-h-6 rounded text-xs text-ink-muted underline hover:text-ink"
+            className="block min-h-6 rounded text-xs text-ink-muted underline enabled:hover:text-ink disabled:opacity-40"
           >
             Don't hide here
           </button>
@@ -169,6 +179,7 @@ function ItemRow({ item, highlighted, stays, typeOptions, onHighlight, onRetype,
           <input
             aria-label={`Link id for ${where}`}
             placeholder="Link id"
+            disabled={!canMark}
             value={mark.linkId}
             onChange={(event) => onLink(mark, event.target.value)}
             className="mt-1 block h-7 w-full rounded border border-field bg-white px-2 text-xs placeholder:text-ink-muted"
@@ -179,8 +190,9 @@ function ItemRow({ item, highlighted, stays, typeOptions, onHighlight, onRetype,
         type="button"
         aria-label={`Remove mark ${where}`}
         title={onKeepHere === undefined ? "Remove" : "Stop hiding everywhere, once this document is approved"}
+        disabled={!canMark}
         onClick={onRemove}
-        className="min-h-6 min-w-6 rounded text-ink-muted hover:bg-paper-sunk hover:text-ink"
+        className="min-h-6 min-w-6 rounded text-ink-muted enabled:hover:bg-paper-sunk enabled:hover:text-ink disabled:opacity-40"
       >
         ×
       </button>

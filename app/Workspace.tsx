@@ -65,6 +65,8 @@ interface WorkspaceProps {
   readonly output: DocumentHandle | undefined;
   /** Whether the PDF worker is ready, so the pages take marks. */
   readonly ready: boolean;
+  /** Whether the Session takes changes to the marks: not while approval works out what spreads, or waits for its heads-up. */
+  readonly canMark: boolean;
   readonly error: EngineError | undefined;
   /** Hears why a page could not be drawn or read. */
   readonly onFailure: (error: EngineError) => void;
@@ -99,7 +101,7 @@ export function Workspace(props: WorkspaceProps) {
   const { pages } = output ?? handle;
   const viewer = usePageImages(session, handle, output, props.onFailure);
   const source = output === undefined ? "original" : "output";
-  const editing = output === undefined && props.ready;
+  const editing = output === undefined && props.ready && props.canMark;
   const shownMarks = output === undefined ? marks.marks : [];
   const zoom = useZoom(pages);
   const checked = checkedFiles[review.approved ? "cleaned" : "preview"];
@@ -191,6 +193,7 @@ export function Workspace(props: WorkspaceProps) {
         id={MARKS_PANEL_ID}
         width={widths.marks}
         marks={marks.marks}
+        canMark={props.canMark}
         hidden={review.hidden}
         reach={review.reach}
         images={props.images}

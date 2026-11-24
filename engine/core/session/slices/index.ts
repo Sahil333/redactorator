@@ -1,5 +1,6 @@
 import type { DocumentId, Project } from "../../../model/project";
 import type { SessionChange } from "../changes";
+import { approval, type ApprovalPart } from "./approval";
 import { history, withNoHistory, type HistoryPart } from "./history";
 import { firstMarks, marks, type MarksPart } from "./marks";
 import { firstOperation, operation, type OperationPart } from "./operation";
@@ -12,6 +13,7 @@ export interface SessionParts {
   readonly operation: OperationPart;
   readonly viewer: ViewerPart;
   readonly output: OutputPart | undefined;
+  readonly approval: ApprovalPart | undefined;
 }
 
 export const firstParts = (project: Project): SessionParts => ({
@@ -19,6 +21,7 @@ export const firstParts = (project: Project): SessionParts => ({
   operation: firstOperation,
   viewer: firstViewer,
   output: undefined,
+  approval: undefined,
 });
 
 /** The document an undoable record changes. A label change is not undone. */
@@ -42,7 +45,9 @@ export function session(parts: SessionParts, change: SessionChange): SessionPart
     operation: operation(parts.operation, change),
     viewer: viewer(parts.viewer, change),
     output: output(parts.output, change),
+    approval: approval(parts.approval, change),
   };
-  const same = next.record === parts.record && next.operation === parts.operation && next.viewer === parts.viewer && next.output === parts.output;
+  const same =
+    next.record === parts.record && next.operation === parts.operation && next.viewer === parts.viewer && next.output === parts.output && next.approval === parts.approval;
   return same ? parts : next;
 }

@@ -12,6 +12,7 @@ import type { LockHold } from "../ports";
 import type { InterimChange, SessionChange } from "./changes";
 import { applyOutput } from "./effects/apply";
 import { staleHandle, viewerOf } from "./effects/open";
+import { approvalOf } from "./effects/plan";
 import { saver } from "./effects/save";
 import { gate, type SessionView } from "./gate";
 import { canStep, validOutput } from "./selectors";
@@ -23,7 +24,7 @@ export interface OpenSession {
   readonly store: Store;
   readonly folder: string;
   readonly parts: SessionParts;
-  /** Until steps 6c and 6d: lands a change the app's hooks worked out, and saves it, unless the Session is closing. */
+  /** Until step 6d: lands documents the app added, and saves them, unless the gate refuses it. */
   commit(change: InterimChange): void;
 }
 
@@ -97,6 +98,9 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
     if (name !== undefined) host.addCustomType(name);
   }
 
+  const source = { store, folder, client: host.client };
+  const approval = approvalOf({ source, view, allowed, dispatch, change });
+
   const step = (direction: "undo" | "redo") => (document: DocumentId) => {
     const at = allowed("history", document);
     if (!at.ok) return at;
@@ -134,6 +138,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
         }),
     },
     history: { undo: step("undo"), redo: step("redo") },
+    approval: { plan: approval.plan, confirm: approval.confirm, cancel: approval.cancel },
     documents: {
       markDownloaded(document) {
         const at = allowed("markDownloaded", document);
@@ -143,7 +148,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
       },
     },
     viewer: viewerOf({
-      source: { store, folder, client: host.client },
+      source,
       view,
       allowed,
       dispatch,
@@ -180,6 +185,9 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
       const at = allowed("close");
       if (!at.ok) return at;
       dispatch({ type: "closeStarted" });
+      // An approval being worked out lands first; one waiting for its heads-up is cancelled.
+      if (view()?.parts.operation.operation === "planning") await approval.settled();
+      if (view()?.parts.operation.operation === "confirming") dispatch({ type: "approvalCancelled" });
       if (!(await saving.flush())) {
         dispatch({ type: "closeFailed" });
         return { ok: false, error: { code: "save-failed" } };

@@ -1,5 +1,6 @@
 import type { Problem } from "../api/state";
 import type { LibraryChange } from "./library/changes";
+import type { SessionChange } from "./session/changes";
 
 /**
  * The problems that outlive the command that caused them. A store load replaces them with its own;
@@ -17,6 +18,18 @@ export function problems(current: readonly Problem[], change: LibraryChange, rev
     case "changeStarted":
     case "imported":
       return [];
+    default:
+      return current;
+  }
+}
+
+/** A failed approval is a problem until the next approval starts. */
+export function approvalProblems(current: readonly Problem[], change: SessionChange, revision: number): readonly Problem[] {
+  switch (change.type) {
+    case "approvalFailed":
+      return [...current, { error: { code: "approval-failed" }, raisedAt: revision }];
+    case "planning":
+      return current.some(({ error }) => error.code === "approval-failed") ? current.filter(({ error }) => error.code !== "approval-failed") : current;
     default:
       return current;
   }

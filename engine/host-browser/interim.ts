@@ -5,7 +5,7 @@ import { documentReadings, findPlaces } from "../core/session/effects/readings";
 import { writeOriginals } from "../core/stored/projects";
 import type { PageText, Reading } from "../model/document";
 import type { DocumentId, ProjectDocument } from "../model/project";
-import type { Approval, TextPlace } from "../model/spread";
+import type { TextPlace } from "../model/spread";
 import type { Store } from "../storage/store";
 
 export type { StoredProject } from "../core/stored/projects";
@@ -21,8 +21,6 @@ export interface Interim extends EngineInterim {
   readonly stored: { readonly writeOriginals: typeof writeOriginals };
   /** Until step 6d. */
   readonly readings: Readings;
-  /** Until step 6c: an approval the app worked out lands. */
-  approve(session: Session, approval: Approval): void;
   /** Until step 6d: documents the app added, with the project's hidden values spread into them. */
   addDocuments(session: Session, documents: readonly ProjectDocument[]): void;
 }
@@ -35,7 +33,5 @@ export const interimOf = (core: EngineInterim): Interim => ({
     documentReadings: (store, folder, documents) => documentReadings({ store, folder, client: core.client }, documents),
     findPlaces: (keys, documents) => findPlaces(core.client, keys, documents),
   },
-  approve: (session, { project, here, changes }) =>
-    core.opened(session)?.commit({ type: "approved", project, changedDocuments: [here, ...changes].map(({ document }) => document) }),
   addDocuments: (session, documents) => core.opened(session)?.commit({ type: "documentsAdded", documents }),
 });

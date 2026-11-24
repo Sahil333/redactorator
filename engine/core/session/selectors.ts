@@ -55,11 +55,13 @@ export function sessionState(view: SessionView, folder: string): SessionState {
   const { handle } = view.parts.viewer;
   const document = handle && project.documents.find(({ id }) => id === handle.document);
   const output = validOutput(view)?.shown;
+  const { approval } = view.parts;
   return {
     project,
     folder,
     save: view.parts.operation.save,
     operation: view.parts.operation.operation,
+    ...(approval === undefined ? {} : { approval: approval.plan }),
     ...(handle === undefined ? {} : { open: handle }),
     ...(output === undefined ? {} : { output }),
     can: can(view),

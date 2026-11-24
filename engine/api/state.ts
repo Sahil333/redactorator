@@ -1,4 +1,4 @@
-import type { Reach } from "../model/spread";
+import type { Change, Reach } from "../model/spread";
 import type { DocumentId, Project, Settings } from "../model/project";
 import type { PageModel } from "../model/document";
 import type { EngineError } from "./errors";
@@ -57,6 +57,8 @@ export interface SessionState {
   readonly save: "saved" | "saving" | "failed";
   /** Adding, approving and applying run one at a time. */
   readonly operation: "idle" | "adding" | "planning" | "confirming" | "applying";
+  /** The approval waiting for the user to read its heads-up, while confirming. */
+  readonly approval?: ApprovalPlan;
   /** The document open in the PDF worker. */
   readonly open?: DocumentHandle;
   /** The open document's cleaned file, only while it still matches its marks and the appearance; its bytes stay inside. */
@@ -81,4 +83,14 @@ export interface SessionState {
 export interface DocumentHandle {
   readonly document: DocumentId;
   readonly pages: readonly [PageModel, ...PageModel[]];
+}
+
+/** An approval worked out and waiting for `approval.confirm` or `approval.cancel`: what it changes beyond its document's review state. */
+export interface ApprovalPlan {
+  readonly planId: number;
+  readonly document: DocumentId;
+  /** Per other document it changes: the places it hides, shows and retypes there. */
+  readonly changes: readonly Change[];
+  /** More places of its own values that it hides in the approved document. */
+  readonly here: Change;
 }

@@ -297,7 +297,11 @@ async function holdWorkerReplies(page: Page, key: string, type: PdfReply["type"]
     key,
     type,
   );
-  const fakes = await fakeWorker(page, key, { prelude });
+  return releaser(page, await fakeWorker(page, key, { prelude }), key);
+}
+
+/** The function that ends the PDF worker's fake `key`, once it has acted, by a message on its `release` channel. */
+function releaser(page: Page, fakes: PageFakes, key: string): () => Promise<void> {
   return async () => {
     await heldSomething(fakes, key);
     await page.evaluate((key) => new BroadcastChannel(`release ${key}`).postMessage("release"), key);
@@ -306,6 +310,27 @@ async function holdWorkerReplies(page: Page, key: string, type: PdfReply["type"]
 
 /** Holds the answer to every search an approval runs, from the PDF worker's next start, until released. */
 export const holdApprovalSearch = (page: Page) => holdWorkerReplies(page, "holdApprovalSearch", "matched");
+
+/** From the PDF worker's next start, it refuses every file it is asked to read, as unreadable, until the returned function stops it. */
+export async function refuseReadings(page: Page): Promise<() => Promise<void>> {
+  const key = "refuseReadings";
+  const prelude = sourceOf(
+    (scope: WorkerScope, acted, key: string) => {
+      const send = scope.postMessage.bind(scope);
+      let refusing = true;
+      new BroadcastChannel(`release ${key}`).onmessage = () => {
+        refusing = false;
+      };
+      scope.postMessage = (message, transfer) => {
+        if (!refusing || message.type !== "inspected") return send(message, transfer);
+        acted(key);
+        send({ type: "refused", inspection: message.inspection, error: { code: "open-failed", message: "The fake could not read this file." } });
+      };
+    },
+    key,
+  );
+  return releaser(page, await fakeWorker(page, key, { prelude }), key);
+}
 
 /** Holds the PDF worker's reading of each added file, from its next start, until released. */
 export const holdInspection = (page: Page) => holdWorkerReplies(page, "holdInspection", "inspected");

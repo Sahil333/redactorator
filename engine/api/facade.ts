@@ -6,7 +6,7 @@ import type { DocumentId, Settings } from "../model/project";
 import type { TextPieceRange } from "../model/selection";
 import type { Store } from "../storage/store";
 import type { Refusal, Result } from "./errors";
-import type { DocumentHandle, EngineState } from "./state";
+import type { ApprovalPlan, DocumentHandle, EngineState } from "./state";
 
 /** The one object the app, or a script, uses: commands by role, and the state. */
 export interface Engine {
@@ -65,6 +65,16 @@ export interface Session {
   readonly history: {
     undo(document: DocumentId): Result<void>;
     redo(document: DocumentId): Result<void>;
+  };
+  /** Approving a document: its values become hidden in the whole project, and spread to the other documents. */
+  readonly approval: {
+    /**
+     * Works out what approving `document` spreads. It lands at once when it changes nothing beyond
+     * the document's review state; otherwise the plan waits, in the state, for `confirm` or `cancel`.
+     */
+    plan(document: DocumentId): Promise<Result<{ readonly landed: true } | { readonly landed: false; readonly plan: ApprovalPlan }>>;
+    confirm(planId: number): Promise<Result<void>>;
+    cancel(planId: number): Result<void>;
   };
   readonly documents: {
     /** The document's cleaned file was downloaded. */

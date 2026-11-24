@@ -194,7 +194,6 @@ export function App() {
       <ProjectView
         key={opened.folder}
         ref={project.projectRef}
-        facade={started.engine}
         session={opened.session}
         opened={state.session}
         interim={started.interim}

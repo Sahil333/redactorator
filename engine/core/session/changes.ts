@@ -1,4 +1,4 @@
-import type { DocumentHandle } from "../../api/state";
+import type { ApprovalPlan, DocumentHandle } from "../../api/state";
 import type { Appearance, PageText } from "../../model/document";
 import type { PageIndex } from "../../model/geometry";
 import type { Mark } from "../../model/marks";
@@ -30,8 +30,15 @@ export type SessionChange =
   | { readonly type: "redo"; readonly document: DocumentId }
   /** What an undo or redo brings back; history passes it to the slice it wraps. */
   | ({ readonly type: "restored"; readonly document: DocumentId } & Edits)
+  /** Approval works out what approving `document` spreads. */
+  | { readonly type: "planning"; readonly document: DocumentId }
+  /** An approval waits for its heads-up: the record it was worked out from, and the record it would make. */
+  | { readonly type: "planned"; readonly plan: ApprovalPlan; readonly from: Project; readonly project: Project }
   /** An approval landed: the project it made, and the documents it changed, the approved one first. */
   | { readonly type: "approved"; readonly project: Project; readonly changedDocuments: readonly DocumentId[] }
+  /** Nothing was approved: the readings could not be had or searched, or the record changed since the plan. */
+  | { readonly type: "approvalFailed" }
+  | { readonly type: "approvalCancelled" }
   | { readonly type: "documentsAdded"; readonly documents: readonly ProjectDocument[] }
   | { readonly type: "downloaded"; readonly document: DocumentId }
   /** The PDF worker is asked to open `document`: what was open, and its output, are gone. */
@@ -51,5 +58,5 @@ export type SessionChange =
   /** Closing stopped, as the save failed: the Session stays open. */
   | { readonly type: "closeFailed" };
 
-/** The changes the app's hooks still work out themselves, landed through `interim` until each command moves. */
-export type InterimChange = Extract<SessionChange, { readonly type: "approved" | "documentsAdded" }>;
+/** The change the app's hooks still work out themselves, landed through `interim` until step 6d. */
+export type InterimChange = Extract<SessionChange, { readonly type: "documentsAdded" }>;

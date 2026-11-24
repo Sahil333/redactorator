@@ -8,7 +8,7 @@ import { can } from "./library/gate";
 import { firstLibrary, library, type LibraryParts } from "./library/slices";
 import { pdfClient, type PdfClient, type WorkerStatus } from "./pdf-client/client";
 import type { LockPort, WorkerChannel } from "./ports";
-import { problems } from "./problems";
+import { approvalProblems, problems } from "./problems";
 import type { SessionChange } from "./session/changes";
 import type { OpenSession, SessionHost } from "./session/facade";
 import { sessionState } from "./session/selectors";
@@ -29,15 +29,20 @@ type Change =
   /** A change to the Session `from`'s part of the state. */
   | { readonly type: "session"; readonly from: Session; readonly change: SessionChange };
 
+/** A change to the open Session's part of the state, and the problems an approval raises or clears. */
+function reduceSession(root: Root, { from, change }: Extract<Change, { readonly type: "session" }>, revision: number): Root {
+  const open = root.session;
+  // Work a closed Session started never lands in the project open after it.
+  if (open?.session !== from) return root;
+  const parts = sessionParts(open.parts, change);
+  const raised = approvalProblems(root.problems, change, revision);
+  if (parts === open.parts && raised === root.problems) return root;
+  return { ...root, revision, problems: raised, session: parts === open.parts ? open : { ...open, parts } };
+}
+
 function reduce(root: Root, change: Change): Root {
   const revision = root.revision + 1;
-  if (change.type === "session") {
-    const open = root.session;
-    // Work a closed Session started never lands in the project open after it.
-    if (open?.session !== change.from) return root;
-    const parts = sessionParts(open.parts, change.change);
-    return parts === open.parts ? root : { ...root, revision, session: { ...open, parts } };
-  }
+  if (change.type === "session") return reduceSession(root, change, revision);
   const next =
     change.type === "workerChanged"
       ? { ...root, worker: change.worker }
