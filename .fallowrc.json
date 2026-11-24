@@ -9,6 +9,7 @@
       { "name": "model", "patterns": ["engine/model/**"] },
       { "name": "storage", "patterns": ["engine/storage/**"] },
       { "name": "pdf-protocol", "patterns": ["engine/pdf-protocol/**"] },
+      { "name": "api", "patterns": ["engine/api/**"] },
       { "name": "core", "patterns": ["engine/core/**"] },
       { "name": "pdf", "patterns": ["engine/worker.ts", "engine/glyphs.ts", "engine/glyphs.test.ts"] },
       { "name": "host-browser", "patterns": ["engine/host-browser/**"] },
@@ -18,7 +19,9 @@
     "rules": [
       { "from": "model", "allow": [] },
       { "from": "storage", "allow": [] },
-      { "from": "pdf-protocol", "allow": ["model"] }
+      { "from": "pdf-protocol", "allow": ["model"] },
+      { "from": "api", "allow": ["model", "storage"] },
+      { "from": "core", "allow": ["model", "storage", "api", "pdf-protocol"] }
     ]
   }
 }

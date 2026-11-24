@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { Appearance, DocumentModel, Edit, PageText, Source } from "../engine/model/document";
 import { isPageIndex, type PageIndex } from "../engine/model/geometry";
-import type { Pixels } from "../engine/pdf-protocol/messages";
-import { pdfClient, type Applied, type PdfClient, type WorkerStatus } from "../engine/core/pdf-client/client";
-import type { ClientError } from "../engine/core/pdf-client/errors";
-import { notRunning } from "../engine/core/pdf-client/waiting";
-import { startPdfWorker } from "../engine/host-browser/workerChannel";
+import type { EngineError } from "../engine/api/errors";
+import type { Pixels } from "../engine/api/facade";
+import type { Applied, ClientError, PdfClient, WorkerStatus } from "../engine/host-browser/interim";
 import { CSS_PIXELS_PER_POINT } from "./pageGeometry";
 
 /** What the engine is doing when that is all there is to say, or undefined while it is ready. */
-export function engineStatus(engine: Pick<Engine, "state">): string | undefined {
+export function engineStatus(engine: Pick<PdfEngine, "state">): string | undefined {
   if (engine.state === "starting") return "Starting the PDF engine…";
   if (engine.state === "stopped") return "The PDF engine is not running.";
   if (engine.state === "applying") return "Applying and checking…";
@@ -49,13 +47,13 @@ export interface OpenDocument extends Omit<PdfSource, "bytes"> {
 
 type Images = ReadonlyMap<PageIndex, ImageData>;
 
-export interface Engine {
+export interface PdfEngine {
   readonly state: WorkerStatus["state"];
   readonly document: OpenDocument | undefined;
   readonly images: Readonly<Record<Source, Images>>;
   readonly texts: ReadonlyMap<PageIndex, PageText>;
   readonly output: Applied | undefined;
-  readonly error: ClientError | undefined;
+  readonly error: EngineError | undefined;
   open(source: PdfSource): void;
   /** Whether the engine can work on `bytes`. */
   inspect: PdfClient["inspect"];
@@ -81,7 +79,10 @@ function forgetRequests(requested: Set<string>, prefix: string) {
   for (const key of requested) if (key.startsWith(prefix)) requested.delete(key);
 }
 
-export function useEngine(): Engine {
+const notRunning: ClientError = { code: "worker-not-running" };
+
+/** The PDF worker as the open project's hooks use it, over the engine's client once the engine starts. */
+export function useEngine(started: PdfClient | undefined): PdfEngine {
   const client = useRef<PdfClient | undefined>(undefined);
   const picked = useRef({ name: "", sha256: "" });
   // The client acts on the document opened last, so a request from a render made before then
@@ -98,27 +99,21 @@ export function useEngine(): Engine {
   const [images, setImages] = useState<Record<Source, Images>>(noImages);
   const [texts, setTexts] = useState<ReadonlyMap<PageIndex, PageText>>(new Map());
   const [output, setOutput] = useState<Applied | undefined>(undefined);
-  const [error, setError] = useState<ClientError | undefined>(undefined);
+  const [error, setError] = useState<EngineError | undefined>(undefined);
 
   useEffect(() => {
-    const channel = startPdfWorker();
-    const started = pdfClient(channel);
     client.current = started;
-    const unsubscribe = started.onStatus((status) => {
+    return started?.onStatus((status) => {
       setState(status.state);
       // Once stopped, no output can be trusted to match what is shown.
       if (status.state === "stopped") setOutput(undefined);
       if (status.error !== undefined) setError(status.error);
     });
-    return () => {
-      unsubscribe();
-      channel.terminate();
-    };
-  }, []);
+  }, [started]);
 
   // Only a sentence the worker wrote about the request is shown: a stale answer, or one after the
   // worker stopped, has nothing to add to what the status already says.
-  function showFailure(failure: ClientError) {
+  function showFailure(failure: EngineError) {
     if (failure.message !== undefined) setError(failure);
   }
 
@@ -214,7 +209,7 @@ export function useEngine(): Engine {
     output,
     error,
     open,
-    // Asked before the worker starts, which React's order of effects rules out, nothing would answer.
+    // Asked before the engine starts, nothing would answer.
     inspect: (bytes) => client.current?.inspect(bytes) ?? Promise.resolve(notRunning),
     match: (keys, documents) => client.current?.match(keys, documents) ?? Promise.resolve(notRunning),
     show,

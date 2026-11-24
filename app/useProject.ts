@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { DocumentId, Project, ProjectDocument } from "../engine/model/project";
-import { saveProject, type StoredProject } from "./projects";
 import { markKey } from "../engine/model/marks";
 import type { Approval } from "../engine/model/spread";
+import type { StoredFiles, StoredProject } from "../engine/host-browser/interim";
 import type { Store } from "../engine/storage/store";
 
 // Undo goes back this many changes per document.
@@ -41,7 +41,7 @@ function withEdits(project: Project, id: DocumentId, { marks, shown }: Edits, ki
  * The open project: its documents and marks, undo and redo per document, and saving.
  * Every change is saved as it is made; changes made while a save is under way are saved together next.
  */
-export function useProject(store: Store, opened: StoredProject) {
+export function useProject(files: StoredFiles, store: Store, opened: StoredProject) {
   const { folder } = opened;
   const [project, setProject] = useState(opened.project);
   const [histories, setHistories] = useState<ReadonlyMap<DocumentId, History>>(new Map());
@@ -61,7 +61,7 @@ export function useProject(store: Store, opened: StoredProject) {
       queued.current = false;
       unsaved.current = false;
       try {
-        await saveProject(store, { folder, project: latest.current });
+        await files.saveProject(store, { folder, project: latest.current });
         setSaveState(unsaved.current ? "saving" : "saved");
         return true;
       } catch {

@@ -1,16 +1,19 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import type { LockHold } from "../engine/core/ports";
-import { Home } from "./Home";
-import { prepareFiles, type Refusal } from "./importFiles";
-import { createProject, duplicateProject, nameFromFile, saveProject, type ProjectEntries, type StoredProject } from "./projects";
-import { ProjectView, type ProjectHandle } from "./ProjectView";
+import type { Engine, Library } from "../engine/api/facade";
+import type { EngineState, ProjectSummary } from "../engine/api/state";
+import { createBrowserEngine } from "../engine/host-browser/createBrowserEngine";
 import { errorText } from "./errors";
+import { Home } from "./Home";
+import type { Refusal } from "./importFiles";
+import { ProjectView, type ProjectHandle } from "./ProjectView";
 import { engineStatus, useEngine } from "./useEngine";
-import { keepStorage, useProjectStore } from "./useProjectStore";
+import { useEngineState } from "./useEngineState";
+import { useHomeChanges } from "./useHomeChanges";
+import { useProblem } from "./useProblem";
+import { useProjectsFolder } from "./useProjectsFolder";
 
 // Labelling mode, for building the evaluation dataset: open the app with ?label.
 const labelling = new URLSearchParams(window.location.search).has("label");
-
 
 // The open project is in the address, so Back and Forward move between it and the projects.
 const PROJECT_HASH = "#project=";
@@ -47,142 +50,150 @@ function useHistoryMoves(onChange: () => void) {
 /**
  * Opens the project the address names, once the projects are listed and none are moving into a
  * folder; a project the list doesn't hold sends the address back to the projects. Returns the
- * function that reads the address. It may run through a closure from an earlier render, as after
- * a move, so it only sets state.
+ * function that reads the address, which only sets state.
  */
-function useAddressedProject(projects: ProjectEntries | undefined, settling: boolean, open: (stored: StoredProject) => void) {
+function useAddressedProject(projects: readonly ProjectSummary[] | undefined, ready: boolean, open: (projectId: string) => void) {
   const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
-  const openWaiting = useEffectEvent((id: string, listed: ProjectEntries) => {
+  const openWaiting = useEffectEvent((id: string, listed: readonly ProjectSummary[]) => {
     setWaitingFor(undefined);
-    const stored = listed.find((entry) => "project" in entry && entry.project.id === id);
-    if (stored !== undefined && "project" in stored) open(stored);
+    if (listed.some((entry) => "id" in entry && entry.id === id)) open(id);
     else navigate("replace", homeAddress());
   });
   useEffect(() => {
-    if (waitingFor !== undefined && projects !== undefined && !settling) openWaiting(waitingFor, projects);
-  }, [waitingFor, projects, settling]);
+    if (waitingFor !== undefined && projects !== undefined && ready) openWaiting(waitingFor, projects);
+  }, [waitingFor, projects, ready]);
   return () => {
     const id = projectInAddress();
     if (id !== undefined) setWaitingFor(id);
   };
 }
 
-interface OpenProject {
-  readonly stored: StoredProject;
-  readonly hold: LockHold;
-  /** Files chosen with the ones that made a new project, which could not be added. */
-  readonly refused: readonly Refusal[];
-}
-
-export function App() {
-  const engine = useEngine();
-  const projectStore = useProjectStore(() => openFromAddress());
-  const { store, projects, settings, problem, where, refresh, whileLocked } = projectStore;
-  // "Later" on the folder card holds until the next visit.
-  const [later, setLater] = useState(false);
-  // No project opens or starts while the projects move into a folder: it would be left behind in the browser.
-  const settling = where?.kind === "moving" || where?.kind === "opening";
-  const openFromAddress = useAddressedProject(projects, settling, (stored) => void openProject(stored, "none"));
-  const [open, setOpen] = useState<OpenProject | undefined>(undefined);
-  const [refused, setRefused] = useState<readonly Refusal[]>([]);
-  const [adding, setAdding] = useState(false);
+/**
+ * Opening a project, as a Session, and leaving it, kept in step with the address. `onOpened` runs
+ * once a project opens.
+ */
+function useOpenProject(facade: Engine | undefined, state: EngineState | undefined, onOpened: () => void) {
+  const library = state?.library;
+  const openFromAddress = useAddressedProject(library?.projects, library?.phase === "ready", (projectId) => void open(projectId, "none"));
+  // Files chosen with the ones that made a new project, which could not be added.
+  const [carried, setCarried] = useState<readonly Refusal[]>([]);
   const projectRef = useRef<ProjectHandle>(null);
+  const session = state?.session === undefined ? undefined : facade?.session();
 
-  async function openProject(stored: StoredProject, how: Navigation, notAdded: readonly Refusal[] = []) {
-    if (settling) return;
-    const taken = await projectStore.take(stored, "open it");
-    if (taken === undefined) {
+  async function open(projectId: string, how: Navigation, notAdded: readonly Refusal[] = []) {
+    if (facade === undefined) return;
+    // Set before the project shows, which takes them as it starts.
+    setCarried(notAdded);
+    const result = await facade.library.projects.open(projectId);
+    if (!result.ok) {
       if (how === "none") navigate("replace", homeAddress());
       return;
     }
-    setRefused([]);
-    setOpen({ stored: taken.current, hold: taken.hold, refused: notAdded });
-    navigate(how, projectAddress(stored.project.id));
+    onOpened();
+    navigate(how, projectAddress(projectId));
   }
 
   /** False, and the project stays open, when its changes could not be saved. */
-  async function leaveProject(how: Navigation): Promise<boolean> {
-    if (open === undefined) return true;
+  async function leave(how: Navigation): Promise<boolean> {
+    if (session === undefined) return true;
     if (!((await projectRef.current?.save()) ?? true)) return false;
-    open.hold.release();
-    setOpen(undefined);
+    const closing = session.close();
     navigate(how, homeAddress());
-    await refresh();
+    await closing;
     return true;
   }
 
   /** Back or Forward: leave the open project if the address no longer names it, then open the one it names. */
   async function followAddress() {
-    if (open !== undefined && projectInAddress() === open.stored.project.id) return;
-    if (open !== undefined && !(await leaveProject("none"))) {
-      navigate("push", projectAddress(open.stored.project.id));
+    if (session !== undefined && projectInAddress() === session.projectId) return;
+    if (session !== undefined && !(await leave("none"))) {
+      navigate("push", projectAddress(session.projectId));
       return;
     }
     openFromAddress();
   }
   useHistoryMoves(() => void followAddress());
 
-  async function startProject(files: readonly File[]) {
-    if (store === undefined || adding || settling) return;
-    setAdding(true);
-    try {
-      const prepared = await prepareFiles(files, engine.inspect);
-      setRefused(prepared.refused);
-      const [first] = prepared.added;
-      if (first === undefined) return;
-      const stored = await createProject(store, nameFromFile(first.file), prepared.added);
-      if (where?.kind === "browser") keepStorage();
-      await refresh();
-      await openProject(stored, "push", prepared.refused);
-    } catch {
-      projectStore.failed();
-    } finally {
-      setAdding(false);
-    }
-  }
+  return { session, carried, projectRef, openFromAddress, open, leave };
+}
 
-  if (open !== undefined && store !== undefined) {
+export function App() {
+  const [started, setStarted] = useState<ReturnType<typeof createBrowserEngine> | undefined>(undefined);
+  const facade = started?.engine;
+  const interim = started?.interim;
+  const state = useEngineState(facade);
+  const library = state?.library;
+  const engine = useEngine(interim?.client);
+  const problem = useProblem(facade);
+  const projectsFolder = useProjectsFolder(
+    library,
+    (first) => {
+      setStarted(createBrowserEngine(first));
+      project.openFromAddress();
+    },
+    (error) => (error === undefined ? problem.drop() : problem.raise(errorText(error))),
+  );
+  // "Later" on the folder card holds until the next visit.
+  const [later, setLater] = useState(false);
+  const project = useOpenProject(facade, state, () => {
+    problem.drop();
+    changes.dismissRefused();
+  });
+  const changes = useHomeChanges({
+    started,
+    inspect: engine.inspect,
+    raise: problem.raise,
+    open: (projectId, notAdded) => project.open(projectId, "push", notAdded),
+    pickProjectToImport: projectsFolder.pickProjectToImport,
+  });
+  const opened = project.session && interim?.opened(project.session);
+
+  const withLibrary = (act: (library: Library) => Promise<void>) => () => {
+    if (facade !== undefined) void act(facade.library);
+  };
+
+  if (opened !== undefined && library !== undefined && interim !== undefined) {
     return (
       <ProjectView
-        key={open.stored.folder}
-        ref={projectRef}
-        store={store}
-        initial={open.stored}
-        initialRefused={open.refused}
+        key={opened.folder}
+        ref={project.projectRef}
+        files={interim.stored}
+        store={opened.store}
+        initial={opened}
+        initialRefused={project.carried}
         engine={engine}
-        settings={settings}
-        onSettings={projectStore.changeSettings}
+        settings={library.settings}
+        onAppearance={(appearance) => facade?.library.settings.update({ appearance })}
+        onCustomType={interim.addCustomType}
         labelling={labelling}
-        problem={problem}
-        onClose={() => void leaveProject("push")}
+        problem={problem.shown(state)}
+        onClose={() => void project.leave("push")}
       />
     );
   }
 
   return (
     <Home
-      projects={projects}
-      canAdd={store !== undefined && engine.state === "ready" && !adding && !settling}
-      status={engineStatus(engine) ?? ""}
-      error={errorText(engine.error) ?? problem}
-      refused={refused}
-      onDismissRefused={() => setRefused([])}
-      onFiles={(files) => void startProject(files)}
-      where={where}
+      library={library}
+      adding={changes.adding}
+      waiting={projectsFolder.waiting}
+      status={engineStatus({ state: state?.worker.status ?? "starting" }) ?? ""}
+      error={errorText(engine.error) ?? problem.shown(state)}
+      refused={changes.refused}
+      onDismissRefused={changes.dismissRefused}
+      onFiles={changes.onFiles}
       later={later}
       folder={{
-        onChoose: () => void projectStore.chooseFolder(),
-        onReopen: () => void projectStore.reopenFolder(),
+        onChoose: withLibrary(projectsFolder.chooseFolder),
+        onReopen: withLibrary(projectsFolder.reopenFolder),
         onLater: () => setLater(true),
-        onImport: () => void projectStore.importFromFolder(),
+        onImport: changes.onImport,
       }}
-      onOpen={(stored) => void openProject(stored, "push")}
-      onRename={(stored, name) => void whileLocked(stored, (from, current) => saveProject(from, { ...current, project: { ...current.project, name } }))}
-      onDuplicate={(stored) => void whileLocked(stored, (from, current) => duplicateProject(from, current))}
-      onArchive={(stored, archived) =>
-        void whileLocked(stored, (from, current) => saveProject(from, { ...current, project: { ...current.project, archived } }))
-      }
-      onDelete={(stored) => void whileLocked(stored, (from, current) => from.remove(current.folder))}
+      onOpen={(listed) => void project.open(listed.id, "push")}
+      onRename={changes.onRename}
+      onDuplicate={changes.onDuplicate}
+      onArchive={changes.onArchive}
+      onDelete={changes.onDelete}
     />
   );
 }

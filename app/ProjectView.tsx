@@ -12,11 +12,12 @@ import { itemKey, markKey, toEdits, type Mark } from "../engine/model/marks";
 import type { Tool } from "./marks";
 import { NotAdded } from "./NotAdded";
 import type { DocumentId, Project, ProjectDocument, Settings } from "../engine/model/project";
-import type { StoredProject } from "./projects";
+import type { StoredFiles, StoredProject } from "../engine/host-browser/interim";
+import type { Appearance } from "../engine/model/document";
 import { newFrom, reachOf } from "../engine/model/spread";
 import type { Store } from "../engine/storage/store";
 import { TopBar, type Editing, type History } from "./TopBar";
-import { engineStatus, type Engine, type OpenDocument } from "./useEngine";
+import { engineStatus, type PdfEngine, type OpenDocument } from "./useEngine";
 import { useAddDocuments } from "./useAddDocuments";
 import { useApproval } from "./useApproval";
 import { useDocumentInEngine } from "./useDocumentInEngine";
@@ -37,13 +38,16 @@ export interface ProjectHandle {
 
 interface ProjectViewProps {
   readonly ref: Ref<ProjectHandle>;
+  readonly files: StoredFiles;
   readonly store: Store;
   readonly initial: StoredProject;
   /** Files that could not be added when the project was made, still to be shown. */
   readonly initialRefused: readonly Refusal[];
-  readonly engine: Engine;
+  readonly engine: PdfEngine;
   readonly settings: Settings;
-  readonly onSettings: (settings: Settings) => void;
+  readonly onAppearance: (appearance: Appearance) => void;
+  /** A mark typed with a type the user typed in, which the settings don't hold yet. */
+  readonly onCustomType: (name: string) => void;
   readonly labelling: boolean;
   /** Why something outside this project failed, such as saving the settings. */
   readonly problem: string | undefined;
@@ -55,7 +59,7 @@ interface Panels {
   readonly pages: boolean;
 }
 
-function statusText(engine: Engine, shown: OpenDocument | undefined, currentPage: PageIndex | undefined): string {
+function statusText(engine: PdfEngine, shown: OpenDocument | undefined, currentPage: PageIndex | undefined): string {
   if (engine.state !== "ready") return engineStatus(engine) ?? "";
   if (shown === undefined) return "";
   return `Page ${(currentPage ?? 0) + 1} of ${shown.model.pages.length}`;
@@ -110,7 +114,7 @@ function Alerts({ saveFailed, problems }: { readonly saveFailed: boolean; readon
 }
 
 /** The open document's place in the project's review, for the workspace. */
-function reviewOf(opened: ReturnType<typeof useProject>, document: ProjectDocument | undefined, engine: Engine): Review {
+function reviewOf(opened: ReturnType<typeof useProject>, document: ProjectDocument | undefined, engine: PdfEngine): Review {
   const { project } = opened;
   return {
     hidden: project.hidden,
@@ -133,21 +137,22 @@ const documentOf = (project: Project, id: DocumentId | undefined) => project.doc
 
 /** Marking the open document: its marks, undo and redo, approving, and the controls the top bar shows. */
 function useEditing(
+  files: StoredFiles,
   store: Store,
-  engine: Engine,
+  engine: PdfEngine,
   opened: ReturnType<typeof useProject>,
   active: DocumentId | undefined,
   settings: Settings,
-  onSettings: (settings: Settings) => void,
+  { onAppearance, onCustomType }: Pick<ProjectViewProps, "onAppearance" | "onCustomType">,
   adding: boolean,
 ) {
-  const approval = useApproval(store, opened, engine);
+  const approval = useApproval(files, store, opened, engine);
   const [tool, setTool] = useState<Tool>("text");
   const [exporting, setExporting] = useState(false);
   const [lastFacts, setLastFacts] = useState<DocumentFacts | undefined>(undefined);
   const focus = useHandOffFocus(engine.output !== undefined);
   const activeDocument = documentOf(opened.project, active);
-  const images = useImages(store, opened.folder, activeDocument, engine);
+  const images = useImages(files, store, opened.folder, activeDocument, engine);
   const marking = useMarks(
     active,
     activeDocument?.marks ?? [],
@@ -157,7 +162,7 @@ function useEditing(
       opened.edit(active, ({ marks, shown }) => ({ marks: update(marks), shown }), kind);
     },
     settings.customTypes,
-    (name) => onSettings({ ...settings, customTypes: [...settings.customTypes, name] }),
+    onCustomType,
   );
   // Adding and approving each change the whole project, so Approve waits for an add.
   const busy = marking.pending !== undefined || engine.state !== "ready" || approval.working || approval.asking !== undefined || adding;
@@ -180,7 +185,7 @@ function useEditing(
     appearance: settings.appearance,
     onAppearance: (appearance) => {
       engine.discardOutput();
-      onSettings({ ...settings, appearance });
+      onAppearance(appearance);
     },
     applyRef: focus.applyRef,
     hasMarks: marking.marks.length > 0,
@@ -262,18 +267,18 @@ function openInTabs(tabs: ReturnType<typeof useTabs>, documents: readonly Projec
 
 /** An open project: its documents in the explorer and tabs, the open document's pages and marks. */
 export function ProjectView(props: ProjectViewProps) {
-  const { store, initial, engine, settings, labelling, onClose } = props;
-  const opened = useProject(store, initial);
+  const { files, store, initial, engine, settings, labelling, onClose } = props;
+  const opened = useProject(files, store, initial);
   const { project } = opened;
   const tabs = useTabs(project.id, project.documents);
   const { active } = tabs;
   const activeDocument = documentOf(project, active);
-  const { shown, missing } = useDocumentInEngine(store, opened.folder, activeDocument, engine);
-  const adder = useAddDocuments(store, { folder: opened.folder, project }, engine, props.initialRefused, (documents) => {
+  const { shown, missing } = useDocumentInEngine(files, store, opened.folder, activeDocument, engine);
+  const adder = useAddDocuments(files, store, { folder: opened.folder, project }, engine, props.initialRefused, (documents) => {
     opened.addDocuments(documents);
     openInTabs(tabs, documents);
   });
-  const { marking, history, editing, tool, focus, labels, approval, images } = useEditing(store, engine, opened, active, settings, props.onSettings, adder.adding);
+  const { marking, history, editing, tool, focus, labels, approval, images } = useEditing(files, store, engine, opened, active, settings, props, adder.adding);
   // Leaving waits for an add or an approval under way: it lands in the project before it is saved and let go.
   useImperativeHandle(props.ref, () => ({ save: () => adder.settled().then(approval.settled).then(opened.save) }));
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });

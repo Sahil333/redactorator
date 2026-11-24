@@ -14,7 +14,7 @@ import { ReviewBanner } from "./ReviewBanner";
 import type { Reach } from "../engine/model/spread";
 import { Splitter } from "./Splitter";
 import { Thumbnails, thumbnailsWidth } from "./Thumbnails";
-import type { Engine } from "./useEngine";
+import type { PdfEngine } from "./useEngine";
 import { errorText } from "./errors";
 import { useZoom } from "./useZoom";
 import { ZoomControls } from "./ZoomControls";
@@ -53,7 +53,7 @@ const checkedFiles = {
 } as const;
 
 interface WorkspaceProps {
-  readonly engine: Engine;
+  readonly engine: PdfEngine;
   readonly pages: readonly [PageModel, ...PageModel[]];
   readonly marks: Marks;
   readonly review: Review;

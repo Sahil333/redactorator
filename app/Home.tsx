@@ -1,34 +1,54 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import type { LibraryState, ProjectSummary } from "../engine/api/state";
 import { DropZone } from "./DropZone";
 import type { Refusal } from "./importFiles";
 import { NotAdded } from "./NotAdded";
 import { PickFiles } from "./PickFiles";
-import type { ProjectEntries, StoredProject, UnreadableProject } from "./projects";
-import type { Whereabouts } from "./useProjectStore";
+import type { Waiting } from "./useProjectsFolder";
+
+/** A project on the list that can be read. */
+export type Listed = Extract<ProjectSummary, { readonly id: string }>;
+
+type Unreadable = Extract<ProjectSummary, { readonly unreadable: string }>;
 
 interface ProjectActions {
-  readonly onOpen: (stored: StoredProject) => void;
-  readonly onRename: (stored: StoredProject, name: string) => void;
-  readonly onDuplicate: (stored: StoredProject) => void;
-  readonly onArchive: (stored: StoredProject, archived: boolean) => void;
-  readonly onDelete: (stored: StoredProject) => void;
+  readonly onOpen: (listed: Listed) => void;
+  readonly onRename: (listed: Listed, name: string) => void;
+  readonly onDuplicate: (listed: Listed) => void;
+  readonly onArchive: (listed: Listed, archived: boolean) => void;
+  readonly onDelete: (listed: Listed) => void;
 }
 
 interface HomeProps extends ProjectActions {
-  /** Undefined until the projects have been read. */
-  readonly projects: ProjectEntries | undefined;
-  /** Whether new files can be taken: the engine is ready and nothing else is being added. */
-  readonly canAdd: boolean;
+  /** The engine's Library; undefined until the engine starts. */
+  readonly library: LibraryState | undefined;
+  /** Whether files chosen on Home are being made into a project. */
+  readonly adding: boolean;
+  /** The remembered folder, when the page can't use it until the user acts. */
+  readonly waiting: Waiting | undefined;
   readonly status: string;
   readonly error: string | undefined;
   readonly refused: readonly Refusal[];
   readonly onDismissRefused: () => void;
   readonly onFiles: (files: readonly File[]) => void;
-  /** Where the projects are kept; undefined until that is known. */
-  readonly where: Whereabouts | undefined;
   /** Whether the user put off moving the projects into a folder, on this visit. */
   readonly later: boolean;
   readonly folder: FolderActions;
+}
+
+/** Where the projects are kept, as Home tells the user. */
+type Whereabouts =
+  | { readonly kind: "browser" }
+  /** In the picked folder; or, before that, moving the projects into it or opening it again. */
+  | { readonly kind: "moving" | "opening" | "folder"; readonly name: string }
+  | Waiting;
+
+function whereabouts(library: LibraryState | undefined, waiting: Waiting | undefined): Whereabouts | undefined {
+  if (waiting !== undefined || library === undefined) return waiting;
+  const { place, phase } = library;
+  if (place.kind === "none") return undefined;
+  if (place.kind === "folder" && (phase === "moving" || phase === "opening")) return { kind: phase, name: place.name };
+  return place;
 }
 
 interface FolderActions {
@@ -41,11 +61,7 @@ interface FolderActions {
 
 const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`;
 
-const markCount = ({ project }: StoredProject) => project.documents.reduce((sum, document) => sum + document.marks.length, 0);
-
-const approvedCount = ({ project }: StoredProject) => project.documents.filter((document) => document.review === "approved").length;
-
-const problemText: Record<UnreadableProject["problem"], string> = {
+const problemText: Record<Unreadable["unreadable"], string> = {
   damaged: "Its project file is damaged, so it can't be opened. Start a new project with its documents.",
   newer: "It was saved by a newer version of Redactorator. Reload the page to open it.",
 };
@@ -86,7 +102,7 @@ function Steps() {
 const card = "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-accent/25 bg-accent-wash px-4 py-3";
 
 /** Where the projects are kept, when that asks something of the user: a folder to pick, or Chrome's permission again. */
-function FolderCard({ where, later, folder }: Pick<HomeProps, "where" | "later" | "folder">) {
+function FolderCard({ where, later, folder }: { readonly where: Whereabouts | undefined } & Pick<HomeProps, "later" | "folder">) {
   if (where === undefined || where.kind === "folder" || (where.kind === "browser" && later)) return null;
   if (where.kind === "moving" || where.kind === "opening") {
     return (
@@ -134,7 +150,13 @@ function FolderCard({ where, later, folder }: Pick<HomeProps, "where" | "later" 
   );
 }
 
-function EmptyHome({ canAdd, onFiles, folder, where }: Pick<HomeProps, "canAdd" | "onFiles" | "where" | "folder">) {
+function EmptyHome({ canAdd, canImport, onFiles, folder, where }: {
+  readonly canAdd: boolean;
+  readonly canImport: boolean;
+  readonly onFiles: HomeProps["onFiles"];
+  readonly folder: FolderActions;
+  readonly where: Whereabouts | undefined;
+}) {
   const link = "underline hover:text-ink disabled:opacity-50";
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-8">
@@ -159,7 +181,7 @@ function EmptyHome({ canAdd, onFiles, folder, where }: Pick<HomeProps, "canAdd" 
       )}
       <p className="text-center text-ink-muted">
         Moving to this computer from another?{" "}
-        <button type="button" disabled={!canAdd} onClick={folder.onImport} className={link}>
+        <button type="button" disabled={!canImport} onClick={folder.onImport} className={link}>
           Import a project
         </button>
       </p>
@@ -241,76 +263,75 @@ function RenameField({ name, onDone }: { readonly name: string; readonly onDone:
 }
 
 /** A project on Home. While projects move into a folder, it can't be opened or changed. */
-function ProjectRow({ stored, actions, moving }: { readonly stored: StoredProject; readonly actions: ProjectActions; readonly moving: boolean }) {
+function ProjectRow({ listed, actions, can }: { readonly listed: Listed; readonly actions: ProjectActions; readonly can: LibraryState["can"] }) {
   const [renaming, setRenaming] = useState(false);
-  const { project } = stored;
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-4 border-t border-rule px-4 py-2.5 first:border-t-0">
       {renaming ? (
         <RenameField
-          name={project.name}
+          name={listed.name}
           onDone={(name) => {
             setRenaming(false);
-            if (name !== undefined && name !== project.name) actions.onRename(stored, name);
+            if (name !== undefined && name !== listed.name) actions.onRename(listed, name);
           }}
         />
       ) : (
         <button
           type="button"
-          disabled={moving}
-          onClick={() => actions.onOpen(stored)}
+          disabled={!can.open}
+          onClick={() => actions.onOpen(listed)}
           className="min-h-6 truncate text-left font-display font-semibold text-base enabled:hover:underline disabled:text-ink-muted"
         >
-          {project.name}
+          {listed.name}
         </button>
       )}
-      <span className="text-ink-muted">{plural(project.documents.length, "document")}</span>
-      <span className="text-ink-muted">{plural(markCount(stored), "mark")}</span>
+      <span className="text-ink-muted">{plural(listed.documents, "document")}</span>
+      <span className="text-ink-muted">{plural(listed.marks, "mark")}</span>
       <span className="text-ink-muted">
-        {approvedCount(stored)} of {project.documents.length} approved
+        {listed.approved} of {listed.documents} approved
       </span>
-      <RowMenu name={project.name} disabled={moving}>
+      <RowMenu name={listed.name} disabled={!can.manage}>
         <MenuItem label="Rename" onSelect={() => setRenaming(true)} />
-        <MenuItem label="Duplicate" onSelect={() => actions.onDuplicate(stored)} />
-        <MenuItem label={project.archived ? "Unarchive" : "Archive"} onSelect={() => actions.onArchive(stored, !project.archived)} />
-        <MenuItem label="Delete" onSelect={() => actions.onDelete(stored)} />
+        <MenuItem label="Duplicate" onSelect={() => actions.onDuplicate(listed)} />
+        <MenuItem label={listed.archived ? "Unarchive" : "Archive"} onSelect={() => actions.onArchive(listed, !listed.archived)} />
+        <MenuItem label="Delete" onSelect={() => actions.onDelete(listed)} />
       </RowMenu>
     </li>
   );
 }
 
-function UnreadableRow({ entry }: { readonly entry: UnreadableProject }) {
+function UnreadableRow({ entry }: { readonly entry: Unreadable }) {
   return (
     <li className="flex flex-col border-t border-rule px-4 py-2.5 first:border-t-0">
       <span className="font-display font-semibold text-base">{entry.folder}</span>
-      <span className="text-mark">{problemText[entry.problem]}</span>
+      <span className="text-mark">{problemText[entry.unreadable]}</span>
     </li>
   );
 }
 
-const byName = (a: StoredProject, b: StoredProject) => a.project.name.localeCompare(b.project.name);
+const byName = (a: Listed, b: Listed) => a.name.localeCompare(b.name);
 
 /** The projects in use and the archived ones, each by name, and those that can't be read. */
-function sortEntries(projects: ProjectEntries) {
-  const current: StoredProject[] = [];
-  const archived: StoredProject[] = [];
-  const unreadable: UnreadableProject[] = [];
+function sortEntries(projects: readonly ProjectSummary[]) {
+  const current: Listed[] = [];
+  const archived: Listed[] = [];
+  const unreadable: Unreadable[] = [];
   for (const entry of projects) {
-    if ("problem" in entry) unreadable.push(entry);
-    else (entry.project.archived ? archived : current).push(entry);
+    if ("unreadable" in entry) unreadable.push(entry);
+    else (entry.archived ? archived : current).push(entry);
   }
   return { current: current.toSorted(byName), archived: archived.toSorted(byName), unreadable };
 }
 
-function ProjectList({ projects, actions, moving }: { readonly projects: ProjectEntries; readonly actions: ProjectActions; readonly moving: boolean }) {
+function ProjectList({ projects, actions, can }: { readonly projects: readonly ProjectSummary[]; readonly actions: ProjectActions; readonly can: LibraryState["can"] }) {
   const { current, archived, unreadable } = sortEntries(projects);
   const list = "overflow-hidden rounded-lg border border-rule bg-paper-raised";
   return (
     <>
       {(current.length > 0 || unreadable.length > 0) && (
         <ul className={list}>
-          {current.map((stored) => (
-            <ProjectRow key={stored.folder} stored={stored} actions={actions} moving={moving} />
+          {current.map((listed) => (
+            <ProjectRow key={listed.folder} listed={listed} actions={actions} can={can} />
           ))}
           {unreadable.map((entry) => (
             <UnreadableRow key={entry.folder} entry={entry} />
@@ -321,8 +342,8 @@ function ProjectList({ projects, actions, moving }: { readonly projects: Project
         <details className="flex flex-col gap-2">
           <summary className="cursor-pointer text-ink-muted">Archived ({archived.length})</summary>
           <ul className={`${list} mt-2`}>
-            {archived.map((stored) => (
-              <ProjectRow key={stored.folder} stored={stored} actions={actions} moving={moving} />
+            {archived.map((listed) => (
+              <ProjectRow key={listed.folder} listed={listed} actions={actions} can={can} />
             ))}
           </ul>
         </details>
@@ -332,8 +353,8 @@ function ProjectList({ projects, actions, moving }: { readonly projects: Project
 }
 
 /** Asks before a project is deleted for good. */
-function DeleteDialog({ stored, onDelete, onClose }: {
-  readonly stored: StoredProject;
+function DeleteDialog({ listed, onDelete, onClose }: {
+  readonly listed: Listed;
   readonly onDelete: () => void;
   readonly onClose: () => void;
 }) {
@@ -351,7 +372,7 @@ function DeleteDialog({ stored, onDelete, onClose }: {
     >
       <div className="flex flex-col gap-3">
         <h2 id={titleId} className="font-display font-semibold text-lg wrap-anywhere">
-          Delete “{stored.project.name}”?
+          Delete “{listed.name}”?
         </h2>
         <p>This can't be undone.</p>
         <div className="flex justify-end gap-2">
@@ -375,9 +396,13 @@ function DeleteDialog({ stored, onDelete, onClose }: {
 }
 
 export function Home(props: HomeProps) {
-  const { projects, canAdd, status, error, refused, onDismissRefused, onFiles, where, folder } = props;
+  const { library, adding, status, error, refused, onDismissRefused, onFiles, folder } = props;
+  const projects = library?.projects;
+  const where = whereabouts(library, props.waiting);
+  const canAdd = library !== undefined && library.can.create && !adding;
+  const canImport = library !== undefined && library.can.import && !adding;
   const empty = projects !== undefined && projects.length === 0;
-  const [deleting, setDeleting] = useState<StoredProject | undefined>(undefined);
+  const [deleting, setDeleting] = useState<Listed | undefined>(undefined);
   const actions: ProjectActions = { ...props, onDelete: setDeleting };
   return (
     <div className="grid h-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)]">
@@ -389,7 +414,7 @@ export function Home(props: HomeProps) {
         <div className="flex-1" />
         {projects !== undefined && !empty && (
           <>
-            <button type="button" disabled={!canAdd} onClick={folder.onImport} className={`${button} disabled:opacity-50`}>
+            <button type="button" disabled={!canImport} onClick={folder.onImport} className={`${button} disabled:opacity-50`}>
               Import a project
             </button>
             <PickFiles label="New project" disabled={!canAdd} className={`${darkButton} px-3.5 py-1.5`} onFiles={onFiles} />
@@ -403,12 +428,12 @@ export function Home(props: HomeProps) {
             <FolderCard where={where} later={props.later} folder={folder} />
           </div>
         )}
-        {empty && <EmptyHome canAdd={canAdd} onFiles={onFiles} folder={folder} where={where} />}
-        {projects !== undefined && !empty && (
+        {empty && <EmptyHome canAdd={canAdd} canImport={canImport} onFiles={onFiles} folder={folder} where={where} />}
+        {library?.projects !== undefined && !empty && (
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-8">
             <FolderCard where={where} later={props.later} folder={folder} />
             <h2 className="font-display font-semibold text-2xl">Projects</h2>
-            <ProjectList projects={projects} actions={actions} moving={where?.kind === "moving" || where?.kind === "opening"} />
+            <ProjectList projects={library.projects} actions={actions} can={library.can} />
             <p className="text-ink-muted">
               {where?.kind === "folder"
                 ? `Projects are kept in the folder “${where.name}” on this computer.`
@@ -417,7 +442,7 @@ export function Home(props: HomeProps) {
           </div>
         )}
       </DropZone>
-      {deleting && <DeleteDialog stored={deleting} onDelete={() => props.onDelete(deleting)} onClose={() => setDeleting(undefined)} />}
+      {deleting && <DeleteDialog listed={deleting} onDelete={() => props.onDelete(deleting)} onClose={() => setDeleting(undefined)} />}
     </div>
   );
 }
