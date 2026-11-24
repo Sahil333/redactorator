@@ -100,15 +100,20 @@ function useOpenProject(facade: Engine | undefined, state: EngineState | undefin
     else if (how === "none") navigate("replace", homeAddress());
   }
 
-  /** False, and the project stays open, when its changes could not be saved. */
-  async function leave(how: Navigation): Promise<boolean> {
-    if (session === undefined) return true;
+  const leaving = useRef<Promise<boolean>>(undefined);
+
+  async function close(open: Session, how: Navigation): Promise<boolean> {
     await projectRef.current?.settled();
-    const closed = await session.close();
-    // Refused as already closing: the close under way leaves.
-    if (!closed.ok) return closed.error.code !== "save-failed";
+    if (!(await open.close()).ok) return false;
     navigate(how, homeAddress());
     return true;
+  }
+
+  /** False, and the project stays open, when its changes could not be saved. A second leave waits for the one under way. */
+  function leave(how: Navigation): Promise<boolean> {
+    if (session === undefined) return Promise.resolve(true);
+    leaving.current ??= close(session, how).finally(() => (leaving.current = undefined));
+    return leaving.current;
   }
 
   /** Back or Forward: leave the open project if the address no longer names it, then open the one it names. */

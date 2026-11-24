@@ -141,11 +141,10 @@ function useEditing(
   files: StoredFiles,
   store: Store,
   engine: PdfEngine,
-  { session, opened: { can } }: Pick<ProjectViewProps, "session" | "opened">,
+  { session, opened: { can }, onAppearance, onCustomType }: Pick<ProjectViewProps, "session" | "opened" | "onAppearance" | "onCustomType">,
   opened: ReturnType<typeof useProject>,
   active: DocumentId | undefined,
   settings: Settings,
-  { onAppearance, onCustomType }: Pick<ProjectViewProps, "onAppearance" | "onCustomType">,
   adding: boolean,
 ) {
   const approval = useApproval(files, store, opened, engine);
@@ -300,7 +299,7 @@ export function ProjectView(props: ProjectViewProps) {
     opened.addDocuments(documents);
     openInTabs(tabs, documents);
   });
-  const { marking, history, editing, tool, focus, labels, approval, images } = useEditing(files, store, engine, props, opened, active, settings, props, adder.adding);
+  const { marking, history, editing, tool, focus, labels, approval, images } = useEditing(files, store, engine, props, opened, active, settings, adder.adding);
   // Leaving waits for an add or an approval under way: it lands in the project before it is saved and let go.
   useImperativeHandle(props.ref, () => ({ settled: () => adder.settled().then(approval.settled) }));
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });

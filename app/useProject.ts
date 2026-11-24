@@ -22,7 +22,6 @@ export function useProject(engine: Engine, session: Session, opened: SessionStat
       const { marks, shown } = change({ marks: document?.marks ?? [], shown: document?.shown ?? [] });
       interim.replace(session, id, marks, shown, kind);
     },
-    /** Lands an approval in one save. It can't be undone, so it ends the undo history of every document it changed. */
     approve: (approval: Approval) => interim.approve(session, approval),
     downloaded: (id: DocumentId) => void session.documents.markDownloaded(id),
     addDocuments: (documents: readonly ProjectDocument[]) => interim.addDocuments(session, documents),
