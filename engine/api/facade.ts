@@ -1,4 +1,4 @@
-import type { Settings } from "../model/project";
+import type { DocumentId, Settings } from "../model/project";
 import type { Store } from "../storage/store";
 import type { Refusal, Result } from "./errors";
 import type { EngineState } from "./state";
@@ -45,7 +45,18 @@ export interface Library {
 /** One open, locked project. */
 export interface Session {
   readonly projectId: string;
-  /** Lets the project go and lists the projects again. */
+  /** Each document's own undo and redo; changing nothing when there is nothing to go back to. */
+  readonly history: {
+    undo(document: DocumentId): Result<void>;
+    redo(document: DocumentId): Result<void>;
+  };
+  readonly documents: {
+    /** The document's cleaned file was downloaded. */
+    markDownloaded(document: DocumentId): Result<void>;
+  };
+  /** Saves now. Resolves once every change so far is written: true if they all landed. */
+  flush(): Promise<boolean>;
+  /** Saves every change, then lets the project go and lists the projects again; stays open, with `save-failed`, when the save fails. */
   close(): Promise<Result<void>>;
 }
 

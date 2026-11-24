@@ -34,6 +34,8 @@ export type ErrorCode =
   | "add-save-failed"
   | "add-search-failed"
   | "add-while-approving"
+  // The project's latest changes could not be saved: `close`'s result while the Session stays open.
+  | "save-failed"
   // Refusals the app never shows: it disables the control from the state, or never sends the command.
   | "busy-moving"
   | "busy-creating"
@@ -41,7 +43,10 @@ export type ErrorCode =
   | "open-here"
   | "session-open"
   | "session-closed"
-  | "unknown-project";
+  | "unknown-project"
+  | "unknown-document"
+  | "worker-not-ready"
+  | "busy-applying";
 
 export interface EngineError {
   readonly code: ErrorCode;

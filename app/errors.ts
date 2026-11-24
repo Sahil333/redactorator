@@ -34,6 +34,7 @@ const sentences: Partial<Record<ErrorCode, (data: (key: string) => string) => st
   "add-search-failed": () =>
     "This file could not be searched for the project's hidden values, so it wasn't added. Reload the page, then add it again.",
   "add-while-approving": () => "This file wasn't added while a document was being approved. Add it again once the approval is done.",
+  "save-failed": () => "Your latest changes could not be saved. Check that the disk has space; the next change tries again.",
 };
 
 /** What to tell the user about `error`: the worker's own sentence, or the app's; undefined for one the app never shows. */

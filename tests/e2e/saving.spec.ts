@@ -64,3 +64,18 @@ test("settings changed while one is being saved are stored in the order they wer
 
   await expect.poll(async () => JSON.parse((await storedText(page, ".redactorator/settings.json")) ?? "{}")).toHaveProperty(["appearance", "colour"], "#336699");
 });
+
+test("leaving a project saves it first, and while that save runs the project takes no more changes", async ({ page }) => {
+  await openOneWord(page);
+  const release = await holdWrites(page, "project.json");
+  await markText(page, 1, janeRoe, "Person");
+  const undo = page.getByRole("button", { name: "Undo" });
+  await expect(undo).toBeEnabled();
+
+  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Projects" }).click();
+
+  await expect(undo).toBeDisabled();
+  await release();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  expect(await storedProject(page)).toHaveProperty(markCount, 1);
+});
