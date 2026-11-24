@@ -1,4 +1,4 @@
-import { writeWhole } from "./storage";
+import { writeWhole } from "../engine/host-browser/stores";
 
 // Chrome's save dialog, which TypeScript's DOM types leave out.
 declare global {

@@ -4,7 +4,7 @@ import { prepareFiles, type Refusal } from "./importFiles";
 import type { ProjectDocument } from "../engine/model/project";
 import { writeOriginals, type StoredProject } from "./projects";
 import { hiddenTextKeys, spreadToAdded } from "../engine/model/spread";
-import type { Store } from "./storage";
+import type { Store } from "../engine/storage/store";
 import type { Engine } from "./useEngine";
 
 const NOT_SAVED = "This file could not be saved in the project. Check that the disk has space, then add it again.";

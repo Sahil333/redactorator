@@ -1,19 +1,4 @@
-// Where projects are kept. The app reaches storage only through `Store`, so another backend
-// (a folder on the user's disk, another browser's storage, a cloud) can take its place.
-
-/** Files and folders under one root, addressed by paths like `Folder/.redactorator/project.json`. */
-export interface Store {
-  /** The file at `path`, or undefined when there is none. */
-  read(path: string): Promise<File | undefined>;
-  /** Writes `data` to `path`, making its folders. The file changes only once the whole write lands. */
-  write(path: string, data: BufferSource | Blob | string): Promise<void>;
-  /** The names of the folders directly inside `path` ("" for the root). */
-  folders(path: string): Promise<string[]>;
-  /** The names of the files directly inside `path` ("" for the root). */
-  files(path: string): Promise<string[]>;
-  /** Removes the file or folder at `path`, with everything in it. */
-  remove(path: string): Promise<void>;
-}
+import type { Store } from "../storage/store";
 
 /** Writes `data` to `file`, which changes only once the whole write lands. */
 export async function writeWhole(file: FileSystemFileHandle, data: BufferSource | Blob | string): Promise<void> {
@@ -30,7 +15,12 @@ export async function writeWhole(file: FileSystemFileHandle, data: BufferSource 
 
 const isNotFound = (error: unknown) => error instanceof DOMException && error.name === "NotFoundError";
 
-const segments = (path: string) => path.split("/").filter((segment) => segment !== "");
+// A document's file name comes from a stored, possibly imported, project file, so a path must not climb out of the store.
+function segments(path: string): string[] {
+  const names = path.split("/");
+  if (path.startsWith("/") || names.includes("..")) throw new Error("A store path must stay inside the store");
+  return names.filter((segment) => segment !== "");
+}
 
 async function names(folder: FileSystemDirectoryHandle, kind: FileSystemHandleKind): Promise<string[]> {
   const found: string[] = [];
@@ -41,7 +31,7 @@ async function names(folder: FileSystemDirectoryHandle, kind: FileSystemHandleKi
 }
 
 /** The files and folders under `root`: Chrome's private storage, or a folder the user picked. */
-export function directoryStore(root: FileSystemDirectoryHandle): Store {
+export function folderStore(root: FileSystemDirectoryHandle): Store {
   async function folder(names: readonly string[], create: boolean): Promise<FileSystemDirectoryHandle> {
     let handle = root;
     for (const name of names) handle = await handle.getDirectoryHandle(name, { create });
@@ -59,7 +49,7 @@ export function directoryStore(root: FileSystemDirectoryHandle): Store {
     async read(path) {
       try {
         const [handle, name] = await parent(path, false);
-        return await (await handle.getFileHandle(name)).getFile();
+        return await (await (await handle.getFileHandle(name)).getFile()).bytes();
       } catch (error) {
         if (isNotFound(error)) return undefined;
         throw error;
@@ -88,5 +78,5 @@ export function directoryStore(root: FileSystemDirectoryHandle): Store {
 
 /** The browser's private storage for this site. */
 export async function privateStore(): Promise<Store> {
-  return directoryStore(await navigator.storage.getDirectory());
+  return folderStore(await navigator.storage.getDirectory());
 }

@@ -19,13 +19,17 @@ import {
   type ProjectDocument,
   type Settings,
 } from "../engine/model/project";
-import type { Store } from "./storage";
+import type { LockPort } from "../engine/core/ports";
+import type { Store } from "../engine/storage/store";
 
 const RECORDS = ".redactorator";
 const PROJECT_FILE = `${RECORDS}/project.json`;
 const textFile = (folder: string, id: DocumentId) => `${folder}/${RECORDS}/text/${id}.json`;
 const imagesFile = (folder: string, id: DocumentId) => `${folder}/${RECORDS}/images/${id}.json`;
 const SETTINGS_FILE = `${RECORDS}/settings.json`;
+// `folder` is "" for the store's root, as when one project's own folder is imported.
+const inFolder = (folder: string, name: string) => (folder === "" ? name : `${folder}/${name}`);
+const decoder = new TextDecoder();
 
 /** A project and the folder it lives in. */
 export interface StoredProject {
@@ -43,7 +47,7 @@ export interface UnreadableProject {
 export interface NewDocument {
   readonly id: DocumentId;
   readonly file: string;
-  readonly bytes: ArrayBuffer;
+  readonly bytes: Uint8Array<ArrayBuffer>;
   readonly sha256: string;
   /** Its pages' text and images, which the project keeps so values and images can be found in it later. */
   readonly reading: Reading;
@@ -73,9 +77,9 @@ export const nameFromFile = (file: string): string => file.replace(/\.pdf$/i, ""
 
 /** The project in `folder` as it is stored now, or why it can't be read; undefined when there is none. */
 export async function readProject(store: Store, folder: string): Promise<StoredProject | UnreadableProject | undefined> {
-  const file = await store.read(`${folder}/${PROJECT_FILE}`);
+  const file = await store.read(inFolder(folder, PROJECT_FILE));
   if (file === undefined) return undefined;
-  const project = parseProject(await file.text());
+  const project = parseProject(decoder.decode(file));
   return typeof project === "string" ? { folder, problem: project } : { folder, project };
 }
 
@@ -125,7 +129,7 @@ export async function writeOriginals(
 /** A document's stored text, or why it can't be used; undefined when there is none, as for a project from before texts were kept. */
 export async function readTexts(store: Store, folder: string, document: ProjectDocument): Promise<PageText[] | StoredFileProblem | undefined> {
   const file = await store.read(textFile(folder, document.id));
-  return file === undefined ? undefined : parseTexts(await file.text(), document.pages);
+  return file === undefined ? undefined : parseTexts(decoder.decode(file), document.pages);
 }
 
 export const saveTexts = (store: Store, folder: string, id: DocumentId, texts: readonly PageText[]): Promise<void> =>
@@ -134,7 +138,7 @@ export const saveTexts = (store: Store, folder: string, id: DocumentId, texts: r
 /** A document's stored images, or why they can't be used; undefined when there are none, as for a project from before images were kept. */
 export async function readImages(store: Store, folder: string, document: ProjectDocument): Promise<PlacedImage[] | StoredFileProblem | undefined> {
   const file = await store.read(imagesFile(folder, document.id));
-  return file === undefined ? undefined : parseImages(await file.text(), document.pages);
+  return file === undefined ? undefined : parseImages(decoder.decode(file), document.pages);
 }
 
 export const saveImages = (store: Store, folder: string, id: DocumentId, images: readonly PlacedImage[]): Promise<void> =>
@@ -184,22 +188,18 @@ function copyName(name: string, taken: readonly string[]): string {
   return candidate;
 }
 
-async function sameBytes(a: File, b: File): Promise<boolean> {
-  if (a.size !== b.size) return false;
-  const [x, y] = await Promise.all([a.bytes(), b.bytes()]);
-  return x.every((byte, at) => byte === y[at]);
-}
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((byte, at) => byte === b[at]);
 
 /** Copies the folder at `fromPath` into `intoPath`, file by file, each read back and checked whole. */
 async function copyFolder(from: Store, fromPath: string, into: Store, intoPath: string): Promise<void> {
   for (const name of await from.files(fromPath)) {
-    const file = await from.read(`${fromPath}/${name}`);
+    const file = await from.read(inFolder(fromPath, name));
     if (file === undefined) throw new Error("A file went while it was copied");
     await into.write(`${intoPath}/${name}`, file);
     const copy = await into.read(`${intoPath}/${name}`);
-    if (copy === undefined || !(await sameBytes(file, copy))) throw new Error("A copied file does not match its original");
+    if (copy === undefined || !sameBytes(file, copy)) throw new Error("A copied file does not match its original");
   }
-  for (const name of await from.folders(fromPath)) await copyFolder(from, `${fromPath}/${name}`, into, `${intoPath}/${name}`);
+  for (const name of await from.folders(fromPath)) await copyFolder(from, inFolder(fromPath, name), into, `${intoPath}/${name}`);
 }
 
 /**
@@ -226,7 +226,7 @@ async function sameFolder(a: Store, aPath: string, b: Store, bPath: string): Pro
   if (sorted(aFiles) !== sorted(bFiles) || sorted(aFolders) !== sorted(bFolders)) return false;
   for (const name of aFiles) {
     const [x, y] = await Promise.all([a.read(`${aPath}/${name}`), b.read(`${bPath}/${name}`)]);
-    if (x === undefined || y === undefined || !(await sameBytes(x, y))) return false;
+    if (x === undefined || y === undefined || !sameBytes(x, y)) return false;
   }
   for (const name of aFolders) if (!(await sameFolder(a, `${aPath}/${name}`, b, `${bPath}/${name}`))) return false;
   return true;
@@ -245,9 +245,9 @@ async function moveFolder(from: Store, folder: string, into: Store, name: string
 }
 
 /** Moves one readable project, while no other tab has it open; false when one does. */
-async function moveProject(from: Store, entry: StoredProject, into: Store): Promise<boolean> {
-  const release = await lockProject(entry.project.id);
-  if (release === undefined) return false;
+async function moveProject(from: Store, entry: StoredProject, into: Store, locks: LockPort): Promise<boolean> {
+  const hold = await locks.acquire(entry.project.id);
+  if (hold === undefined) return false;
   try {
     // Another tab, starting at the same time, may have moved it while this one waited.
     if ((await readProject(from, entry.folder)) === undefined) return true;
@@ -255,7 +255,7 @@ async function moveProject(from: Store, entry: StoredProject, into: Store): Prom
     else await moveFolder(from, entry.folder, into, entry.project.name);
     return true;
   } finally {
-    release();
+    hold.release();
   }
 }
 
@@ -281,11 +281,11 @@ async function moveSettings(from: Store, into: Store): Promise<void> {
  * now; the names of those left behind are returned. The app's settings go too, unless `into`
  * has its own.
  */
-export async function moveProjects(from: Store, into: Store): Promise<string[]> {
+export async function moveProjects(from: Store, into: Store, locks: LockPort): Promise<string[]> {
   const left: string[] = [];
   for (const entry of await listProjects(from)) {
     if ("problem" in entry) await moveFolder(from, entry.folder, into, entry.folder);
-    else if (!(await moveProject(from, entry, into))) left.push(entry.project.name);
+    else if (!(await moveProject(from, entry, into, locks))) left.push(entry.project.name);
   }
   await moveSettings(from, into);
   return left;
@@ -305,10 +305,10 @@ export async function importProject(from: Store, into: Store): Promise<StoredFil
 }
 
 /** A document's original, or undefined when it is gone from the project's folder. */
-export const findOriginal = (store: Store, folder: string, document: ProjectDocument): Promise<File | undefined> =>
+export const findOriginal = (store: Store, folder: string, document: ProjectDocument): Promise<Uint8Array<ArrayBuffer> | undefined> =>
   store.read(`${folder}/${document.file}`);
 
-export async function readOriginal(store: Store, folder: string, document: ProjectDocument): Promise<File> {
+export async function readOriginal(store: Store, folder: string, document: ProjectDocument): Promise<Uint8Array<ArrayBuffer>> {
   const file = await findOriginal(store, folder, document);
   if (file === undefined) throw new Error("The original is missing");
   return file;
@@ -316,23 +316,8 @@ export async function readOriginal(store: Store, folder: string, document: Proje
 
 export async function loadSettings(store: Store): Promise<Settings | StoredFileProblem> {
   const file = await store.read(SETTINGS_FILE);
-  return file === undefined ? defaultSettings : parseSettings(await file.text());
+  return file === undefined ? defaultSettings : parseSettings(decoder.decode(file));
 }
 
 export const saveSettings = (store: Store, settings: Settings): Promise<void> => store.write(SETTINGS_FILE, settingsJson(settings));
 
-/**
- * Holds the project's lock while it is open, so a second tab cannot open it and write over it.
- * Resolves to the function that lets the lock go, or undefined when another tab holds it.
- */
-export function lockProject(id: string): Promise<(() => void) | undefined> {
-  return new Promise((resolve) => {
-    void navigator.locks.request(`redactorator-project:${id}`, { ifAvailable: true }, (lock) => {
-      if (lock === null) {
-        resolve(undefined);
-        return undefined;
-      }
-      return new Promise<void>((release) => resolve(() => release()));
-    });
-  });
-}

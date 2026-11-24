@@ -1,10 +1,13 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import type { LockHold } from "../engine/core/ports";
+import { webLocks } from "../engine/host-browser/locks";
+import { folderStore, privateStore } from "../engine/host-browser/stores";
 import { defaultSettings, type Settings } from "../engine/model/project";
+import type { Store } from "../engine/storage/store";
 import {
   importProject,
   listProjects,
   loadSettings,
-  lockProject,
   moveProjects,
   readProject,
   saveSettings,
@@ -12,7 +15,6 @@ import {
   type StoredProject,
 } from "./projects";
 import { pickFolder, rememberedFolder, rememberFolder, stillThere } from "./projectsFolder";
-import { directoryStore, privateStore, type Store } from "./storage";
 
 const READ_FAILED = "Your projects could not be read. Reload the page to try again.";
 const CHANGE_FAILED = "That change could not be saved. Check that the disk has space, then try again.";
@@ -31,10 +33,10 @@ const settingsProblem = {
   newer: "Your settings were saved by a newer version of Redactorator, so the defaults are in use and changes are not saved. Reload the page to get the newer version.",
 } as const;
 
-/** A project this tab holds the lock on, as stored now, and the function that lets the lock go. */
+/** A project this tab holds the lock on, as stored now, and that lock. */
 export interface TakenProject {
   readonly current: StoredProject;
-  readonly release: () => void;
+  readonly hold: LockHold;
 }
 
 /** Where the projects are kept, as home tells the user. */
@@ -87,11 +89,11 @@ async function loadStore(folder: FileSystemDirectoryHandle | undefined): Promise
   const { name } = folder;
   if ((await folder.queryPermission({ mode: "readwrite" })) !== "granted") return { where: { kind: "reopen", name } };
   if (!(await stillThere(folder))) return { where: { kind: "missing", name } };
-  const store = directoryStore(folder);
+  const store = folderStore(folder);
   // Projects still inside Chrome move in: all of them the first time, and later any left behind.
   let problem: string | undefined;
   try {
-    const left = await moveProjects(await privateStore(), store);
+    const left = await moveProjects(await privateStore(), store, webLocks);
     if (left.length > 0) problem = leftBehind(left);
   } catch {
     problem = notMoved(name);
@@ -182,8 +184,8 @@ export function useProjectStore(onLoaded: (listed: ProjectEntries) => void) {
   async function take(stored: StoredProject, doing: string): Promise<TakenProject | undefined> {
     const from = storeRef.current;
     if (from === undefined) return undefined;
-    const release = await lockProject(stored.project.id);
-    if (release === undefined) {
+    const hold = await webLocks.acquire(stored.project.id);
+    if (hold === undefined) {
       setProblem(busyElsewhere(stored, doing));
       return undefined;
     }
@@ -191,15 +193,15 @@ export function useProjectStore(onLoaded: (listed: ProjectEntries) => void) {
     try {
       current = await readProject(from, stored.folder);
     } catch {
-      release();
+      hold.release();
       setProblem(READ_FAILED);
       return undefined;
     }
     if (current !== undefined && "project" in current && current.project.id === stored.project.id) {
       setProblem(undefined);
-      return { current, release };
+      return { current, hold };
     }
-    release();
+    hold.release();
     setProblem(gone(stored));
     await refresh();
     return undefined;
@@ -215,7 +217,7 @@ export function useProjectStore(onLoaded: (listed: ProjectEntries) => void) {
     } catch {
       setProblem(CHANGE_FAILED);
     } finally {
-      taken.release();
+      taken.hold.release();
     }
     await refresh();
   }
@@ -246,7 +248,7 @@ export function useProjectStore(onLoaded: (listed: ProjectEntries) => void) {
         const folder = await pickFolder("redactorator-projects", "readwrite");
         if (folder === undefined) return;
         // One project's own folder would hide that project and take the others inside it.
-        if ((await readProject(directoryStore(folder), "")) !== undefined) {
+        if ((await readProject(folderStore(folder), "")) !== undefined) {
           setProblem(oneProject(folder.name));
           return;
         }
@@ -271,7 +273,7 @@ export function useProjectStore(onLoaded: (listed: ProjectEntries) => void) {
       try {
         const folder = await pickFolder("redactorator-import", "read");
         if (folder === undefined) return;
-        why = await importProject(directoryStore(folder), into);
+        why = await importProject(folderStore(folder), into);
       } catch {
         why = "failed";
       }

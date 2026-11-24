@@ -364,7 +364,7 @@ repo's patched build (`vendor/mupdf`) has not been tried in Node.
 | `engine/core` | The facade, Library, Session (dispatcher, slices, effects, selectors, gate), intake, stored formats and stored files (`core/stored/`), readings, the PDF-worker client, the `LockPort` and `WorkerChannel` interfaces | model, storage, api, pdf-protocol | `engine/core/tsconfig.json`, extending the base | `core` | 2 | 5a |
 | `engine/pdf` | The handler and its modules; `write/` holds the verbatim set | model, pdf-protocol, `mupdf` | `engine/pdf/tsconfig.json`, extending the base, excluding `worker.ts` | `pdf`, with `pdf/write` limited to `pdf/apply.ts` | 2 (today's `engine/worker.ts` and `engine/glyphs.ts`) | 7 |
 | `engine/pdf/worker.ts` | The Web Worker entry: binds `self` to the handler | the handler | `engine/pdf/tsconfig.worker.json`: the base plus `lib: ["ES2024", "WebWorker"]` | `pdf` | 2 (as `engine/worker.ts`) | 7 |
-| `engine/host-browser` | Store backends, Web Locks adapter, worker channel, `createBrowserEngine` | everything in `engine/` except `pdf` (the worker is reached by URL) | the root `tsconfig.json` (DOM) | `host-browser` | 4 | 8 |
+| `engine/host-browser` | Store backends, Web Locks adapter, worker channel, `createBrowserEngine` | everything in `engine/` except `pdf` (the worker is reached by URL) | the root `tsconfig.json` (DOM) | `host-browser` | 3 | 8 |
 | `app` | React components and hooks, browser-only UI concerns | model, api, the `Store` type from storage, `host-browser` | the root `tsconfig.json` (DOM, `vite/client`) | `app` | 2 | 8 |
 
 **Zones before rules.** Fallow checks an import only when the imported file
@@ -1065,8 +1065,8 @@ interface LockPort { acquire(projectId: string): Promise<LockHold | undefined> }
 interface LockHold { release(): void }
 
 interface Store {
-  read(path: string): Promise<Uint8Array | undefined>;   // a fresh array the caller owns
-  write(path: string, data: Uint8Array | string): Promise<void>;
+  read(path: string): Promise<Uint8Array<ArrayBuffer> | undefined>;   // a fresh array the caller owns
+  write(path: string, data: Uint8Array<ArrayBuffer> | string): Promise<void>;
   folders(path: string): Promise<string[]>;
   files(path: string): Promise<string[]>;
   remove(path: string): Promise<void>;
@@ -1076,7 +1076,12 @@ interface Store {
 A `LockHold` is released when its holder dies, as Web Locks do. `Store`
 paths are relative to the store's root and `/`-separated; an adapter refuses
 a path with a `..` segment or a leading `/`, since a document's file name
-comes from a stored, possibly imported `project.json`.
+comes from a stored, possibly imported `project.json`. The root itself is
+`""`; a file in it is named without a leading `/`.
+
+The bytes are `Uint8Array<ArrayBuffer>`: TypeScript's plain `Uint8Array` may
+sit on a `SharedArrayBuffer`, and the browser's file-writing API takes only
+views over an `ArrayBuffer`.
 
 ### 11. Room for phase 4 detection (speculative, not built)
 
@@ -1909,24 +1914,30 @@ golden test.
 
 *   **Type / Scope**: TypeScript module.
 *   **Proposed Changes**: `engine/storage/store.ts` gets the `Store`
-    interface (`storage.ts:5-16`) with `read(path): Promise<Uint8Array |
-    undefined>` (a fresh array the caller owns) and `write(path, data:
-    Uint8Array | string)`. `engine/host-browser/stores.ts` gets
-    `directoryStore` (renamed `folderStore`, 43-87) with its helpers
-    `isNotFound`, `segments` and `names` (31-41), `privateStore` (90-92) and
-    `writeWhole` (19-29), converting `File` to `Uint8Array` on read.
+    interface (`storage.ts:5-16`) with `read(path):
+    Promise<Uint8Array<ArrayBuffer> | undefined>` (a fresh array the caller
+    owns) and `write(path, data: Uint8Array<ArrayBuffer> | string)`.
+    `engine/host-browser/stores.ts` gets `directoryStore` (renamed
+    `folderStore`, 43-87) with its helpers `isNotFound`, `segments` and
+    `names` (31-41), `privateStore` (90-92) and `writeWhole` (19-29),
+    converting `File` to `Uint8Array` on read.
+    `segments` refuses a path with a `..` segment or a leading `/`
+    (Technical Plan section 10).
 
 #### 23. `app/projects.ts` (Modify; moves in step 5a)
 
 *   **Type / Scope**: TypeScript module.
 *   **Proposed Changes**: reads use `Uint8Array` and `TextDecoder` instead of
     `File.text()`, `.bytes()` and `.size` (`projects.ts:76, 126, 135,
-    166-201, 221-231, 306-317`); `NewDocument.bytes` becomes `Uint8Array`
-    (44), and its write at 110 takes it;
-    `readOriginal` and `findOriginal` return bytes. `lockProject` (326-336)
-    moves to `engine/host-browser/locks.ts` as the Web Locks `LockPort`;
-    `moveProject` and `moveProjects` (246-258, 282-290) take the `LockPort`
-    as an argument.
+    166-201, 221-231, 306-317`); `NewDocument.bytes` becomes
+    `Uint8Array<ArrayBuffer>` (44), and its write at 110 takes it;
+    `readOriginal` and `findOriginal` return bytes. A path in the store's
+    root folder (`""`, joined at 74, 194 and 200 when importing reads a
+    project's own folder, or when `useProjectStore.ts:249` checks a picked
+    folder is not one) is joined without a leading `/`, which the store now
+    refuses. `lockProject` (326-336) moves to `engine/host-browser/locks.ts`
+    as the Web Locks `LockPort`; `moveProject` and `moveProjects` (246-258,
+    282-290) take the `LockPort` as an argument.
 
 #### 24. `engine/core/ports.ts` (Create)
 
@@ -1939,23 +1950,29 @@ golden test.
 *   **Type / Scope**: React hooks and components.
 *   **Proposed Changes**: `app/useProjectStore.ts` builds stores with
     `folderStore` and `privateStore` and takes the lock through the
-    `LockPort` (`take`, 182-206); `app/App.tsx` keeps the `LockHold` in
-    `OpenProject` where it keeps `release` today (45-50, 72, 89);
+    `LockPort` (`take`, 182-206), so `TakenProject` holds a `LockHold`;
+    `app/App.tsx` keeps the `LockHold` in `OpenProject` where it keeps
+    `release` today (45-50, 72, 89);
     `app/download.ts` imports `writeWhole` from `host-browser`;
     `app/importFiles.ts` builds `NewDocument.bytes` as
     `new Uint8Array(await file.arrayBuffer())` (36-45);
     `app/documentReadings.ts:21` and `app/useDocumentInEngine.ts:22-25` pass
-    the bytes on, and `app/useEngine.ts`'s `open` (61, 269) takes a
-    `Uint8Array` and transfers `bytes.slice().buffer`; the
-    type-only `Store` imports move to `engine/storage` in
+    the bytes on, and `app/useEngine.ts`'s `open` (61, 269) and `inspect`
+    (93, 246-248) each take a `Uint8Array` and transfer
+    `bytes.slice().buffer`, so `importFiles.ts` no longer copies before
+    inspecting (43); the type-only `Store` imports move to `engine/storage` in
     `app/useProject.ts`, `app/useAddDocuments.ts`, `app/documentReadings.ts`,
     `app/useImages.ts`, `app/useApproval.ts` and `app/ProjectView.tsx`.
 
-#### 26. `engine/storage/tsconfig.json` (Create); `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify)
+#### 26. `engine/storage/tsconfig.json` (Create); `tsconfig.json`, `package.json`, `.fallowrc.json`, `engine/tsconfig.test.json` (Modify)
 
 *   **Type / Scope**: build configuration.
 *   **Proposed Changes**: the storage config, and the `storage` zone with
-    its rule (imports nothing).
+    its rule (imports nothing); `engine/tsconfig.test.json` includes
+    `storage/**/*.test.ts`. The `host-browser` zone
+    (`engine/host-browser/**`), new with this step's folder, is added with
+    no rule; its rule comes in step 8. Without it, the `model` and
+    `storage` rules would let either folder import `host-browser`.
 *   **Temporary edges:** `app` imports `engine/core/ports` until step 6d;
     `app` imports `engine/storage` and `engine/host-browser` from here on,
     which step 8 makes the app's allowed edges.
@@ -2012,9 +2029,7 @@ project and folder tests are green.
 
 *   **Type / Scope**: build configuration.
 *   **Proposed Changes**: the protocol config, and the rule of the
-    `pdf-protocol` zone (imports model); the zone exists from step 2. The
-    `host-browser` zone (`engine/host-browser/**`), new with item 28's
-    folder, is added with no rule; its rule comes in step 8.
+    `pdf-protocol` zone (imports model); the zone exists from step 2.
 *   **Temporary edges:** `app/useEngine.ts` imports `engine/core/pdf-client`
     until step 5a.
 

@@ -3,7 +3,7 @@ import type { DocumentId, Project, ProjectDocument } from "../engine/model/proje
 import { saveProject, type StoredProject } from "./projects";
 import { markKey } from "../engine/model/marks";
 import type { Approval } from "../engine/model/spread";
-import type { Store } from "./storage";
+import type { Store } from "../engine/storage/store";
 
 // Undo goes back this many changes per document.
 const HISTORY_LIMIT = 100;
