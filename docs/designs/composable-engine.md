@@ -160,7 +160,8 @@ the code, not reproduced.
 *   **Enforced boundaries.** Each engine folder has its own typecheck config,
     all run by `pnpm typecheck`, and fallow zones enforce the import rules of
     the component map (decision 27). `pnpm test` runs the typecheck configs
-    and, from step 0, `pnpm exec fallow audit`.
+    and, from step 0, `pnpm exec fallow architecture --boundaries` and
+    `pnpm exec fallow audit`.
 *   **Behaviour kept, and checked by tests.** Every browser test passes, and
     the oracle passes every cleaned PDF the tests judge; any rewritten test
     checks the same thing, recorded in a ledger with a negative control
@@ -209,11 +210,10 @@ the code, not reproduced.
 
 ## Open Questions
 
-*   **Fallow's reach** (to settle in step 0, with fallbacks named in the
-    Technical Plan): does fallow see the edge from `engine/host-browser` to
-    the worker through `new URL(..., import.meta.url)`; does that edge count
-    for zone rules; and can a zone limit `engine/pdf/write/` to a single
-    importer?
+*   **Fallow's reach**: settled in step 0. Fallow sees the worker edge
+    through `new URL(..., import.meta.url)`, the edge counts for zone rules,
+    and a zone can limit `engine/pdf/write/` to a single importer; every
+    rule uses a fallow zone (Technical Plan section 3).
 *   **Formats without fixed pages** (to settle before phase 5's text adapter,
     the first one planned): virtual pages with made-up boxes, or an anchor
     with no geometry. The two do not cost the same (section 12).
@@ -258,6 +258,7 @@ the code, not reproduced.
 *   **Given**: a developer who imports `engine/core` from `app/`, or uses
     `window` or `File` inside `engine/core`.
 *   **When**: they run `pnpm typecheck` or `pnpm test` (which runs
+    `pnpm exec fallow architecture --boundaries` and
     `pnpm exec fallow audit` from step 0 on), or an agent commits (the fallow
     gate runs the same audit).
 *   **Then**: the check fails and names the file and the rule it broke.
@@ -391,13 +392,64 @@ files and the script line, and each later step appends its config.
 `TextDecoder` with `decode`. Node 20 and later, Bun and browsers provide all
 three.
 
-**Fallow's reach is unknown until step 0.** Each rule that depends on it has
-a fallback:
+**Fallow's reach, settled in step 0.** A throwaway spike on fallow 3.43.2
+(`fallow trace --path`, `fallow architecture --boundaries` and
+`fallow audit`, on a copy of the repo with the target folders stubbed)
+found:
 
-| Rule | If fallow can | If fallow cannot |
+*   **Fallow sees the worker edge.** `fallow trace --path app/useEngine.ts
+    engine/worker.ts` reports one `dynamic` hop at `app/useEngine.ts:178`,
+    the `new Worker(new URL("../engine/worker.ts", import.meta.url))` call.
+*   **The edge counts for zones.** With `engine/pdf/**` in a zone that
+    `host-browser` may not import, the `new URL(...)` line is reported as a
+    boundary violation, exactly like a static import.
+*   **A zone can have a single importer.** A file belongs to the first zone,
+    in the order listed, whose pattern matches it; a zone listed after a
+    broader one matches no file, and fallow warns that it matched none.
+    Imports inside one zone are always allowed. So `pdf-apply`
+    (`engine/pdf/apply.ts`) and `pdf-write` (`engine/pdf/write/**`), listed
+    before `pdf` (`engine/pdf/**`), with `pdf-write` in no rule's `allow`
+    but `pdf-apply`'s, flag every other import into `write/`: through
+    `write/index.ts` or straight to a file inside it.
+*   **Only zoned files with a rule are checked.** A file in no zone, or in a
+    zone with no rule, may import anything. A rule is as strong as the set
+    of importers that are zoned.
+*   **JSON files are in no zone.** A zone pattern such as `dataset/*.json`
+    matches no file, so a JSON import never breaks a rule. The `model`
+    zone's rule is `allow: []`, and its imports of `dataset/*.json` pass.
+*   **`fallow audit` checks only changed files.** It fails on a violation in
+    a file changed since its base (the merge-base with `origin/main`), and
+    counts a violation already there in a touched file as inherited, which
+    does not fail. A step that only switches a zone on in `.fallowrc.json`
+    therefore leaves the audit green even when unchanged files break the
+    zone. `pnpm exec fallow architecture --boundaries` checks every file and
+    exits 1 on any violation.
+*   **TypeScript project references** (the optional question). On
+    TypeScript 7.0.2, with `composite` configs and `references`, `tsc -b`
+    fails when a project imports a file of a project it does not reference
+    (TS6307), so references could enforce the direction between folders.
+    They cannot limit a folder to one importing file, and they need
+    declaration output and build-info files. Not chosen: zones express
+    every rule.
+
+Each rule's mechanism:
+
+| Rule | Mechanism | On in step |
 | --- | --- | --- |
-| `host-browser` may not import `engine/pdf`, yet starts the worker through `new URL(..., import.meta.url)` | Allow that one edge in the zone config | List `engine/pdf/worker.ts` as a separate entry in `.fallowrc.json`, and a boundary unit test (`engine/boundaries.test.ts`) fails if any source under `app` or `engine/host-browser` imports a module under `engine/pdf`. With plain per-folder configs, TypeScript follows imports into excluded folders, so the typecheck alone cannot stop it (step 0 also asks whether composite project references could) |
-| Only `engine/pdf/apply.ts` may import `engine/pdf/write/` | A zone `pdf/write` whose only importer is `pdf/apply.ts` | `write/index.ts` exports only `writeAndCheck` and `CheckFailed`, and the same boundary test fails on any other importer |
+| `host-browser` may not import `engine/pdf`, yet starts the worker through `new URL(..., import.meta.url)` | Fallow zone. `engine/pdf/worker.ts` is in the `pdf` zone, which `host-browser`'s rule does not allow. The one `new Worker(new URL("../pdf/worker.ts", import.meta.url))` line in `engine/host-browser/workerChannel.ts` has `// fallow-ignore-next-line boundary-violation` above it. Any other import of a file under `engine/pdf`, a static import of `worker.ts` included, is still a violation; if the comment stops sitting over the edge, fallow reports it as a stale suppression. A separate zone for `worker.ts` that `host-browser` may import was tried and not chosen: it also lets a static import of `worker.ts` through, which would load the handler and MuPDF on the page | 7 (`pdf`), 8 (`host-browser`) |
+| Only `engine/pdf/apply.ts` may import `engine/pdf/write/` | Fallow zones `pdf-apply` and `pdf-write`, listed before `pdf`; only `pdf-apply`'s rule allows `pdf-write`. Since unzoned files are not checked, step 7 also adds a `tests` zone (`tests/**`) whose rule allows every zone except `pdf-write`, and step 8's `app` and `host-browser` rules leave `pdf-write` out | 7 |
+| Each folder's direction rule in the table above | Fallow zone per folder, with the `allow` list of the "May import" column | per the table |
+
+**Every source file in a zone, from step 8.** Because a file in no zone is
+not checked, step 8 (item 55) turns on
+`"boundaries": { "coverage": { "requireAllFiles": true, "allowUnmatched": ["*.config.ts"] } }`
+in `.fallowrc.json`: fallow then reports every source file that matches no
+zone, so a new folder cannot import around a rule. The root
+`playwright.config.ts`, `vite.config.ts` and `vitest.config.ts` stay
+unzoned; the spike showed fallow reports them otherwise.
+
+`engine/boundaries.test.ts` (item 56) is not needed: no rule falls back to
+it.
 
 ### 4. The facade (`engine/api`)
 
@@ -1108,7 +1160,7 @@ The test plan (brief, Analysis section 8), in short:
     nothing, fails the test.
 *   **A ledger** in each PR, one row per rewritten test: old and new name,
     what it proves, the fault injected, the assertion before and after,
-    evidence it can fail.
+    evidence it can fail (the template is under item 4).
 *   **New tests** for behaviours nothing watches today, and **the golden
     test**: a scripted session writes the same bytes to all four stored files
     as today's build, once ids and dates are replaced by placeholders.
@@ -1227,7 +1279,8 @@ unload flush, and the race. This design adds:
 *   **One PR per step and per part**, numbered −1 to 8, with steps 5 and 6 in
     parts (5a, 5b, 6a to 6d). Each keeps `pnpm test` green: the typecheck,
     Vitest, the oracle and dataset tools, Playwright, and from step 0
-    `pnpm exec fallow audit`. The brief's slices 7, 8 and 9 are steps 5b, 7
+    `pnpm exec fallow architecture --boundaries` and
+    `pnpm exec fallow audit` (item 6). The brief's slices 7, 8 and 9 are steps 5b, 7
     and 8 here.
 *   **Done when.** Each step ends with a "Done when" line naming the tests
     and checks that prove it. The PR description lists the configs and zones
@@ -1433,6 +1486,53 @@ callers: `busy-adding`, `busy-approving`, `busy-applying`,
     and after, evidence it can fail). The spike also asks, optionally,
     whether composite project references on TypeScript 7.0.2 could enforce
     the direction rules.
+*   **Spike answers**: Technical Plan section 3, "Fallow's reach, settled in
+    step 0".
+
+**Stable names.** An old tab and a new tab run side by side during a
+deploy, and stored files outlive both, so no step changes any of these.
+Code that moves keeps the value; a test that names one keeps naming it.
+Citations are to `f64230d`; each line is the same on the `main` that step 0
+started from.
+
+| Name | Value | Source | Why it stays |
+| --- | --- | --- | --- |
+| Project lock | Web Locks name `redactorator-project:<id>`, requested with `ifAvailable` | `app/projects.ts:328` | An old and a new tab must exclude each other from one project |
+| IndexedDB database | `redactorator`, version 1 | `app/projectsFolder.ts:16, 29` | Holds the remembered folder; a new version number would block an old tab's open |
+| IndexedDB object store and key | store `handles`, key `projects-folder` | `app/projectsFolder.ts:17-18` | The remembered folder is read back under them |
+| Tabs key | `sessionStorage` key `redactorator:tabs:<id>` | `app/useTabs.ts:12, 17, 38` | A reload into the new build keeps the open tabs |
+| Records folder | `.redactorator` | `app/projects.ts:22` | Every stored path is under it |
+| Stored paths | `<folder>/.redactorator/project.json`, `<folder>/.redactorator/text/<id>.json`, `<folder>/.redactorator/images/<id>.json`, and at the root `.redactorator/settings.json` | `app/projects.ts:23-26` | The four stored files |
+| Format names | `redactorator-project`, `redactorator-text`, `redactorator-images`, `redactorator-settings` | `app/project.ts:95-98` | A stored file with another name reads as damaged |
+| Format versions | project 3, text 1, images 1, settings 1 | `app/project.ts:102-105` | No format bump (decision 6); an old tab reads a higher version as newer |
+| Folder-name rules | `sameName` (`localeCompare` with `sensitivity: "accent"`, so case is ignored), `unique` (`name (2)`, `name (3)` and on, before the extension), `UNSAFE` characters become `-`, `safeName` (dots and white space trimmed from both ends, at most 120 characters) | `app/projects.ts:53-68` | Old and new tabs must pick the same folder and file names |
+| Project-name rules | `<name> (copy)` for a duplicate; `copyName` gives `<name> (2)` and on to a project copied into a store that already holds its id | `app/projects.ts:163, 179-183` | As above |
+| Fallback names | `Document.pdf` for a document, `Project` for a project | `app/projects.ts:107, 143` | As above |
+| `nameFromFile` | the file name without a final `.pdf`, any case | `app/projects.ts:70` | A new project's name |
+| Picker ids | `redactorator-projects` (choose a folder), `redactorator-import` (import) | `app/useProjectStore.ts:246, 272` | Chrome remembers the last folder per id |
+| Project address | `#project=<id>`, the id URI-encoded | `app/App.tsx:14, 24` | Bookmarks and Back and Forward |
+| Labelling mode | `?label` in the query | `app/App.tsx:10` | Maintainers open it by address |
+| Built worker name | `assets/worker-<hash>.js`, from the entry's file name `worker.ts` | `app/useEngine.ts:178`, `vite.config.ts:50` | The tests' routes and fakes find the PDF worker by it (`tests/e2e/app.ts:28, 35`); item 54 keeps the file name |
+
+**The ledger.** Each PR that rewrites a test adds one row per rewritten
+test to its description (section 13, decision 29). A new test that
+replaces nothing has no row.
+
+| Column | What goes in it |
+| --- | --- |
+| Old test | File, line and title of the test before the PR (`file:line › title`) |
+| New test | File, line and title after the PR |
+| What it proves | The behaviour a user or the oracle sees, in one sentence; the same for old and new |
+| Fault injected | The change to the app or the fake that removes the guarded behaviour for the red run, for example "`isAboutOlderFile` returns false" |
+| Assertion before | The old test's assertion that catches the fault, quoted |
+| Assertion after | The new test's assertion that catches it, quoted |
+| Evidence it can fail | The red run: the commit or diff used, the command, and the failing line of its output |
+
+```markdown
+| Old test | New test | What it proves | Fault injected | Assertion before | Assertion after | Evidence it can fail |
+| --- | --- | --- | --- | --- | --- | --- |
+| `<file>:<line> › <title>` | `<file>:<line> › <title>` | <behaviour> | <fault> | `<assertion>` | `<assertion>` | <commit or diff>, `<command>`: `<failing line>` |
+```
 
 #### 5. `AGENTS.md`, `.claude/skills/typescript-rules/SKILL.md` (Modify, already edited)
 
@@ -1443,15 +1543,30 @@ callers: `busy-adding`, `busy-approving`, `busy-applying`,
     are intended design); the leak-fixture rule for verbatim moves; and the
     sentence that `docs/designs/` holds design documents written in this
     repo and edited by PRs, unlike the live documents in `docs/`.
+*   **As built**: all three landed in PR #16 with the design, each quoted
+    in its description, so step 0 commits nothing for this item.
 
 #### 6. `package.json` (Modify)
 
 *   **Type / Scope**: scripts.
-*   **Proposed Changes**: `test` becomes
-    `pnpm typecheck && pnpm exec fallow audit && vitest run && pnpm test:tools && playwright test`.
-    If the audit is not green on today's code, this step fixes or records
-    each finding before adding it. If `coverage/coverage-final.json` does
-    not exist, `health.coverage` is removed from `.fallowrc.json`.
+*   **Proposed Changes**: as built, `test` becomes
+    `pnpm typecheck && pnpm exec fallow architecture --boundaries && vitest run && pnpm test:tools && pnpm test:coverage && pnpm exec fallow audit`.
+    *   **Playwright runs once, on the instrumented build** (`pnpm test:coverage`,
+        `COVERAGE=1 playwright test`), and writes
+        `coverage/coverage-final.json`. `.fallowrc.json` keeps
+        `health.coverage`, so the audit's complexity scores use that run's
+        counts. The file is not committed (`.gitignore`), so the audit
+        comes after Playwright. Without it the audit stops with an error
+        once any file has changed; fallow's static estimate in its place
+        flags 95 functions on today's code, against 1 (a test helper the
+        audit does not gate) with coverage. The owner chose this over
+        removing `health.coverage` or running Playwright twice.
+    *   **`fallow architecture --boundaries` checks every file**, since the
+        audit checks only files changed since its base (Technical Plan
+        section 3). Each step that switches a zone on is then checked
+        against every file in the tree, not only the files it changed.
+    *   The audit and the boundary check are green on today's code, with no
+        finding to fix or record.
 
 **Done when:** the spike's answers, the names list and the ledger template
 are in this document; `pnpm test`, now with fallow, is green.
@@ -1704,9 +1819,9 @@ at every use site in the same commit, with no import aliases.
     `tsc -p . && tsc -p engine/model && tsc -p engine/tsconfig.test.json`;
     each later step appends its folder's `&& tsc -p engine/<folder>`, adds
     its folder to the root's `exclude` and its tests to the test config's
-    `include`. `.fallowrc.json` gets the `model` zone (imports only
-    `dataset/*.json`), or `engine/boundaries.test.ts` (Create) checks it,
-    per step 0's answers.
+    `include`. `.fallowrc.json` gets the `model` zone, whose rule is `allow: []`: JSON
+    files are in no zone, so its imports of `dataset/*.json` pass (Technical
+    Plan section 3).
 
     ```jsonc
     // engine/tsconfig.base.json
@@ -1723,7 +1838,8 @@ at every use site in the same commit, with no import aliases.
     `engine/pdf-protocol` until step 5a.
 
 **Done when:** `tsc -p engine/model` and `tsc -p engine/tsconfig.test.json`
-pass; the `model` zone (or the boundary test) is on; every test is green,
+pass; the `model` zone is on and `pnpm exec fallow architecture --boundaries`
+passes; every test is green,
 including the running-header tests (`pages.spec.ts:18-67, 105-139`) and the
 golden test.
 
@@ -1779,7 +1895,7 @@ golden test.
 
 *   **Type / Scope**: build configuration.
 *   **Proposed Changes**: the storage config and `storage` zone (imports
-    nothing), or the boundary test per step 0's answers.
+    nothing).
 *   **Temporary edges:** `app` imports `engine/core/ports` until step 6d;
     `app` imports `engine/storage` and `engine/host-browser` from here on,
     which step 8 makes the app's allowed edges.
@@ -1836,7 +1952,7 @@ project and folder tests are green.
 
 *   **Type / Scope**: build configuration.
 *   **Proposed Changes**: the protocol config and `pdf-protocol` zone
-    (imports model), or the boundary test per step 0's answers.
+    (imports model).
 *   **Temporary edges:** `app/useEngine.ts` imports `engine/core/pdf-client`
     until step 5a.
 
@@ -1928,8 +2044,7 @@ owner together here, so the store never has two owners.
     *   `app/errors.ts` (Modify) gains the step 5a codes of the error table.
     *   `engine/api/tsconfig.json`, `engine/core/tsconfig.json` (Create);
         `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify): the api
-        and core configs and zones, or the boundary test per step 0's
-        answers.
+        and core configs and zones.
 *   **Temporary edges:** none from core to app; `app` imports
     `engine/host-browser/interim.ts` until step 6d.
 
@@ -2260,8 +2375,12 @@ green; nothing in `app/` imports `engine/core`.
     ```
 
     The channel's URL becomes
-    `../pdf/worker.ts`; the `pdf` and `pdf/write` zones, or the boundary test
-    per step 0's answers. `vite.config.ts` needs no change: the entry keeps
+    `../pdf/worker.ts`. `.fallowrc.json` lists the zones `pdf-apply`
+    (`engine/pdf/apply.ts`), `pdf-write` (`engine/pdf/write/**`) and `pdf`
+    (`engine/pdf/**`) in that order, since a file belongs to the first zone
+    that matches it; only `pdf-apply`'s rule allows `pdf-write`. It also adds
+    the `tests` zone (`tests/**`), whose rule allows every zone except
+    `pdf-write` (Technical Plan section 3). `vite.config.ts` needs no change: the entry keeps
     the file name `worker.ts`, so the built name keeps the `worker-` prefix.
 
 **Done when:** `tsc -p engine/pdf` and `tsc -p engine/pdf/tsconfig.worker.json`
@@ -2277,7 +2396,14 @@ pass; the redaction, spreading and page tests are green with `judge`; after
 *   **Proposed Changes**: the root config covers only `app`,
     `engine/host-browser`, `tests` and `*.config.ts`; the `host-browser`
     and `app` zones are switched on with the edges of Technical Plan
-    section 3; `pnpm typecheck` runs every config.
+    section 3, neither allowing `pdf` or `pdf-write`; the
+    `new Worker(new URL("../pdf/worker.ts", import.meta.url))` line in
+    `engine/host-browser/workerChannel.ts` gets
+    `// fallow-ignore-next-line boundary-violation` on the line above it, the
+    one allowed edge into `pdf`; `.fallowrc.json` turns on
+    `boundaries.coverage.requireAllFiles`, with `allowUnmatched` listing only
+    `*.config.ts`, so every other source file must be in a zone (Technical
+    Plan section 3); `pnpm typecheck` runs every config.
 
 #### 56. `engine/boundaries.test.ts` (Create or extend, only for rules fallow cannot express)
 
@@ -2287,7 +2413,9 @@ pass; the redaction, spreading and page tests are green with `judge`; after
     whose zone fallow cannot express (each config item from step 2 on names
     it as the fallback) and extended by later ones; it reads files with
     `node:fs`, so `engine/tsconfig.test.json` gives it Node's types. This
-    step checks it covers every such rule.
+    step checks it covers every such rule. Step 0 found no such rule
+    (Technical Plan section 3), so the file is not created unless a later
+    rule needs it.
 
 #### 57. HLD and Implementation Plan change list (in the PR description)
 
@@ -2302,17 +2430,20 @@ pass; the redaction, spreading and page tests are green with `judge`; after
     worker" stays true).
 
 **Done when:** `pnpm test` runs every typecheck config and every zone, and is
-green.
+green; `pnpm exec fallow architecture --boundaries` reports no file outside a
+zone, apart from the root `*.config.ts` files.
 
 ### Verification Plan
 
 *   **Compilation/Build**: `pnpm typecheck` (every config), `pnpm build`.
 *   **Unit Tests**: `pnpm exec vitest run` (moved unit tests, and slice or
     selector tests only where a bug shows they help).
-*   **Static Analysis**: `pnpm exec fallow audit`, run by `pnpm test` from
-    step 0, including the zones; `engine/boundaries.test.ts` where used.
+*   **Static Analysis**: `pnpm exec fallow architecture --boundaries`
+    (every zone, every file) and `pnpm exec fallow audit` (changed files),
+    both run by `pnpm test` from step 0.
 *   **E2E/Integration**: `pnpm test`, which runs the typecheck, fallow,
-    Vitest, the oracle and dataset tools, and Playwright, including the new
+    Vitest, the oracle and dataset tools, and Playwright on the instrumented
+    build, including the new
     history, saving, golden, network and race tests. Every test that
     downloads a cleaned PDF and calls `judge` keeps calling it.
 *   **Per step**: each step's "Done when" line.
