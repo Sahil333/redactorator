@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p .",
-    "test": "pnpm typecheck && vitest run && pnpm test:tools && playwright test",
+    "test": "pnpm typecheck && pnpm exec fallow architecture --boundaries && vitest run && pnpm test:tools && pnpm test:coverage && pnpm exec fallow audit",
     "test:coverage": "COVERAGE=1 playwright test",
     "test:tools": "uv run --project tests/oracle python -m pytest tests/oracle -q && uv run --project tools/dataset python -m pytest tools/dataset -q"
   },
