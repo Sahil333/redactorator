@@ -355,22 +355,32 @@ repo's patched build (`vendor/mupdf`) has not been tried in Node.
 
 ### 3. Folders, configs and import rules
 
-| Folder | Holds | May import | Typecheck config | Fallow zone | Switched on in step |
-| --- | --- | --- | --- | --- | --- |
-| `engine/model` | Pure rules and types: units, geometry, text model, marks, matching, spreading, images and their fingerprint, mark types, ground truth, project and settings types, the target functions, the stored-format parse kit, the reader and writer error codes | `dataset/*.json` | `engine/model/tsconfig.json`, extending the base | `model` | 2 |
-| `engine/storage` | The `Store` interface | nothing | `engine/storage/tsconfig.json`, extending the base | `storage` | 3 |
-| `engine/pdf-protocol` | PDF-worker messages and their parsers, `FileNumber`, `InspectionNumber`, `MatchNumber`, the wire's error-code list (typed by model's reader and writer codes) | model | `engine/pdf-protocol/tsconfig.json`, extending the base | `pdf-protocol` | 4 |
-| `engine/api` | Types only: the facade namespaces, state, results, `ErrorCode`, `Refusal`, handle and pixel types | model; the `Store` type from storage | `engine/api/tsconfig.json`, extending the base | `api` | 5a |
-| `engine/core` | The facade, Library, Session (dispatcher, slices, effects, selectors, gate), intake, stored formats and stored files (`core/stored/`), readings, the PDF-worker client, the `LockPort` and `WorkerChannel` interfaces | model, storage, api, pdf-protocol | `engine/core/tsconfig.json`, extending the base | `core` | 5a |
-| `engine/pdf` | The handler and its modules; `write/` holds the verbatim set | model, pdf-protocol, `mupdf` | `engine/pdf/tsconfig.json`, extending the base, excluding `worker.ts` | `pdf`, with `pdf/write` limited to `pdf/apply.ts` | 7 |
-| `engine/pdf/worker.ts` | The Web Worker entry: binds `self` to the handler | the handler | `engine/pdf/tsconfig.worker.json`: the base plus `lib: ["ES2024", "WebWorker"]` | `pdf` | 7 |
-| `engine/host-browser` | Store backends, Web Locks adapter, worker channel, `createBrowserEngine` | everything in `engine/` except `pdf` (the worker is reached by URL) | the root `tsconfig.json` (DOM) | `host-browser` | 8 |
-| `app` | React components and hooks, browser-only UI concerns | model, api, the `Store` type from storage, `host-browser` | the root `tsconfig.json` (DOM, `vite/client`) | `app` | 8 |
+| Folder | Holds | May import | Typecheck config | Fallow zone | Zone from step | Rule on in step |
+| --- | --- | --- | --- | --- | --- | --- |
+| `engine/model` | Pure rules and types: units, geometry, text model, marks, matching, spreading, images and their fingerprint, mark types, ground truth, project and settings types, the target functions, the stored-format parse kit, the reader and writer error codes | `dataset/*.json` | `engine/model/tsconfig.json`, extending the base | `model` | 2 | 2 |
+| `engine/storage` | The `Store` interface | nothing | `engine/storage/tsconfig.json`, extending the base | `storage` | 3 | 3 |
+| `engine/pdf-protocol` | PDF-worker messages and their parsers, `FileNumber`, `InspectionNumber`, `MatchNumber`, the wire's error-code list (typed by model's reader and writer codes) | model | `engine/pdf-protocol/tsconfig.json`, extending the base | `pdf-protocol` | 2 | 4 |
+| `engine/api` | Types only: the facade namespaces, state, results, `ErrorCode`, `Refusal`, handle and pixel types | model; the `Store` type from storage | `engine/api/tsconfig.json`, extending the base | `api` | 5a | 5a |
+| `engine/core` | The facade, Library, Session (dispatcher, slices, effects, selectors, gate), intake, stored formats and stored files (`core/stored/`), readings, the PDF-worker client, the `LockPort` and `WorkerChannel` interfaces | model, storage, api, pdf-protocol | `engine/core/tsconfig.json`, extending the base | `core` | 2 | 5a |
+| `engine/pdf` | The handler and its modules; `write/` holds the verbatim set | model, pdf-protocol, `mupdf` | `engine/pdf/tsconfig.json`, extending the base, excluding `worker.ts` | `pdf`, with `pdf/write` limited to `pdf/apply.ts` | 2 (today's `engine/worker.ts` and `engine/glyphs.ts`) | 7 |
+| `engine/pdf/worker.ts` | The Web Worker entry: binds `self` to the handler | the handler | `engine/pdf/tsconfig.worker.json`: the base plus `lib: ["ES2024", "WebWorker"]` | `pdf` | 2 (as `engine/worker.ts`) | 7 |
+| `engine/host-browser` | Store backends, Web Locks adapter, worker channel, `createBrowserEngine` | everything in `engine/` except `pdf` (the worker is reached by URL) | the root `tsconfig.json` (DOM) | `host-browser` | 4 | 8 |
+| `app` | React components and hooks, browser-only UI concerns | model, api, the `Store` type from storage, `host-browser` | the root `tsconfig.json` (DOM, `vite/client`) | `app` | 2 | 8 |
+
+**Zones before rules.** Fallow checks an import only when the imported file
+is in a zone, so a rule refuses nothing while the folders it names are
+unzoned (step 2 showed this: with only `model` zoned, a model file importing
+`app/` passed). So every folder has its zone from the step that creates it,
+or from step 2 for folders that exist then, with no rule; its rule comes in
+the step the table names. A zone with no rule restricts nothing. Until step
+7, the `pdf` zone lists today's `engine/worker.ts` and `engine/glyphs.ts`
+(and its test); step 7 changes its pattern to `engine/pdf/**`. The `tests`
+zone (`tests/**`) also exists from step 2 and gets its rule in step 7.
 
 **Typecheck configs.** In TypeScript a child config's `files`, `include`
 and `exclude` each replace the parent's when set, so the layout is:
 *   `engine/tsconfig.base.json` extends the root's strict flags, sets
-    `lib: ["ES2024"]` and `types: []`, lists `engine/globals.d.ts` in
+    `lib: ["ES2024"]` and `types: []`, lists `engine/globals.ts` in
     `files`, and excludes `*.test.ts`.
 *   Each engine folder's config extends the base and sets only `include` to
     its own folder, so it keeps the base's `files` and `exclude`.
@@ -379,18 +389,21 @@ and `exclude` each replace the parent's when set, so the layout is:
     and sets `exclude: []`.
 *   `engine/pdf/tsconfig.worker.json` adds the `WebWorker` library and sets
     `files` to the entry alone. That library already declares `crypto` and
-    `TextDecoder`, so it does not take `engine/globals.d.ts`.
+    `TextDecoder`, so it does not take `engine/globals.ts`.
 *   The root config excludes each engine folder once that folder's config is
-    on, and always excludes `engine/globals.d.ts`, so the declarations never
+    on, and always excludes `engine/globals.ts`, so the declarations never
     meet the DOM library.
 
 `pnpm typecheck` runs `tsc -p` once per config; item 21 gives the literal
 files and the script line, and each later step appends its config.
 
-**`engine/globals.d.ts`** declares only `crypto.randomUUID(): string`,
+**`engine/globals.ts`** declares only `crypto.randomUUID(): string`,
 `crypto.subtle.digest("SHA-256", data: Uint8Array): Promise<ArrayBuffer>` and
-`TextDecoder` with `decode`. Node 20 and later, Bun and browsers provide all
-three.
+`TextDecoder` with `decode`, inside `declare global { ... }` with
+`export {}`. Node 20 and later, Bun and browsers provide all three. It is a
+`.ts` file, not a `.d.ts`, because the root's `skipLibCheck` skips every
+declaration file: a mistake in a `.d.ts` would never be reported. No module
+imports it, so `.fallowrc.json` lists it in `supportEntry`.
 
 **Fallow's reach, settled in step 0.** A throwaway spike on fallow 3.43.2
 (`fallow trace --path`, `fallow architecture --boundaries` and
@@ -414,15 +427,19 @@ found:
 *   **Only zoned files with a rule are checked.** A file in no zone, or in a
     zone with no rule, may import anything. A rule is as strong as the set
     of importers that are zoned.
+*   **Only imports of zoned files can break a rule** (found in step 2). An
+    import of a file in no zone passes whatever the importer's rule says, so
+    a rule is also only as strong as the set of targets that are zoned.
+    Hence zones come before rules (above).
 *   **JSON files are in no zone.** A zone pattern such as `dataset/*.json`
     matches no file, so a JSON import never breaks a rule. The `model`
     zone's rule is `allow: []`, and its imports of `dataset/*.json` pass.
 *   **`fallow audit` checks only changed files.** It fails on a violation in
     a file changed since its base (the merge-base with `origin/main`), and
     counts a violation already there in a touched file as inherited, which
-    does not fail. A step that only switches a zone on in `.fallowrc.json`
-    therefore leaves the audit green even when unchanged files break the
-    zone. `pnpm exec fallow architecture --boundaries` checks every file and
+    does not fail. A step that only switches a zone's rule on in
+    `.fallowrc.json` therefore leaves the audit green even when unchanged
+    files break the rule. `pnpm exec fallow architecture --boundaries` checks every file and
     exits 1 on any violation.
 *   **TypeScript project references** (the optional question). On
     TypeScript 7.0.2, with `composite` configs and `references`, `tsc -b`
@@ -437,7 +454,7 @@ Each rule's mechanism:
 | Rule | Mechanism | On in step |
 | --- | --- | --- |
 | `host-browser` may not import `engine/pdf`, yet starts the worker through `new URL(..., import.meta.url)` | Fallow zone. `engine/pdf/worker.ts` is in the `pdf` zone, which `host-browser`'s rule does not allow. The one `new Worker(new URL("../pdf/worker.ts", import.meta.url))` line in `engine/host-browser/workerChannel.ts` has `// fallow-ignore-next-line boundary-violation` above it. Any other import of a file under `engine/pdf`, a static import of `worker.ts` included, is still a violation; if the comment stops sitting over the edge, fallow reports it as a stale suppression. A separate zone for `worker.ts` that `host-browser` may import was tried and not chosen: it also lets a static import of `worker.ts` through, which would load the handler and MuPDF on the page | 7 (`pdf`), 8 (`host-browser`) |
-| Only `engine/pdf/apply.ts` may import `engine/pdf/write/` | Fallow zones `pdf-apply` and `pdf-write`, listed before `pdf`; only `pdf-apply`'s rule allows `pdf-write`. Since unzoned files are not checked, step 7 also adds a `tests` zone (`tests/**`) whose rule allows every zone except `pdf-write`, and step 8's `app` and `host-browser` rules leave `pdf-write` out | 7 |
+| Only `engine/pdf/apply.ts` may import `engine/pdf/write/` | Fallow zones `pdf-apply` and `pdf-write`, listed before `pdf`; only `pdf-apply`'s rule allows `pdf-write`. Since unzoned files are not checked, step 7 also adds the rule of the `tests` zone (`tests/**`, a zone from step 2), which allows every zone except `pdf-write`, and step 8's `app` and `host-browser` rules leave `pdf-write` out | 7 |
 | Each folder's direction rule in the table above | Fallow zone per folder, with the `allow` list of the "May import" column | per the table |
 
 **Every source file in a zone, from step 8.** Because a file in no zone is
@@ -1283,9 +1300,9 @@ unload flush, and the race. This design adds:
     `pnpm exec fallow audit` (item 6). The brief's slices 7, 8 and 9 are steps 5b, 7
     and 8 here.
 *   **Done when.** Each step ends with a "Done when" line naming the tests
-    and checks that prove it. The PR description lists the configs and zones
-    it switched on, the temporary edges it allows (and the step that removes
-    each), and its ledger rows.
+    and checks that prove it. The PR description lists the configs, zones
+    and zone rules it switched on, the temporary edges it allows (and the
+    step that removes each), and its ledger rows.
 *   **Moves land in one commit.** A move writes the new file, updates every
     importer and deletes the old file in the same commit, so the fallow gate
     never sees a duplicate or an unused export. "Copy, verify, then remove"
@@ -1563,7 +1580,7 @@ replaces nothing has no row.
         removing `health.coverage` or running Playwright twice.
     *   **`fallow architecture --boundaries` checks every file**, since the
         audit checks only files changed since its base (Technical Plan
-        section 3). Each step that switches a zone on is then checked
+        section 3). Each step that turns a zone's rule on is then checked
         against every file in the tree, not only the files it changed.
     *   The audit and the boundary check are green on today's code, with no
         finding to fix or record.
@@ -1831,24 +1848,41 @@ at every use site in the same commit, with no import aliases.
     `app/ReviewBanner.tsx`, `app/TypePicker.tsx`, `app/LabelExport.tsx`;
     `tests/e2e/fakes.ts` (types).
 
-#### 21. `engine/tsconfig.base.json`, `engine/model/tsconfig.json`, `engine/tsconfig.test.json`, `engine/globals.d.ts` (Create); `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify)
+#### 21. `engine/tsconfig.base.json`, `engine/model/tsconfig.json`, `engine/tsconfig.test.json`, `engine/globals.ts` (Create); `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify)
 
 *   **Type / Scope**: build configuration.
 *   **Proposed Changes**: the files below (Technical Plan section 3 explains
     them); the root config's `exclude` gains `engine/model` and
-    `engine/globals.d.ts`. The `typecheck` script becomes
+    `engine/globals.ts`. The `typecheck` script becomes
     `tsc -p . && tsc -p engine/model && tsc -p engine/tsconfig.test.json`;
     each later step appends its folder's `&& tsc -p engine/<folder>`, adds
     its folder to the root's `exclude` and its tests to the test config's
-    `include`. `.fallowrc.json` gets the `model` zone, whose rule is `allow: []`: JSON
-    files are in no zone, so its imports of `dataset/*.json` pass (Technical
-    Plan section 3).
+    `include`. `.fallowrc.json` gets the `model` zone, whose rule is
+    `allow: []`: JSON files are in no zone, so its imports of
+    `dataset/*.json` pass. It also gets, with no rule, a zone for each other
+    folder that exists: `pdf-protocol`, `core`, `pdf` (`engine/worker.ts`,
+    `engine/glyphs.ts` and its test), `app` and `tests`, so the `model` rule
+    refuses an import of any of them; and `supportEntry` lists
+    `engine/globals.ts`, which no module imports (Technical Plan section 3).
+
+    ```jsonc
+    // .fallowrc.json, the boundaries part
+    "zones": [
+      { "name": "model", "patterns": ["engine/model/**"] },
+      { "name": "pdf-protocol", "patterns": ["engine/pdf-protocol/**"] },
+      { "name": "core", "patterns": ["engine/core/**"] },
+      { "name": "pdf", "patterns": ["engine/worker.ts", "engine/glyphs.ts", "engine/glyphs.test.ts"] },
+      { "name": "app", "patterns": ["app/**"] },
+      { "name": "tests", "patterns": ["tests/**"] }
+    ],
+    "rules": [{ "from": "model", "allow": [] }]
+    ```
 
     ```jsonc
     // engine/tsconfig.base.json
     { "extends": "../tsconfig.json",
       "compilerOptions": { "lib": ["ES2024"], "types": [] },
-      "files": ["globals.d.ts"], "include": [], "exclude": ["**/*.test.ts"] }
+      "files": ["globals.ts"], "include": [], "exclude": ["**/*.test.ts"] }
     // engine/model/tsconfig.json (every folder config is the same, with its own include)
     { "extends": "../tsconfig.base.json", "include": ["."] }
     // engine/tsconfig.test.json
@@ -1859,8 +1893,10 @@ at every use site in the same commit, with no import aliases.
     `engine/pdf-protocol` until step 5a.
 
 **Done when:** `tsc -p engine/model` and `tsc -p engine/tsconfig.test.json`
-pass; the `model` zone is on and `pnpm exec fallow architecture --boundaries`
-passes; every test is green,
+pass, and fail on a typo in `engine/globals.ts`; the `model` zone and its
+rule are on, `pnpm exec fallow architecture --boundaries` passes, and it
+reports a model file that imports `app/` (a probe, removed); every test is
+green,
 including the running-header tests (`pages.spec.ts:18-67, 105-139`) and the
 golden test.
 
@@ -1915,8 +1951,8 @@ golden test.
 #### 26. `engine/storage/tsconfig.json` (Create); `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify)
 
 *   **Type / Scope**: build configuration.
-*   **Proposed Changes**: the storage config and `storage` zone (imports
-    nothing).
+*   **Proposed Changes**: the storage config, and the `storage` zone with
+    its rule (imports nothing).
 *   **Temporary edges:** `app` imports `engine/core/ports` until step 6d;
     `app` imports `engine/storage` and `engine/host-browser` from here on,
     which step 8 makes the app's allowed edges.
@@ -1972,8 +2008,10 @@ project and folder tests are green.
 #### 31. `engine/pdf-protocol/tsconfig.json` (Create); `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify)
 
 *   **Type / Scope**: build configuration.
-*   **Proposed Changes**: the protocol config and `pdf-protocol` zone
-    (imports model).
+*   **Proposed Changes**: the protocol config, and the rule of the
+    `pdf-protocol` zone (imports model); the zone exists from step 2. The
+    `host-browser` zone (`engine/host-browser/**`), new with item 28's
+    folder, is added with no rule; its rule comes in step 8.
 *   **Temporary edges:** `app/useEngine.ts` imports `engine/core/pdf-client`
     until step 5a.
 
@@ -2065,7 +2103,8 @@ owner together here, so the store never has two owners.
     *   `app/errors.ts` (Modify) gains the step 5a codes of the error table.
     *   `engine/api/tsconfig.json`, `engine/core/tsconfig.json` (Create);
         `tsconfig.json`, `package.json`, `.fallowrc.json` (Modify): the api
-        and core configs and zones.
+        and core configs, the `api` zone, and the rules of `api` and `core`
+        (the `core` zone exists from step 2).
 *   **Temporary edges:** none from core to app; `app` imports
     `engine/host-browser/interim.ts` until step 6d.
 
@@ -2389,7 +2428,8 @@ green; nothing in `app/` imports `engine/core`.
     `exclude: ["worker.ts", "**/*.test.ts"]`) and the entry's config:
 
     ```jsonc
-    // engine/pdf/tsconfig.worker.json: WebWorker already declares crypto and TextDecoder
+    // engine/pdf/tsconfig.worker.json: WebWorker already declares crypto and TextDecoder,
+    // so its "files" replaces the base's engine/globals.ts
     { "extends": "../tsconfig.base.json",
       "compilerOptions": { "lib": ["ES2024", "WebWorker"] },
       "files": ["worker.ts"], "include": [] }
@@ -2398,10 +2438,12 @@ green; nothing in `app/` imports `engine/core`.
     The channel's URL becomes
     `../pdf/worker.ts`. `.fallowrc.json` lists the zones `pdf-apply`
     (`engine/pdf/apply.ts`), `pdf-write` (`engine/pdf/write/**`) and `pdf`
-    (`engine/pdf/**`) in that order, since a file belongs to the first zone
-    that matches it; only `pdf-apply`'s rule allows `pdf-write`. It also adds
-    the `tests` zone (`tests/**`), whose rule allows every zone except
-    `pdf-write` (Technical Plan section 3). `vite.config.ts` needs no change: the entry keeps
+    (now `engine/pdf/**`, replacing step 2's `engine/worker.ts` and
+    `engine/glyphs.ts` patterns) in that order, since a file belongs to the
+    first zone that matches it, and adds the rules of all three: only
+    `pdf-apply`'s rule allows `pdf-write`. It also adds the rule of the
+    `tests` zone (`tests/**`, a zone from step 2), which allows every zone
+    except `pdf-write` (Technical Plan section 3). `vite.config.ts` needs no change: the entry keeps
     the file name `worker.ts`, so the built name keeps the `worker-` prefix.
 
 **Done when:** `tsc -p engine/pdf` and `tsc -p engine/pdf/tsconfig.worker.json`
@@ -2415,9 +2457,9 @@ pass; the redaction, spreading and page tests are green with `judge`; after
 
 *   **Type / Scope**: build configuration.
 *   **Proposed Changes**: the root config covers only `app`,
-    `engine/host-browser`, `tests` and `*.config.ts`; the `host-browser`
-    and `app` zones are switched on with the edges of Technical Plan
-    section 3, neither allowing `pdf` or `pdf-write`; the
+    `engine/host-browser`, `tests` and `*.config.ts`; the rules of the
+    `host-browser` and `app` zones are switched on with the edges of
+    Technical Plan section 3, neither allowing `pdf` or `pdf-write`; the
     `new Worker(new URL("../pdf/worker.ts", import.meta.url))` line in
     `engine/host-browser/workerChannel.ts` gets
     `// fallow-ignore-next-line boundary-violation` on the line above it, the

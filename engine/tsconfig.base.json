@@ -1,7 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": { "lib": ["ES2024"], "types": [] },
-  "files": ["globals.d.ts"],
+  "files": ["globals.ts"],
   "include": [],
   "exclude": ["**/*.test.ts"]
 }

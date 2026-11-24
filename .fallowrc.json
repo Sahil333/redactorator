@@ -1,10 +1,18 @@
 {
   "ignorePatterns": ["vendor/**"],
+  "supportEntry": ["engine/globals.ts"],
   "health": {
     "coverage": "coverage/coverage-final.json"
   },
   "boundaries": {
-    "zones": [{ "name": "model", "patterns": ["engine/model/**"] }],
+    "zones": [
+      { "name": "model", "patterns": ["engine/model/**"] },
+      { "name": "pdf-protocol", "patterns": ["engine/pdf-protocol/**"] },
+      { "name": "core", "patterns": ["engine/core/**"] },
+      { "name": "pdf", "patterns": ["engine/worker.ts", "engine/glyphs.ts", "engine/glyphs.test.ts"] },
+      { "name": "app", "patterns": ["app/**"] },
+      { "name": "tests", "patterns": ["tests/**"] }
+    ],
     "rules": [{ "from": "model", "allow": [] }]
   }
 }
