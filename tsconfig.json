@@ -17,5 +17,6 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["app", "engine", "tests", "*.config.ts"]
+  "include": ["app", "engine", "tests", "*.config.ts"],
+  "exclude": ["engine/model", "engine/globals.d.ts"]
 }

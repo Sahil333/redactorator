@@ -2,5 +2,9 @@
   "ignorePatterns": ["vendor/**"],
   "health": {
     "coverage": "coverage/coverage-final.json"
+  },
+  "boundaries": {
+    "zones": [{ "name": "model", "patterns": ["engine/model/**"] }],
+    "rules": [{ "from": "model", "allow": [] }]
   }
 }
