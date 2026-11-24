@@ -1,0 +1,358 @@
+// Fakes for failure and timing cases only: at the PDF worker's wire, and at the browser's file
+// writes. Each is named by what it does and checks itself: the `fakes` fixture (coverage.ts)
+// fails a test whose fake never acted, and a hold fails when it is released holding nothing.
+import { expect, type BrowserContext, type Page } from "@playwright/test";
+import type { EngineMessage, EngineRequest } from "../../engine/contract";
+
+/** A message as it crosses the wire: the same shape, with plain numbers for branded ones. */
+type Wire<T> = T extends number
+  ? number
+  : T extends string | boolean | undefined | ArrayBuffer | ImageData
+    ? T
+    : T extends readonly (infer E)[]
+      ? Wire<E>[]
+      : { -readonly [K in keyof T]: Wire<T[K]> };
+
+/** The PDF worker's global scope, as a fake running in it sees it. */
+interface WorkerScope {
+  postMessage: (message: Wire<EngineMessage>, transfer?: Transferable[]) => void;
+  addEventListener(type: "message", listener: (event: MessageEvent<Wire<EngineRequest>>) => void): void;
+}
+
+/** Tells the test, through the page, that the fake `key` acted, from the page or the PDF worker. */
+type Acted = (key: string) => void;
+
+function acted(key: string): void {
+  new BroadcastChannel("fakes").postMessage(key);
+}
+
+/** Source that runs `fake` in the scope it is loaded into, the PDF worker or the page, with `args` copied in as JSON. */
+function sourceOf<S, A extends unknown[]>(fake: (scope: S, acted: Acted, ...args: A) => void, ...args: A): string {
+  return `(${String(fake)})(globalThis, ${String(acted)}, ...${JSON.stringify(args)});`;
+}
+
+interface PageFakes {
+  /** How many times each fake acted, by key. */
+  readonly acted: Map<string, number>;
+  /** The fakes that must have acted by the end of the test. */
+  readonly expected: Set<string>;
+  /** The PDF worker's script: replaced, or the real one with preludes run before it. */
+  worker: { readonly script: string } | { readonly preludes: string[] } | undefined;
+  served: boolean;
+}
+
+const installed = new Map<Page, PageFakes>();
+
+/** Passes on to the test each act a fake reports. */
+function listenToWorker() {
+  new BroadcastChannel("fakes").onmessage = ({ data }) => void Reflect.get(globalThis, "fakeActed")(data);
+}
+
+async function fakesOf(page: Page): Promise<PageFakes> {
+  const known = installed.get(page);
+  if (known !== undefined) return known;
+  const fakes: PageFakes = { acted: new Map(), expected: new Set(), worker: undefined, served: false };
+  installed.set(page, fakes);
+  await page.exposeFunction("fakeActed", (key: string) => fakes.acted.set(key, (fakes.acted.get(key) ?? 0) + 1));
+  await page.addInitScript(listenToWorker);
+  if (page.url().startsWith("http")) await page.evaluate(listenToWorker);
+  return fakes;
+}
+
+async function fakeWorker(page: Page, key: string, change: { readonly script: string } | { readonly prelude: string }): Promise<PageFakes> {
+  const fakes = await fakesOf(page);
+  const { worker } = fakes;
+  if (worker === undefined) {
+    await page.route("**/assets/worker-*.js", async (route) => {
+      fakes.served = true;
+      if (fakes.worker !== undefined && "script" in fakes.worker) {
+        await route.fulfill({ contentType: "text/javascript", body: fakes.worker.script });
+        return;
+      }
+      const response = await route.fetch();
+      await route.fulfill({ response, body: `${fakes.worker?.preludes.join("\n") ?? ""}\n${await response.text()}` });
+    });
+  }
+  if ("script" in change) {
+    if (worker !== undefined) throw new Error(`${key} replaces the PDF worker, which another fake already changes`);
+    fakes.worker = { script: change.script };
+  } else if (worker === undefined) {
+    fakes.worker = { preludes: [change.prelude] };
+  } else if ("preludes" in worker) {
+    worker.preludes.push(change.prelude);
+  } else {
+    throw new Error(`${key} wraps the PDF worker, which another fake has replaced`);
+  }
+  return fakes;
+}
+
+/** A fake in the PDF worker that must act before the test ends. */
+async function workerFake(page: Page, key: string, change: { readonly script: string } | { readonly prelude: string }): Promise<void> {
+  (await fakeWorker(page, key, change)).expected.add(key);
+}
+
+/** Waits until the fake `key` has held something, so releasing it lets that go. */
+async function heldSomething(fakes: PageFakes, key: string): Promise<void> {
+  await expect.poll(() => fakes.acted.get(key) ?? 0, { message: `${key} was released without holding anything` }).toBeGreaterThan(0);
+}
+
+/** The PDF worker throws as it starts. */
+export async function failWorkerStart(page: Page): Promise<void> {
+  const script = sourceOf((_: unknown, acted) => {
+    acted("failWorkerStart");
+    throw new Error("The fake PDF worker failed to start");
+  });
+  await workerFake(page, "failWorkerStart", { script });
+}
+
+/** The PDF worker says it is ready, then sends `message`. */
+export async function replyWith(page: Page, message: unknown): Promise<void> {
+  const script = sourceOf(
+    (scope: { postMessage: (message: unknown) => void }, acted, reply: unknown) => {
+      scope.postMessage({ type: "ready" });
+      acted("replyWith");
+      scope.postMessage(reply);
+    },
+    message,
+  );
+  await workerFake(page, "replyWith", { script });
+}
+
+/**
+ * A PDF worker that says every file is a one-page PDF, holds back its answer to the first document
+ * opened, then sends it once the second is opened, and fails the second.
+ */
+export async function staleOpenReply(page: Page): Promise<void> {
+  const script = sourceOf((scope: WorkerScope, acted) => {
+    scope.postMessage({ type: "ready" });
+    let first: number | undefined;
+    scope.addEventListener("message", ({ data }) => {
+      if (data.type === "inspect") {
+        scope.postMessage({ type: "inspected", inspection: data.inspection, reading: { texts: [{ chars: [] }], images: [] } });
+        return;
+      }
+      if (data.type !== "open") return;
+      if (first === undefined) {
+        first = data.file;
+        return;
+      }
+      acted("staleOpenReply");
+      scope.postMessage({ type: "opened", file: first, document: { pages: [{ index: 0, width: 612, height: 792 }] } });
+      scope.postMessage({ type: "error", file: data.file, error: { code: "open-failed", message: "Second file failed." } });
+    });
+  });
+  await workerFake(page, "staleOpenReply", { script });
+}
+
+/** The PDF worker reads the first file inspected, then throws on the next inspection instead of answering it. */
+export async function stopWorkerAfter(page: Page): Promise<void> {
+  const prelude = sourceOf((scope: WorkerScope, acted) => {
+    let seen = 0;
+    scope.addEventListener("message", (event) => {
+      if (event.data.type !== "inspect") return;
+      seen++;
+      if (seen === 1) return;
+      event.stopImmediatePropagation();
+      acted("stopWorkerAfter");
+      throw new Error("The fake stopped the PDF worker");
+    });
+  });
+  await workerFake(page, "stopWorkerAfter", { prelude });
+}
+
+/** The PDF worker sends the text of the page at `pageIndex` `ms` late. */
+export async function delayPageText(page: Page, pageIndex: number, ms: number): Promise<void> {
+  const prelude = sourceOf(
+    (scope: WorkerScope, acted, pageIndex: number, ms: number) => {
+      const send = scope.postMessage.bind(scope);
+      scope.postMessage = (message, transfer) => {
+        if (message.type !== "text" || message.page !== pageIndex) return send(message, transfer);
+        acted("delayPageText");
+        setTimeout(() => send(message, transfer), ms);
+      };
+    },
+    pageIndex,
+    ms,
+  );
+  await workerFake(page, "delayPageText", { prelude });
+}
+
+/** Each text mark in an apply request runs past the page's text, as if the app sent an edit the worker's text does not hold. */
+export async function tamperApply(page: Page): Promise<void> {
+  const prelude = sourceOf((scope: WorkerScope, acted) => {
+    scope.addEventListener("message", ({ data }) => {
+      if (data.type !== "apply") return;
+      for (const edit of data.edits) {
+        if (edit.kind !== "text") continue;
+        edit.end += 10000;
+        acted("tamperApply");
+      }
+    });
+  });
+  await workerFake(page, "tamperApply", { prelude });
+}
+
+/** The PDF worker sends each cleaned output `ms` late. */
+export async function delayApplied(page: Page, ms: number): Promise<void> {
+  const prelude = sourceOf(
+    (scope: WorkerScope, acted, ms: number) => {
+      const send = scope.postMessage.bind(scope);
+      scope.postMessage = (message, transfer) => {
+        if (message.type !== "applied") return send(message, transfer);
+        acted("delayApplied");
+        setTimeout(() => send(message, transfer), ms);
+      };
+    },
+    ms,
+  );
+  await workerFake(page, "delayApplied", { prelude });
+}
+
+/** Holds the PDF worker's replies of `type` from its next start until the returned function releases them. */
+async function holdWorkerReplies(page: Page, key: string, type: EngineMessage["type"]): Promise<() => Promise<void>> {
+  const prelude = sourceOf(
+    (scope: WorkerScope, acted, key: string, type: string) => {
+      const send = scope.postMessage.bind(scope);
+      const held: [Wire<EngineMessage>, Transferable[] | undefined][] = [];
+      let holding = true;
+      new BroadcastChannel(`release ${key}`).onmessage = () => {
+        holding = false;
+        for (const [message, transfer] of held.splice(0)) send(message, transfer);
+      };
+      scope.postMessage = (message, transfer) => {
+        if (!holding || message.type !== type) return send(message, transfer);
+        held.push([message, transfer]);
+        acted(key);
+      };
+    },
+    key,
+    type,
+  );
+  const fakes = await fakeWorker(page, key, { prelude });
+  return async () => {
+    await heldSomething(fakes, key);
+    await page.evaluate((key) => new BroadcastChannel(`release ${key}`).postMessage("release"), key);
+  };
+}
+
+/** Holds the answer to every search an approval runs, from the PDF worker's next start, until released. */
+export const holdApprovalSearch = (page: Page) => holdWorkerReplies(page, "holdApprovalSearch", "matched");
+
+/** Holds the PDF worker's reading of each added file, from its next start, until released. */
+export const holdInspection = (page: Page) => holdWorkerReplies(page, "holdInspection", "inspected");
+
+/**
+ * Holds every write to a file named `file` in the browser's storage, or to any file, from now on
+ * and after a reload, until the returned function releases them: newest first, as a disk might
+ * finish them, so a write that must land last only does if it waited for the others.
+ */
+export async function holdWrites(page: Page, file?: string): Promise<() => Promise<void>> {
+  const fakes = await fakesOf(page);
+  const install = (file: string | null) => {
+    const original = FileSystemFileHandle.prototype.createWritable;
+    const held: (() => void)[] = [];
+    let holding = true;
+    Reflect.set(globalThis, "releaseWrites", () => {
+      holding = false;
+      for (const go of held.splice(0).reverse()) go();
+    });
+    FileSystemFileHandle.prototype.createWritable = async function (...args) {
+      if (holding && (file === null || this.name === file)) {
+        const released = new Promise<void>((resolve) => held.push(resolve));
+        void Reflect.get(globalThis, "fakeActed")("holdWrites");
+        await released;
+      }
+      return original.apply(this, args);
+    };
+  };
+  await page.addInitScript(install, file ?? null);
+  if (page.url().startsWith("http")) await page.evaluate(install, file ?? null);
+  return async () => {
+    await heldSomething(fakes, "holdWrites");
+    await page.evaluate(() => Reflect.get(globalThis, "releaseWrites")());
+  };
+}
+
+/** Makes every write to the browser's private storage fail from now on, or only the `nth` one (counting from 1). */
+export async function failWrites(page: Page, nth?: number): Promise<void> {
+  (await fakesOf(page)).expected.add("failWrites");
+  await page.evaluate((only) => {
+    const original = FileSystemFileHandle.prototype.createWritable;
+    let count = 0;
+    Reflect.set(globalThis, "restoreWrites", () => {
+      FileSystemFileHandle.prototype.createWritable = original;
+    });
+    FileSystemFileHandle.prototype.createWritable = async function (...args) {
+      count++;
+      Reflect.set(globalThis, "writeAttempts", count);
+      if (only !== undefined && count !== only) return original.apply(this, args);
+      await Reflect.get(globalThis, "fakeActed")("failWrites");
+      throw new DOMException("The disk is full", "QuotaExceededError");
+    };
+  }, nth);
+}
+
+/** Lets writes through again after `failWrites`. */
+export const restoreWrites = (page: Page) => page.evaluate(() => Reflect.get(globalThis, "restoreWrites")());
+
+/** How many writes `failWrites` has seen. */
+export const writeAttempts = (page: Page): Promise<unknown> => page.evaluate(() => Reflect.get(globalThis, "writeAttempts"));
+
+/** Counts, from now on, the writes this page starts to files named `file`; the returned function reads the count. */
+export async function countWrites(page: Page, file: string): Promise<() => Promise<number>> {
+  const fakes = await fakesOf(page);
+  const key = `countWrites ${file}`;
+  fakes.expected.add(key);
+  await page.evaluate(
+    ({ file, key }) => {
+      const original = FileSystemFileHandle.prototype.createWritable;
+      FileSystemFileHandle.prototype.createWritable = async function (...args) {
+        if (this.name === file) await Reflect.get(globalThis, "fakeActed")(key);
+        return original.apply(this, args);
+      };
+    },
+    { file, key },
+  );
+  return async () => fakes.acted.get(key) ?? 0;
+}
+
+/** Reports each WebSocket or EventSource constructed in this scope, and still constructs it. */
+function watchConnections(scope: object, acted: Acted): void {
+  for (const name of ["WebSocket", "EventSource"]) {
+    const original: unknown = Reflect.get(scope, name);
+    if (typeof original !== "function") continue;
+    Reflect.set(scope, name, new Proxy(original, {
+      construct(target, args, newTarget) {
+        acted(`connection ${name}`);
+        return Reflect.construct(target, args, newTarget);
+      },
+    }));
+  }
+}
+
+/**
+ * Watches, from now on, the page and the PDF worker for WebSocket and EventSource connections;
+ * the returned function lists those made.
+ */
+export async function connectionsMade(page: Page): Promise<() => string[]> {
+  const watch = sourceOf(watchConnections);
+  const fakes = await fakeWorker(page, "connectionsMade", { prelude: watch });
+  await page.addInitScript(watch);
+  if (page.url().startsWith("http")) await page.evaluate(watch);
+  return () => [...fakes.acted.keys()].filter((key) => key.startsWith("connection "));
+}
+
+/** Fails the test if a fake on one of `context`'s pages changed no worker script, or never acted. */
+export async function checkFakes(context: BrowserContext): Promise<void> {
+  const problems: string[] = [];
+  for (const [page, fakes] of installed) {
+    if (page.context() !== context) continue;
+    installed.delete(page);
+    if (fakes.worker !== undefined && !fakes.served) problems.push("a fake of the PDF worker served no worker script");
+    const missing = () => [...fakes.expected].filter((key) => !fakes.acted.has(key));
+    // A fake in the worker reports through the page, so its word can come a moment after the act.
+    await expect.poll(() => missing(), { timeout: 2000 }).toEqual([]).catch(() => undefined);
+    problems.push(...missing().map((key) => `${key} never acted`));
+  }
+  if (problems.length > 0) throw new Error(`The test's fakes did not do their job: ${problems.join("; ")}.`);
+}

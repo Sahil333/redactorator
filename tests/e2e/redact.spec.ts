@@ -16,12 +16,12 @@ import {
   openPdf,
   pickType,
   printTypes,
-  wrapEngine,
   rotatedCroppedPdf,
   tjStringsPdf,
   type PointBox,
   downloadButton,
 } from "./app";
+import { delayApplied, tamperApply } from "./fakes";
 import { judge } from "./oracle";
 
 // Geometry from tests/oracle/README.md, in the app's box convention.
@@ -247,13 +247,7 @@ test("changing a mark after apply drops the checked output", async ({ page }) =>
 });
 
 test("a text mark that runs past the page's text blocks the export", async ({ page }) => {
-  // As if the app sent an edit the worker's own text does not hold.
-  await wrapEngine(
-    page,
-    `addEventListener("message", ({ data }) => {
-      if (data.type === "apply") for (const edit of data.edits) if (edit.kind === "text") edit.end += 10000;
-    });`,
-  );
+  await tamperApply(page);
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
@@ -265,12 +259,7 @@ test("a text mark that runs past the page's text blocks the export", async ({ pa
 });
 
 test("changing a mark while apply runs drops the output that arrives after", async ({ page }) => {
-  await wrapEngine(
-    page,
-    `const send = postMessage;
-    self.postMessage = (message, transfer) =>
-      message?.type === "applied" ? setTimeout(() => send(message, transfer), 1000) : send(message, transfer);`,
-  );
+  await delayApplied(page, 1000);
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, dear, "Other");

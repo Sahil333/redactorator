@@ -15,6 +15,10 @@ export const tablePdf = new URL("../../fixtures/table.pdf", import.meta.url).pat
 export const maskedImagePdf = new URL("../../fixtures/masked-image.pdf", import.meta.url).pathname;
 export const longPdf = new URL("../../fixtures/long.pdf", import.meta.url).pathname;
 export const tjStringsPdf = new URL("../../fixtures/tj-strings.pdf", import.meta.url).pathname;
+export const letterA = new URL("../../fixtures/letter-a.pdf", import.meta.url).pathname;
+export const letterB = new URL("../../fixtures/letter-b.pdf", import.meta.url).pathname;
+export const logoA = new URL("../../fixtures/logo-a.pdf", import.meta.url).pathname;
+export const logoB = new URL("../../fixtures/logo-b.pdf", import.meta.url).pathname;
 
 /** A rectangle in the app's box convention: PDF points, origin top-left. See tests/oracle/README.md. */
 export type PointBox = readonly [x0: number, y0: number, x1: number, y1: number];
@@ -22,20 +26,42 @@ export type PointBox = readonly [x0: number, y0: number, x1: number, y1: number]
 // Words of one-word.pdf, from tests/oracle/README.md, in the app's box convention.
 export const janeRoe: PointBox = [101.3, 99.1, 152.7, 115.6];
 export const dear: PointBox = [72, 99.1, 98, 115.6];
+// Words of letter-a.pdf and letter-b.pdf.
+export const aJaneRoe: PointBox = [72, 79.1, 123.4, 95.6];
+export const bStatement: PointBox = [72, 79.1, 126.7, 95.6];
+// "Reference 4471" in logo-a.pdf, under no image.
+export const reference: PointBox = [96, 328, 200, 346];
+// A box over the left 90% of logo-a.pdf's logo (x 100–388, y 100–292), spilling past its other edges.
+export const mostOfLogo: PointBox = [90, 90, 359.2, 302];
 
-/** Serves `script` in place of the engine worker, to make the engine reply in ways the real one can't on demand. */
-export async function fakeEngine(page: Page, script: string): Promise<void> {
-  await page.route("**/assets/worker-*.js", (route) =>
-    route.fulfill({ contentType: "text/javascript", body: script }),
-  );
+/** `text` as a regular expression that matches it as written. */
+const literally = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const explorer = (page: Page) => page.getByRole("navigation", { name: "Documents" });
+
+/** A document's entry in the explorer, with its review and download state. */
+export const inExplorer = (page: Page, file: string) => explorer(page).getByRole("button", { name: new RegExp(`^${literally(file)}`) });
+
+/** The open document's marks, in the marks panel. */
+export const marks = (page: Page) => page.getByRole("complementary", { name: "Marks" }).getByRole("listitem");
+
+export const approveButton = (page: Page) => page.getByRole("banner").getByRole("button", { name: "Approve", exact: true });
+
+/** Approves the open document and, when it changes other documents, agrees to the heads-up. */
+export async function approve(page: Page, headsUp: RegExp | undefined): Promise<void> {
+  await approveButton(page).click();
+  if (headsUp !== undefined) {
+    const dialog = page.getByRole("dialog", { name: /^Approve/ });
+    await expect(dialog).toContainText(headsUp);
+    await dialog.getByRole("button", { name: "Approve" }).click();
+  }
+  await expect(page.getByRole("banner").getByText("Approved", { exact: true })).toBeVisible();
 }
 
-/** Runs `prelude` in the real engine worker before its own code, to bend a message on its way in or out. */
-export async function wrapEngine(page: Page, prelude: string): Promise<void> {
-  await page.route("**/assets/worker-*.js", async (route) => {
-    const response = await route.fetch();
-    await route.fulfill({ response, body: `${prelude}\n${await response.text()}` });
-  });
+/** Opens `file` from the explorer in its tab. */
+export async function show(page: Page, file: string): Promise<void> {
+  await inExplorer(page, file).click();
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(new RegExp(literally(file)));
 }
 
 /** Loads the app at `path` (such as "/?label") and waits until a PDF can be chosen on the home screen. */
@@ -303,6 +329,18 @@ export async function dropFiles(page: Page, target: Locator, paths: readonly str
   }, files);
   await target.dispatchEvent("dragover", { dataTransfer: transfer });
   await target.dispatchEvent("drop", { dataTransfer: transfer });
+}
+
+/** The JSON file at `path` in the browser's private storage, unchecked. */
+export async function storedJson(page: Page, path: string): Promise<unknown> {
+  const text = await page.evaluate(async (path) => {
+    const names = path.split("/");
+    const name = names.pop() ?? "";
+    let folder = await navigator.storage.getDirectory();
+    for (const each of names) folder = await folder.getDirectoryHandle(each);
+    return (await (await folder.getFileHandle(name)).getFile()).text();
+  }, path);
+  return JSON.parse(text);
 }
 
 /** The names of the entries in the folder at `path` in the browser's private storage. */

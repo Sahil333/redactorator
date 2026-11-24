@@ -1,6 +1,8 @@
 import { expect } from "@playwright/test";
 import { test } from "./coverage";
 import { inkedPixels, openApp, openPdf, twoPagePdf } from "./app";
+import { connectionsMade } from "./fakes";
+import { goldenSession } from "./goldenSession";
 
 // The same server under another origin: reachable, so only the policy can stop a request to it.
 const otherOrigin = "http://localhost:4173/";
@@ -17,6 +19,14 @@ test("every request in a session goes to the app's own origin", async ({ page, c
   // The engine worker fetches the WebAssembly file, so seeing it shows worker traffic is recorded too.
   expect(requested.some((url) => url.endsWith(".wasm"))).toBe(true);
   expect(requested.filter((url) => new URL(url).origin !== appOrigin)).toEqual([]);
+});
+
+test("a whole session opens no WebSocket or EventSource, in the page or the PDF worker", async ({ page }) => {
+  const connections = await connectionsMade(page);
+
+  await goldenSession(page);
+
+  expect(connections()).toEqual([]);
 });
 
 test("a PDF opens and renders with the network off", async ({ page, context }) => {
@@ -44,7 +54,7 @@ test("the content security policy blocks requests to other origins from the page
 
   await openApp(page);
   expect(await page.evaluate(fetchOtherOrigin, otherOrigin)).toBe("blocked");
-  const [engine] = page.workers();
+  const engine = page.workers().find((worker) => new URL(worker.url()).pathname.startsWith("/assets/worker-"));
   expect(engine).toBeDefined();
   expect(await engine?.evaluate(fetchOtherOrigin, otherOrigin)).toBe("blocked");
 });
