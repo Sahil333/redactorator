@@ -3,17 +3,22 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { failWrites, holdInspection, holdRead, holdReadFromStart, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
+import { failWrites, holdApprovalSearch, holdInspection, holdRead, holdReadFromStart, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
 import {
+  aJaneRoe,
   addDocuments,
+  approveButton,
   crossPagePdf,
   dropFiles,
   dear,
   encryptedPdf,
   explorer,
   imagePdf,
+  inExplorer,
   inkedPixels,
   janeRoe,
+  letterA,
+  letterB,
   longPdf,
   markText,
   marks,
@@ -621,6 +626,35 @@ test("leaving a project while documents are being added waits for them, so they 
 
   await expect(projectRow(page, "one-word")).toContainText("2 documents");
   expect(await filesInFolder(page, "one-word")).toEqual(["one-word.pdf", "two-pages.pdf"]);
+});
+
+test("leaving a project while an approval is worked out waits for it, so it lands", async ({ page }) => {
+  const release = await holdApprovalSearch(page);
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await markText(page, 1, janeRoe, "Person");
+  await approveButton(page).click();
+  await expect(approveButton(page)).toBeDisabled();
+
+  await projectName(page).getByRole("link", { name: "Projects" }).click();
+  await release();
+
+  await expect(projectRow(page, "one-word")).toContainText("1 of 1 approved");
+});
+
+test("leaving a project with the approval heads-up open approves nothing", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, letterA, letterB);
+  await markText(page, 1, aJaneRoe, "Person");
+  await approveButton(page).click();
+  await expect(page.getByRole("dialog", { name: /^Approve/ })).toBeVisible();
+
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(projectRow(page, "letter-a")).toContainText("0 of 2 approved");
+  await page.getByRole("button", { name: "letter-a", exact: true }).click();
+  await expect(inExplorer(page, "letter-a.pdf")).toContainText("In review");
+  await expect(inExplorer(page, "letter-b.pdf")).toContainText("Not started");
 });
 
 test("if the engine stops while files are being added, the rest are listed as not added instead of waiting forever", async ({ page }) => {

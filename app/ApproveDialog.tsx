@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from "react";
+import type { Session } from "../engine/api/facade";
+import type { ApprovalPlan } from "../engine/api/state";
 import type { DocumentId, ProjectDocument } from "../engine/model/project";
-import type { PendingApproval } from "./useApproval";
 
 const places = (count: number) => (count === 1 ? "1 place" : `${count} places`);
 
@@ -11,7 +12,7 @@ function names(files: readonly string[]): string {
 }
 
 /** What approving will do beyond this document, said in a sentence or two. */
-function consequences(approval: PendingApproval, documents: readonly ProjectDocument[]): string[] {
+function consequences(approval: ApprovalPlan, documents: readonly ProjectDocument[]): string[] {
   const files = new Map(documents.map((document) => [document.id, document.file]));
   const file = (id: DocumentId) => files.get(id) ?? "";
   const total = (field: "hidden" | "shown" | "retyped") => approval.changes.reduce((sum, change) => sum + change[field], 0);
@@ -32,21 +33,23 @@ function consequences(approval: PendingApproval, documents: readonly ProjectDocu
 }
 
 interface ApproveDialogProps {
-  readonly approval: PendingApproval;
+  readonly session: Session;
+  /** The approval waiting for its heads-up, from the state. */
+  readonly approval: ApprovalPlan;
   readonly documents: readonly ProjectDocument[];
-  readonly onApprove: () => void;
-  readonly onCancel: () => void;
 }
 
 /** The heads-up before an approval spreads to other documents, while one waits. Approving can't be undone. */
-export function ApproveDialog({ approval, ...props }: Omit<ApproveDialogProps, "approval"> & { readonly approval: PendingApproval | undefined }) {
+export function ApproveDialog({ approval, ...props }: Omit<ApproveDialogProps, "approval"> & { readonly approval: ApprovalPlan | undefined }) {
   return approval && <HeadsUp approval={approval} {...props} />;
 }
 
-function HeadsUp({ approval, documents, onApprove, onCancel }: ApproveDialogProps) {
+function HeadsUp({ session, approval, documents }: ApproveDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const name = documents.find((document) => document.id === approval.document)?.file ?? "";
+  const onApprove = () => void session.approval.confirm(approval.planId);
+  const onCancel = () => session.approval.cancel(approval.planId);
   useEffect(() => {
     dialogRef.current?.showModal();
   }, []);

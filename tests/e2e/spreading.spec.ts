@@ -29,9 +29,10 @@ import {
   saveFile,
   show,
   standInForSaveDialog,
+  toScreen,
   type PointBox,
 } from "./app";
-import { holdApprovalSearch, holdInspection } from "./fakes";
+import { holdApprovalSearch, holdInspection, refuseReadings } from "./fakes";
 import { judge } from "./oracle";
 
 const lineFeedGlyph = new URL("../../fixtures/line-feed-glyph.pdf", import.meta.url).pathname;
@@ -413,7 +414,42 @@ test("in a project saved before review states, a document whose original is gone
   await expect(inExplorer(page, "one-word.pdf")).toContainText("Approved");
 });
 
-test("a mark made while an approval is worked out is kept, and approved with the rest", async ({ page }) => {
+test("an approval that can't read the documents approves nothing and says so, until the next approval", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await markText(page, 1, janeRoe, "Person");
+  // From the reload on: the project keeps no text, so approving must read the original again.
+  const readable = await refuseReadings(page);
+  await storeAsVersion1(page, "one-word");
+  await expect(marks(page)).toHaveText([/Jane Roe/]);
+
+  await approveButton(page).click();
+  const failed = page.getByRole("alert").filter({ hasText: "The documents' text could not be read, so nothing was approved. Reload the page and approve again." });
+  await expect(failed).toBeVisible();
+  await expect(inExplorer(page, "one-word.pdf")).toContainText("In review");
+
+  await readable();
+  await approve(page, undefined);
+  await expect(failed).toHaveCount(0);
+  await expect(inExplorer(page, "one-word.pdf")).toContainText("Approved");
+});
+
+test("an approval that can't read the documents says so only in its project", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await markText(page, 1, janeRoe, "Person");
+  const readable = await refuseReadings(page);
+  await storeAsVersion1(page, "one-word");
+  await approveButton(page).click();
+  await expect(page.getByRole("alert")).toHaveText("The documents' text could not be read, so nothing was approved. Reload the page and approve again.");
+
+  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Projects" }).click();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await readable();
+});
+
+test("while an approval is worked out, the page and the marks panel take no marks, and the approval then lands", async ({ page }) => {
   const release = await holdApprovalSearch(page);
   await openApp(page);
   await openPdf(page, oneWordPdf);
@@ -421,13 +457,27 @@ test("a mark made while an approval is worked out is kept, and approved with the
   await approveButton(page).click();
   await expect(approveButton(page)).toBeDisabled();
 
-  await markText(page, 1, dear, "Other");
+  // The page offers no marking tool, so a drag across it makes no mark waiting for its type.
+  await expect(page.getByRole("application", { name: /^Page 1, / })).toHaveCount(0);
+  const [x0, y0, x1, y1] = dear;
+  const start = await toScreen(page, 1, x0 + 1, (y0 + y1) / 2);
+  const end = await toScreen(page, 1, x1 - 1, (y0 + y1) / 2);
+  await page.mouse.move(...start);
+  await page.mouse.down();
+  await page.mouse.move(...end, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole("combobox", { name: "Type for this mark" })).toHaveCount(0);
+  const panel = page.getByRole("complementary", { name: "Marks" });
+  await expect(panel.getByRole("button", { name: /^Remove mark Jane Roe/ })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: /^Change type of Jane Roe/ })).toBeDisabled();
+
   await release();
   await expect(page.getByRole("banner").getByText("Approved", { exact: true })).toBeVisible();
-  await expect(marks(page)).toHaveText([/Jane Roe/, /Dear/]);
+  await expect(marks(page)).toHaveText([/Jane Roe/]);
+  await expect(panel.getByRole("button", { name: /^Remove mark Jane Roe/ })).toBeEnabled();
   await saved(page);
   await page.reload();
-  await expect(marks(page)).toHaveText([/Jane Roe/, /Dear/]);
+  await expect(marks(page)).toHaveText([/Jane Roe/]);
   await expect(inExplorer(page, "one-word.pdf")).toContainText("Approved");
 });
 

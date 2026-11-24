@@ -186,10 +186,10 @@ the code, not reproduced.
     | A Library command on this engine's own open project is refused with its own code | 11 | No (headless callers only) |
     | `marks.add` refuses invalid targets with typed codes | 33 | No |
     | `bad-message` is split into five codes, each keeping today's sentence | 28 | No |
-    | While approval works out what spreads, the page and the marks panel take no edits. Today they do, and approval works it out again (`useApproval.ts:42-46`) | 48 | Yes: marking waits for the approval search |
+    | While approval works out what spreads, or its heads-up is open, the page and the marks panel take no edits: the marking surface is gone and the panel's controls, the link-id field included, are disabled. Today they do, and approval works it out again (`useApproval.ts:42-46`) | 48 | Yes: marking waits for the approval search |
     | Adding documents is refused while a document is being applied, or while the heads-up is open. Today an add can start during an apply (`ProjectView.tsx:281, 295`) | 49 | Yes: Add is disabled during an apply |
     | From step 6b until 6d, a document added while an apply runs opens in its tab once the apply is done. Today it opens at once and the apply's output is dropped (owner, step 6b) | 49 | Yes: the new tab is blank until the apply ends |
-    | A closing Session takes no changes: while the save that leaving starts runs, Undo and Redo are disabled and a mark made then is dropped. Today it is kept, and saved perhaps after the lock is let go (owner, step 6a) | 4 | Yes, only while a slow save runs on leaving |
+    | A closing Session takes no changes: while the save that leaving starts runs, Undo and Redo are disabled, from step 6c the marking tools and the marks panel are off too (they read `can.mark`), and a mark whose type is picked then is dropped. Today it is kept, and saved perhaps after the lock is let go (owner, steps 6a and 6c) | 4 | Yes, only while a slow save runs on leaving |
 
 *   **Changes to stored files.** No format version bump, no migration; the
     existing v1 and v2 migrations stay (decision 6).
@@ -739,13 +739,13 @@ The rules:
 | Slice | Owns | Reacts to |
 | --- | --- | --- |
 | `worker` (root) | `worker` | the client's status records |
-| `problems` (root) | `problems` | records that raise or clear a problem (section 6) |
+| `problems` (root) | `problems` | records that raise or clear a problem (section 6), the Session's `approvalFailed` and `planning` among them |
 | `list` (Library) | `projects` and the list sequence | `listed`, `refreshStarted` |
 | `place` (Library) | `place` and `phase` | `storeChanged`, `moveStarted`, `moveEnded`, `opened` |
 | `settings` (Library) | `settings`, the write queue's state and `creating` | `settingsChanged`, `createStarted`, `createEnded` |
 | `marks` | The project record (documents, marks, kept-visible lists, hidden values) and per-document edit counters | `markAdded`, `markRetyped`, `markRemoved`, `keptHere`, `linked`, `restored`, `approved`, `documentsAdded`, `downloaded` |
 | `history` (wraps `marks`) | Per-document undo and redo snapshots, at most 100 | every undoable record (keeps the snapshot before it, clears redo), `undo`, `redo`, `approved` (clears the documents it changed), `documentsAdded` (starts empty histories for the new documents) |
-| `approval` | The plan waiting for confirmation | `planned`, `approved`, `approvalCancelled` |
+| `approval` | The plan waiting for confirmation, the record it was made from and the record it makes | `planned`, `approved`, `approvalFailed`, `approvalCancelled` |
 | `viewer` | The open-document handle, and the open document's page texts (internal) | `opening`, `opened`, `pageTextLoaded` |
 | `output` | The cleaned file's bytes (internal) and its tag: document, edit counter, appearance | `applied`, `applyStarted`, `outputDiscarded`, `opening` |
 | `operation` | `idle`, `adding`, `planning`, `confirming` or `applying`, the save state, and whether the Session is closing | the start and end record of each operation, every record that changes the project record (the save state becomes `saving`), `saved`, `saveFailed`, `closeStarted`, `closeFailed` |
@@ -812,7 +812,7 @@ missing, as today (owner, step 6b).
 | --- | --- | --- |
 | Store problems: `projects-read-failed`, `settings-damaged`, `settings-newer`, `left-behind`, `not-moved` | a store load or refresh | the next store load (which replaces them), a successful open, a successful import, a change whose project is locked and read again |
 | `change-failed`, `open-elsewhere`, `project-gone`, `settings-save-failed` | the command | a successful open, the next store load, a successful import, a change whose project is locked and read again |
-| `approval-failed` | approval | the next `approval.plan` |
+| `approval-failed` | approval | the next `approval.plan`, or the project closing (owner, step 6c) |
 | `save-failed` | not in the list | shown while `session.save` is `failed` |
 | Worker errors | not in the list | `worker.error`, shown before any problem |
 
@@ -822,7 +822,10 @@ newer of its own problem (from picking a folder or asking permission,
 engine problems. Store problems raised together are joined with a space, as
 today. A rename, duplicate, archive or delete that settles drops the app's own
 problem too, as today's single slot cleared; one that failed has raised a
-newer engine problem, which shows.
+newer engine problem, which shows. `approval-failed` shares the slot: before
+step 6c the project showed it as a line of its own beside the slot, so a
+problem raised before it is now hidden until the next approval clears it
+(owner, step 6c).
 
 The app keeps what is not the engine's: whether the remembered folder waits
 for permission or is missing (`reopen`, `missing`), the pending mark, the
@@ -887,7 +890,7 @@ stateDiagram-v2
   idle --> adding: documents.add
   adding --> idle: added or refused
   idle --> planning: approval.plan
-  planning --> idle: approved at once, nothing to approve, or failed
+  planning --> idle: approved at once, or failed
   planning --> confirming: heads-up needed
   confirming --> idle: approval.confirm or approval.cancel
   idle --> applying: output.apply
@@ -900,7 +903,9 @@ stateDiagram-v2
 a heads-up, or drops an output being applied, so the Session reaches `idle`
 and then closes. Today this is leaving with **Projects** during an add
 (`projects.spec.ts:510`) or an approval search, or pressing the browser's
-Back button with the heads-up open (`App.tsx:97-105`).
+Back button with the heads-up open (`App.tsx:97-105`). A heads-up is
+cancelled before the save, so when that save fails the project stays open
+without it (owner, step 6c).
 
 #### Approval
 
@@ -936,7 +941,10 @@ project record while planning and confirming, so the record cannot change
 and nothing is planned again. The identity check stays as a guard: if it
 ever finds a change, a gate bug let one through, and the approval fails
 closed, because a mark lost that way could leave personal data in an
-output.
+output. `approve` finding no document fails the same way; the gate checked
+the document on the record the plan is made from, so it cannot happen.
+`confirm` and `cancel` name the plan they answer: another `planId`, or no
+heads-up waiting, is refused with `no-plan`.
 
 #### Closing
 
@@ -968,8 +976,8 @@ next can never be navigated away from by a leave that finished after it.
 A closed Session refuses every command with `session-closed`. The dispatcher
 drops records from the effects of a Session that is no longer the open one,
 so work a closed Session started can never land in the next project.
-`interim`'s `replace`, `approve` and `addDocuments` (steps 6a to 6d) name
-their Session for the same reason.
+`interim`'s `replace`, `approve` and `addDocuments` (steps 6a to 6d) named,
+or name, their Session for the same reason.
 
 ### 8. The Library
 
@@ -1466,7 +1474,7 @@ app's not-yet-moved hooks what they took from today's modules:
 | `replace(session, document, marks, shown, kind)`, dispatching a temporary `replaced` record | 6a | 6b |
 | `approve(session, pending)`, dispatching `approved` | 6a | 6c |
 | `addDocuments(session, added)`, dispatching `documentsAdded` | 6a | 6d |
-| `readings`, giving `documentReadings` and `findPlaces` | 6b | 6d |
+| `readings`, giving `documentReadings` (removed in 6c with its last caller, `useApproval`) and `findPlaces` | 6b | 6d |
 
 Step 6d deletes the file, and `createBrowserEngine` returns the engine alone.
 
@@ -1476,7 +1484,10 @@ until 6c and adding documents until 6d. Until then the app ANDs its own
 `can.approve`, `can.add` and `can.switchDocument`, and leaving awaits
 `adder.settled()` and `approval.settled()` before `session.close()`, as
 today (`ProjectView.tsx:161, 276`). Step 6c drops the approval half and 6d
-the add half.
+the add half. From 6c until 6d, Add (the button and a drop) reads the
+Session's `operation` (planning or confirming) for its approval half rather
+than `can.add`, which also refuses during an apply, 6d's change (owner, step
+6c).
 
 ### Error table
 
@@ -2583,6 +2594,26 @@ labelling tests are green; the new output test is green.
     `approval.cancel`; the gate refuses every record-changing command,
     `markDownloaded` included, while planning and confirming. Spreading's builders keep today's
     key order (`spread.ts:111, 123`).
+*   **As built** (owner, step 6c): `effects/plan.ts` holds plan, confirm and
+    cancel (`approvalOf`, as 6b's `viewerOf` holds the viewer). Records:
+    `planning` (operation `planning`; clears `approval-failed`), `planned`
+    (operation `confirming`; the plan, the record it was made from and the
+    record it makes), `approved`, `approvalFailed` (raises `approval-failed`)
+    and `approvalCancelled`. The `approval` slice also clears on
+    `approvalFailed`, so a failed confirm drops the plan (section 5).
+    `approve` finding no document fails closed too (section 7). The gate
+    refuses `marks.*`, `labelling.link`, undo and redo, `markDownloaded`,
+    `interim`'s add landing, apply and plan with `busy-approving`, and
+    `documents.add` with `add-while-approving`; `viewer.open` with
+    `busy-approving` only while planning; `confirm` and `cancel` with `no-plan` unless their heads-up
+    waits. `close` always waits for a plan under way, then cancels a heads-up,
+    then saves. `approval-failed` is also cleared when the project closes
+    (section 6). `ApprovalPlan` lives in `engine/api/state.ts` with
+    `DocumentHandle`. `operation.ts` became tables and `createEngine`'s reducer
+    gained `reduceSession`, to stay under fallow's complexity limits. Unit
+    tests (`engine/core/session/facade.test.ts`) cover what no UI path
+    reaches: the identity guard at plan and at confirm, and the gate while a
+    heads-up waits.
 
 #### 47. `app/useApproval.ts` (Delete); `app/ApproveDialog.tsx`, `app/ProjectView.tsx` (Modify)
 
@@ -2596,6 +2627,24 @@ labelling tests are green; the new output test is green.
     `app/usePointerMarking.ts`, `app/useTextSelection.ts`,
     `app/useKeyboardMarking.ts` and `app/MarksPanel.tsx` (remove, retype and
     "Don't hide here") (Modify).
+*   **As built** (owner, step 6c): only `Workspace.tsx` and `MarksPanel.tsx`
+    changed among the marking tools: `Workspace` passes no tool while
+    `can.mark` is false, which already turns `PageList`, `PageView`,
+    `usePointerMarking`, `useTextSelection` and `useKeyboardMarking` off.
+    `MarksPanel` also disables the link-id field and the Delete key. Approve
+    reads `can.approve` through the top bar's `busy`, with `can.apply`, so
+    Apply and Export labels stay disabled during an approval, as today.
+    `ApproveDialog` takes the Session and calls `confirm` and `cancel` itself.
+    `approval-failed` shows in the one problem slot (section 6), with its
+    sentence moved to `app/errors.ts`. Add reads `operation` until 6d (the
+    "app's own flags" rule). `useProject.ts` keeps `folder`, `project` and
+    `addDocuments`;
+    `ProjectView`'s `facade` prop goes. `interim.approve` and
+    `interim.readings.documentReadings` go. New browser tests: a failed
+    approval says so until the next approval, and not on the projects page
+    (`spreading.spec.ts`, new fake `refuseReadings`); leaving during an
+    approval search lands it, and leaving with the heads-up open approves
+    nothing (`projects.spec.ts`).
 
 #### 48. `tests/e2e/spreading.spec.ts` (Modify)
 
@@ -2605,6 +2654,11 @@ labelling tests are green; the new output test is green.
     `holdApprovalSearch` holds, the marking tools are disabled and a drag
     makes no pending mark; after release the approval lands. Ledger row, as
     a deliberate behaviour change.
+*   **As built** (step 6c): "while an approval is worked out, the page and
+    the marks panel take no marks, and the approval then lands": no marking
+    surface, a drag opens no type picker, Remove and Change type are
+    disabled; after release the approval lands with the marks from before
+    and survives a reload.
 
 **Done when:** the spreading tests and the golden test are green.
 

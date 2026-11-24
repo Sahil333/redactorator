@@ -38,6 +38,8 @@ export type ErrorCode =
   | "original-missing"
   // The project's latest changes could not be saved: `close`'s result while the Session stays open.
   | "save-failed"
+  // The documents' readings could not be had or searched, so nothing was approved.
+  | "approval-failed"
   // Refusals the app never shows: it disables the control from the state, or never sends the command.
   | "busy-moving"
   | "busy-creating"
@@ -52,7 +54,9 @@ export type ErrorCode =
   | "empty-target"
   | "empty-box"
   | "worker-not-ready"
-  | "busy-applying";
+  | "busy-approving"
+  | "busy-applying"
+  | "no-plan";
 
 export interface EngineError {
   readonly code: ErrorCode;
