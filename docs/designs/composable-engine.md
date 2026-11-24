@@ -440,6 +440,14 @@ Each rule's mechanism:
 | Only `engine/pdf/apply.ts` may import `engine/pdf/write/` | Fallow zones `pdf-apply` and `pdf-write`, listed before `pdf`; only `pdf-apply`'s rule allows `pdf-write`. Since unzoned files are not checked, step 7 also adds a `tests` zone (`tests/**`) whose rule allows every zone except `pdf-write`, and step 8's `app` and `host-browser` rules leave `pdf-write` out | 7 |
 | Each folder's direction rule in the table above | Fallow zone per folder, with the `allow` list of the "May import" column | per the table |
 
+**Every source file in a zone, from step 8.** Because a file in no zone is
+not checked, step 8 (item 55) turns on
+`"boundaries": { "coverage": { "requireAllFiles": true, "allowUnmatched": ["*.config.ts"] } }`
+in `.fallowrc.json`: fallow then reports every source file that matches no
+zone, so a new folder cannot import around a rule. The root
+`playwright.config.ts`, `vite.config.ts` and `vitest.config.ts` stay
+unzoned; the spike showed fallow reports them otherwise.
+
 `engine/boundaries.test.ts` (item 56) is not needed: no rule falls back to
 it.
 
@@ -2392,7 +2400,10 @@ pass; the redaction, spreading and page tests are green with `judge`; after
     `new Worker(new URL("../pdf/worker.ts", import.meta.url))` line in
     `engine/host-browser/workerChannel.ts` gets
     `// fallow-ignore-next-line boundary-violation` on the line above it, the
-    one allowed edge into `pdf`; `pnpm typecheck` runs every config.
+    one allowed edge into `pdf`; `.fallowrc.json` turns on
+    `boundaries.coverage.requireAllFiles`, with `allowUnmatched` listing only
+    `*.config.ts`, so every other source file must be in a zone (Technical
+    Plan section 3); `pnpm typecheck` runs every config.
 
 #### 56. `engine/boundaries.test.ts` (Create or extend, only for rules fallow cannot express)
 
@@ -2419,7 +2430,8 @@ pass; the redaction, spreading and page tests are green with `judge`; after
     worker" stays true).
 
 **Done when:** `pnpm test` runs every typecheck config and every zone, and is
-green.
+green; `pnpm exec fallow architecture --boundaries` reports no file outside a
+zone, apart from the root `*.config.ts` files.
 
 ### Verification Plan
 
