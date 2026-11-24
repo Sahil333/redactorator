@@ -2,7 +2,6 @@
 // records in a hidden `.redactorator/` folder.
 import type { PageText, PlacedImage, Reading } from "../engine/model/document";
 import {
-  defaultSettings,
   imagesJson,
   parseImages,
   parseProject,
@@ -11,12 +10,15 @@ import {
   projectJson,
   settingsJson,
   textsJson,
+  type StoredFileProblem,
+} from "../engine/core/formats/project";
+import {
+  defaultSettings,
   type DocumentId,
   type Project,
   type ProjectDocument,
   type Settings,
-  type StoredFileProblem,
-} from "./project";
+} from "../engine/model/project";
 import type { Store } from "./storage";
 
 const RECORDS = ".redactorator";

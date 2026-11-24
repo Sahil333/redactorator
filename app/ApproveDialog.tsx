@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from "react";
-import type { DocumentId, ProjectDocument } from "./project";
+import type { DocumentId, ProjectDocument } from "../engine/model/project";
 import type { PendingApproval } from "./useApproval";
 
 const places = (count: number) => (count === 1 ? "1 place" : `${count} places`);

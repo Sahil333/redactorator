@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
-import type { DocumentId, ProjectDocument } from "./project";
+import type { DocumentId, ProjectDocument } from "../engine/model/project";
 
 export const tabId = (id: DocumentId) => `tab-${id}`;
 export const DOCUMENT_PANEL_ID = "document-panel";

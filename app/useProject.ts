@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { DocumentId, Project, ProjectDocument } from "./project";
+import type { DocumentId, Project, ProjectDocument } from "../engine/model/project";
 import { saveProject, type StoredProject } from "./projects";
 import { markKey } from "../engine/model/marks";
 import type { Approval } from "./spread";

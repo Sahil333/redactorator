@@ -9,7 +9,7 @@ import type { Tool } from "./marks";
 import { MarksPanel, marksPanelWidth } from "./MarksPanel";
 import { pageFrameId, PageScale, showMark } from "./pageGeometry";
 import { PageList } from "./PageList";
-import type { HiddenValue } from "./project";
+import type { HiddenValue } from "../engine/model/project";
 import { ReviewBanner } from "./ReviewBanner";
 import type { Reach } from "./spread";
 import { Splitter } from "./Splitter";

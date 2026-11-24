@@ -1,4 +1,4 @@
-import { newDocumentId } from "./project";
+import { newDocumentId } from "../engine/model/project";
 import type { NewDocument } from "./projects";
 import type { Inspection } from "./useEngine";
 

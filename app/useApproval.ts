@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { documentReadings, findPlaces } from "./documentReadings";
-import type { DocumentId, Project } from "./project";
+import type { DocumentId, Project } from "../engine/model/project";
 import { approve, changed, keysToFind, type Approval } from "./spread";
 import type { Store } from "./storage";
 import type { Engine } from "./useEngine";

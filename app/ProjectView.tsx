@@ -11,7 +11,7 @@ import { LabelExport } from "./LabelExport";
 import { itemKey, markKey, toEdits, type Mark } from "../engine/model/marks";
 import type { Tool } from "./marks";
 import { NotAdded } from "./NotAdded";
-import type { DocumentId, Project, ProjectDocument, Settings } from "./project";
+import type { DocumentId, Project, ProjectDocument, Settings } from "../engine/model/project";
 import type { StoredProject } from "./projects";
 import { newFrom, reachOf } from "./spread";
 import type { Store } from "./storage";

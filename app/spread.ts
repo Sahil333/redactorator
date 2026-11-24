@@ -6,7 +6,7 @@ import type { Box, PageIndex } from "../engine/model/geometry";
 import { rangeBoxes, rangeText } from "../engine/model/pageText";
 import { anchorOf, placesOnCopies } from "../engine/model/images";
 import { markKey, markName, nextId, type Mark } from "../engine/model/marks";
-import type { DocumentId, HiddenValue, Project, ProjectDocument } from "./project";
+import type { DocumentId, HiddenValue, Project, ProjectDocument } from "../engine/model/project";
 
 /** How far a hidden value reaches in the project. */
 export interface Reach {

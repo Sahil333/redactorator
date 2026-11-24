@@ -1,7 +1,7 @@
 // What spreading searches: each document's reading (its pages' text and images) as the project
 // keeps it, and where the engine finds values in the text.
 import type { PageText, PlacedImage, Reading } from "../engine/model/document";
-import type { DocumentId, ProjectDocument } from "./project";
+import type { DocumentId, ProjectDocument } from "../engine/model/project";
 import { findOriginal, readImages, readTexts, saveImages, saveTexts } from "./projects";
 import type { TextPlace } from "./spread";
 import type { Store } from "./storage";

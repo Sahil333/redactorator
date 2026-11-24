@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from "react";
-import type { ProjectDocument } from "./project";
+import type { ProjectDocument } from "../engine/model/project";
 import { readOriginal } from "./projects";
 import type { Store } from "./storage";
 import type { Engine, OpenDocument } from "./useEngine";

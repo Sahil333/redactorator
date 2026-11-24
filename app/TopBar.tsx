@@ -3,7 +3,7 @@ import type { Appearance } from "../engine/model/document";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { PickFiles } from "./PickFiles";
 import type { Tool } from "./marks";
-import type { ReviewState } from "./project";
+import type { ReviewState } from "../engine/model/project";
 import type { SaveState } from "./useProject";
 
 const tools: readonly { readonly id: Tool; readonly label: string }[] = [

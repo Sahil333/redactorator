@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { defaultSettings, type Settings } from "./project";
+import { defaultSettings, type Settings } from "../engine/model/project";
 import {
   importProject,
   listProjects,

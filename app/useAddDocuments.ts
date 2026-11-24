@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { findPlaces } from "./documentReadings";
 import { prepareFiles, type Refusal } from "./importFiles";
-import type { ProjectDocument } from "./project";
+import type { ProjectDocument } from "../engine/model/project";
 import { writeOriginals, type StoredProject } from "./projects";
 import { hiddenTextKeys, spreadToAdded } from "./spread";
 import type { Store } from "./storage";

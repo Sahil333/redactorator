@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { newDocumentId, type Project } from "./project";
+import { newDocumentId, type Project } from "../engine/model/project";
 import { approve } from "./spread";
 
 describe("approve", () => {
