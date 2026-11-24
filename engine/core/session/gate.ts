@@ -20,7 +20,7 @@ type SessionCommand = "add" | "mark" | "history" | "markDownloaded" | "open" | "
 
 /** Refused while the PDF worker is starting or stopped. */
 const needsWorker = new Set<SessionCommand>(["history", "apply", "approve"]);
-/** Refused while an apply runs, or documents are being added, with the code each gives; `documents.add` has its own. */
+/** Refused while an apply runs, or documents are being added, with the code each gives; `documents.add` has its own codes. */
 const oneOperation = new Set<SessionCommand>(["history", "open", "apply", "approve"]);
 const busy: Partial<Record<SessionState["operation"], ErrorCode>> = { applying: "busy-applying", adding: "busy-adding" };
 /** Why `documents.add` is refused while another operation runs; the app tells the user the first two codes. */
@@ -32,7 +32,8 @@ const addRefused: Partial<Record<SessionState["operation"], ErrorCode>> = {
 };
 /**
  * Refused while approval plans or its heads-up is open: every command that changes the project
- * record, and every other operation, so the plan always lands on the record it was made from.
+ * record, and every other operation (`documents.add` with its own code), so the plan always lands
+ * on the record it was made from.
  */
 const waitsForApproval = new Set<SessionCommand>(["add", "mark", "history", "markDownloaded", "apply", "approve"]);
 
@@ -44,7 +45,7 @@ function approving({ operation }: SessionView["parts"]["operation"], command: Se
   return waitsForApproval.has(command) || (command === "open" && operation === "planning") ? "busy-approving" : undefined;
 }
 
-/** Why `command` is refused while an apply runs, or documents are being added. */
+/** Why `command` is refused while another operation runs. */
 function running(command: SessionCommand, operation: SessionState["operation"]): ErrorCode | undefined {
   if (command === "addDocuments") return addRefused[operation];
   return oneOperation.has(command) ? busy[operation] : undefined;
