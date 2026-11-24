@@ -5,7 +5,7 @@ import { boxesOn, type Mark, type MarkTarget } from "../engine/model/marks";
 import type { Pending, Tool } from "./marks";
 import { markTypeLabel } from "../engine/model/markTypes";
 import { CSS_PIXELS_PER_POINT, markElementId, pageFrameId, PageScale } from "./pageGeometry";
-import type { RenderDetail } from "./useEngine";
+import type { RenderDetail } from "./usePageImages";
 import { useKeyboardMarking } from "./useKeyboardMarking";
 import { usePointerMarking } from "./usePointerMarking";
 import type { TextSelecting } from "./useTextSelection";

@@ -18,7 +18,9 @@ const customPrefix = "custom:";
 
 export const customMarkType = (name: string): MarkTypeOption => ({ id: `${customPrefix}${name}`, label: name });
 
+/** The name of a type the user typed, or undefined for a built-in type. */
+export const customTypeName = (type: MarkType): string | undefined => (type.startsWith(customPrefix) ? type.slice(customPrefix.length) : undefined);
+
 export function markTypeLabel(type: MarkType): string {
-  if (type.startsWith(customPrefix)) return type.slice(customPrefix.length);
-  return builtInMarkTypes.find((option) => option.id === type)?.label ?? type;
+  return customTypeName(type) ?? builtInMarkTypes.find((option) => option.id === type)?.label ?? type;
 }

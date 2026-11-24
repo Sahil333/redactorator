@@ -2,18 +2,23 @@ import type { SessionState } from "../../../api/state";
 import type { SessionChange } from "../changes";
 
 export interface OperationPart {
+  readonly operation: SessionState["operation"];
   readonly save: SessionState["save"];
   /** While the Session closes, it takes no more commands. */
   readonly closing: boolean;
 }
 
-export const firstOperation: OperationPart = { save: "saved", closing: false };
+export const firstOperation: OperationPart = { operation: "idle", save: "saved", closing: false };
 
-/** Whether the project is saved, and whether the Session is closing. */
+/** What the Session is doing, whether the project is saved, and whether the Session is closing. */
 export function operation(part: OperationPart, change: SessionChange): OperationPart {
   switch (change.type) {
     // Each change to the project record is saved as it is made.
-    case "replaced":
+    case "markAdded":
+    case "markRetyped":
+    case "markRemoved":
+    case "keptHere":
+    case "linked":
     case "undo":
     case "redo":
     case "approved":
@@ -24,6 +29,11 @@ export function operation(part: OperationPart, change: SessionChange): Operation
       return part.save === "saved" ? part : { ...part, save: "saved" };
     case "saveFailed":
       return { ...part, save: "failed" };
+    case "applyStarted":
+      return { ...part, operation: "applying" };
+    case "applied":
+    case "applyFailed":
+      return { ...part, operation: "idle" };
     case "closeStarted":
     case "closeFailed":
       return { ...part, closing: change.type === "closeStarted" };

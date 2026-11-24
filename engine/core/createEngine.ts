@@ -65,7 +65,7 @@ function publish(root: Root): EngineState {
       can: can(root),
       ...(list.projects === undefined ? {} : { projects: list.projects }),
     },
-    ...(root.session === undefined ? {} : { session: sessionState({ worker: root.worker, parts: root.session.parts }, root.session.folder) }),
+    ...(root.session === undefined ? {} : { session: sessionState({ worker: root.worker, settings: settings.settings, parts: root.session.parts }, root.session.folder) }),
   };
 }
 
@@ -78,7 +78,6 @@ export interface EngineInterim {
   opened(session: Session): OpenSession | undefined;
   /** Reads chosen files and has the PDF worker inspect them, for adding them to the open project. */
   intake(files: readonly IncomingFile[]): Promise<Intake>;
-  addCustomType(name: string): void;
 }
 
 /** Builds the engine root: the PDF-worker client over `worker`, and the Library over the first store. No Session is open. */
@@ -88,8 +87,13 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
   const dispatcher = createDispatcher(root, reduce);
   const take = (files: readonly IncomingFile[]) => intake(files, client);
   const session: SessionHost = {
-    state: dispatcher.getState,
+    state() {
+      const { worker, library, session: open } = dispatcher.getState();
+      return { worker, settings: library.settings.settings, session: open };
+    },
     dispatch: (from, change, ...effects) => dispatcher.dispatch({ type: "session", from, change }, ...effects),
+    client,
+    addCustomType: (name) => addCustomType(name),
   };
   const { library: facade, addCustomType } = createLibrary({ state: dispatcher.getState, dispatch: dispatcher.dispatch, lock: start.lock, intake: take, session }, start);
   client.onStatus((status) => dispatcher.dispatch({ type: "workerChanged", worker: workerOf(status) }));
@@ -113,5 +117,5 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
     const open = dispatcher.getState().session;
     return open?.session === session ? open : undefined;
   };
-  return { engine, interim: { client, opened, intake: take, addCustomType } };
+  return { engine, interim: { client, opened, intake: take } };
 }

@@ -8,7 +8,7 @@ import { errorText } from "./errors";
 import { Home } from "./Home";
 import { incomingFiles } from "./incomingFiles";
 import { ProjectView, type ProjectHandle } from "./ProjectView";
-import { engineStatus, useEngine } from "./useEngine";
+import { engineStatus } from "./engineStatus";
 import { useEngineState } from "./useEngineState";
 import { useProblem } from "./useProblem";
 import { useProjectsFolder } from "./useProjectsFolder";
@@ -161,7 +161,6 @@ export function App() {
   const interim = started?.interim;
   const state = useEngineState(facade);
   const library = state?.library;
-  const engine = useEngine(interim?.client);
   const problem = useProblem(facade);
   const projectsFolder = useProjectsFolder(
     library,
@@ -199,10 +198,9 @@ export function App() {
         interim={started.interim}
         store={opened.store}
         initialRefused={project.carried}
-        engine={engine}
+        worker={state.worker}
         settings={state.library.settings}
         onAppearance={(appearance) => facade?.library.settings.update({ appearance })}
-        onCustomType={started.interim.addCustomType}
         labelling={labelling}
         problem={problem.shown(state)}
         onClose={() => void project.leave("push")}
@@ -214,8 +212,8 @@ export function App() {
     <Home
       library={library}
       waiting={projectsFolder.waiting}
-      status={engineStatus({ state: state?.worker.status ?? "starting" }) ?? ""}
-      error={errorText(engine.error) ?? problem.shown(state)}
+      status={engineStatus(state?.worker ?? { status: "starting" }) ?? ""}
+      error={errorText(state?.worker.error) ?? problem.shown(state)}
       refused={refused}
       onDismissRefused={() => setRefused([])}
       onFiles={(files) => withLibrary((library) => createProject(library, files, project, setRefused))()}

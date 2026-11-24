@@ -1,4 +1,4 @@
-import type { Appearance, DocumentModel, Edit, PageText, Reading, Source } from "../../model/document";
+import type { Appearance, DocumentModel, Edit, PageText, Pixels, Reading, Source } from "../../model/document";
 import type { PageIndex } from "../../model/geometry";
 import {
   isFileNumber,
@@ -11,7 +11,6 @@ import {
   type PdfError,
   type PdfReply,
   type PdfRequest,
-  type Pixels,
 } from "../../pdf-protocol/messages";
 import { parsePdfReply } from "../../pdf-protocol/parse";
 import type { WorkerChannel } from "../ports";

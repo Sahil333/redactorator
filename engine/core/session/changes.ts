@@ -1,18 +1,31 @@
+import type { DocumentHandle } from "../../api/state";
+import type { Appearance, PageText } from "../../model/document";
+import type { PageIndex } from "../../model/geometry";
+import type { Mark } from "../../model/marks";
+import type { MarkType } from "../../model/markTypes";
 import type { DocumentId, Project, ProjectDocument } from "../../model/project";
 
 /** What the user changes in a document, and undo and redo take back. */
 export type Edits = Pick<ProjectDocument, "marks" | "shown">;
 
-/**
- * How a change to a document is kept. An `edit` alters what an apply would write: it can be
- * undone, and puts the document in review. A `label` is labelling data only.
- */
-export type EditKind = "edit" | "label";
+/** What a cleaned file was written from: its document, that document's edit count then, and the appearance. */
+export interface OutputTag {
+  readonly document: DocumentId;
+  readonly edits: number;
+  readonly appearance: Appearance;
+}
 
 /** Every change to the open Session's part of the state. */
 export type SessionChange =
-  /** Until step 6b: a document's marks and kept-visible list as the app's marking left them. */
-  | ({ readonly type: "replaced"; readonly document: DocumentId; readonly kind: EditKind } & Edits)
+  | { readonly type: "markAdded"; readonly document: DocumentId; readonly mark: Mark }
+  /** Retypes every mark of the item `markId` belongs to, since a value has one type. */
+  | { readonly type: "markRetyped"; readonly document: DocumentId; readonly markId: number; readonly markType: MarkType }
+  /** Removes every mark of the item `markId` belongs to. */
+  | { readonly type: "markRemoved"; readonly document: DocumentId; readonly markId: number }
+  /** Keeps the value `key` visible in this document only. */
+  | { readonly type: "keptHere"; readonly document: DocumentId; readonly key: string }
+  /** Labelling data: not undone, and the document's review is unchanged. */
+  | { readonly type: "linked"; readonly document: DocumentId; readonly markId: number; readonly linkId: string }
   | { readonly type: "undo"; readonly document: DocumentId }
   | { readonly type: "redo"; readonly document: DocumentId }
   /** What an undo or redo brings back; history passes it to the slice it wraps. */
@@ -21,6 +34,15 @@ export type SessionChange =
   | { readonly type: "approved"; readonly project: Project; readonly changedDocuments: readonly DocumentId[] }
   | { readonly type: "documentsAdded"; readonly documents: readonly ProjectDocument[] }
   | { readonly type: "downloaded"; readonly document: DocumentId }
+  /** The PDF worker is asked to open `document`: what was open, and its output, are gone. */
+  | { readonly type: "opening"; readonly document: DocumentId }
+  | { readonly type: "opened"; readonly handle: DocumentHandle }
+  | { readonly type: "pageTextLoaded"; readonly handle: DocumentHandle; readonly page: PageIndex; readonly text: PageText }
+  | { readonly type: "applyStarted" }
+  /** A cleaned file passed the worker's check. */
+  | { readonly type: "applied"; readonly tag: OutputTag; readonly bytes: Uint8Array<ArrayBuffer>; readonly shown: DocumentHandle }
+  | { readonly type: "applyFailed" }
+  | { readonly type: "outputDiscarded" }
   /** Every change so far is written. */
   | { readonly type: "saved" }
   | { readonly type: "saveFailed" }
@@ -30,4 +52,4 @@ export type SessionChange =
   | { readonly type: "closeFailed" };
 
 /** The changes the app's hooks still work out themselves, landed through `interim` until each command moves. */
-export type InterimChange = Extract<SessionChange, { readonly type: "replaced" | "approved" | "documentsAdded" }>;
+export type InterimChange = Extract<SessionChange, { readonly type: "approved" | "documentsAdded" }>;

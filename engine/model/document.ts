@@ -59,3 +59,10 @@ export type Edit =
 
 /** Which document a render reads: the file the user opened, or the cleaned output. */
 export type Source = "original" | "output";
+
+/** A drawn page: `width` by `height` pixels, row by row, four bytes each (red, green, blue, alpha). */
+export interface Pixels {
+  readonly width: number;
+  readonly height: number;
+  readonly rgba: Uint8ClampedArray<ArrayBuffer>;
+}

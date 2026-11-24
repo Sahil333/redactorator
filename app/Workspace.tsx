@@ -14,8 +14,11 @@ import { ReviewBanner } from "./ReviewBanner";
 import type { Reach } from "../engine/model/spread";
 import { Splitter } from "./Splitter";
 import { Thumbnails, thumbnailsWidth } from "./Thumbnails";
-import type { PdfEngine } from "./useEngine";
+import type { EngineError } from "../engine/api/errors";
+import type { Session } from "../engine/api/facade";
+import type { DocumentHandle } from "../engine/api/state";
 import { errorText } from "./errors";
+import { usePageImages } from "./usePageImages";
 import { useZoom } from "./useZoom";
 import { ZoomControls } from "./ZoomControls";
 import type { Marks } from "./useMarks";
@@ -33,6 +36,8 @@ export const initialWidths: PanelWidths = { pages: thumbnailsWidth.initial, mark
 
 /** The open document's place in the project's review. */
 export interface Review {
+  /** The document's file name, which its downloads are named after. */
+  readonly file: string;
   readonly hidden: readonly HiddenValue[];
   readonly reach: ReadonlyMap<string, Reach>;
   /** The documents whose approval brought this one's new marks. */
@@ -53,8 +58,16 @@ const checkedFiles = {
 } as const;
 
 interface WorkspaceProps {
-  readonly engine: PdfEngine;
-  readonly pages: readonly [PageModel, ...PageModel[]];
+  readonly session: Session;
+  /** The open document. */
+  readonly handle: DocumentHandle;
+  /** Its cleaned file, shown in place of it while there is one. */
+  readonly output: DocumentHandle | undefined;
+  /** Whether the PDF worker is ready, so the pages take marks. */
+  readonly ready: boolean;
+  readonly error: EngineError | undefined;
+  /** Hears why a page could not be drawn or read. */
+  readonly onFailure: (error: EngineError) => void;
   readonly marks: Marks;
   readonly review: Review;
   /** The document's images a box can spread over; undefined until they are read. */
@@ -82,10 +95,11 @@ function pageInMiddle(view: HTMLElement, pages: readonly PageModel[]): PageIndex
 
 /** An open document: page list, pages, and marks, or the checked output in preview. */
 export function Workspace(props: WorkspaceProps) {
-  const { engine, pages, marks, review, widths, onWidths } = props;
-  const { document: opened, output } = engine;
+  const { session, handle, output, marks, review, widths, onWidths } = props;
+  const { pages } = output ?? handle;
+  const viewer = usePageImages(session, handle, output, props.onFailure);
   const source = output === undefined ? "original" : "output";
-  const editing = output === undefined && engine.state === "ready";
+  const editing = output === undefined && props.ready;
   const shownMarks = output === undefined ? marks.marks : [];
   const zoom = useZoom(pages);
   const checked = checkedFiles[review.approved ? "cleaned" : "preview"];
@@ -97,10 +111,10 @@ export function Workspace(props: WorkspaceProps) {
             id={THUMBNAILS_ID}
             width={widths.pages}
             pages={pages}
-            images={engine.images[source]}
+            images={viewer.images[source]}
             currentPage={props.currentPage ?? pages[0].index}
             markedPages={new Set(shownMarks.flatMap((mark) => markPages(mark.target)))}
-            onVisible={(page) => engine.show(source, page)}
+            onVisible={(page) => viewer.show(source, page)}
           />
           <Splitter
             label="Resize the page list"
@@ -115,18 +129,19 @@ export function Workspace(props: WorkspaceProps) {
       <div className="relative flex min-w-0 flex-1">
         <DropZone
           ref={zoom.ref}
-          error={errorText(engine.error)}
+          error={errorText(props.error)}
           onFiles={props.onFiles}
           onScroll={(event) => props.onCurrentPage(pageInMiddle(event.currentTarget, pages))}
         >
-          {output !== undefined && opened !== undefined && (
+          {output !== undefined && (
             <CheckedBanner
               markCount={marks.marks.length}
               file={checked}
               downloadRef={props.downloadRef}
               onBack={props.onBack}
               onDownload={async () => {
-                if (await savePdf(new Blob([output.bytes], { type: "application/pdf" }), `${baseName(opened.name)}-${checked.ending}.pdf`)) review.onDownloaded();
+                const bytes = session.output.bytes();
+                if (bytes.ok && (await savePdf(new Blob([bytes.value], { type: "application/pdf" }), `${baseName(review.file)}-${checked.ending}.pdf`))) review.onDownloaded();
               }}
             />
           )}
@@ -144,15 +159,15 @@ export function Workspace(props: WorkspaceProps) {
             <PageList
               key={source}
               pages={pages}
-              images={engine.images[source]}
-              texts={engine.texts}
+              images={viewer.images[source]}
+              texts={viewer.texts}
               marks={shownMarks}
               pending={marks.pending}
               highlighted={marks.highlighted}
               tool={editing ? props.tool : undefined}
               typeOptions={marks.typeOptions}
               lastType={marks.lastType}
-              onVisible={(page, detail) => engine.show(source, page, detail)}
+              onVisible={(page, detail) => viewer.show(source, page, detail)}
               onMark={marks.propose}
               onPick={marks.add}
               onCancel={marks.cancel}

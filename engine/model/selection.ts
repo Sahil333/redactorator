@@ -2,7 +2,8 @@
 // characters of a page's text, so a selection can start on one page and end on another.
 import type { PageText } from "./document";
 import { isPageIndex, type Box, type PageIndex } from "./geometry";
-import { bounds, rangeText } from "./pageText";
+import type { TextPiece, TextTarget } from "./marks";
+import { bounds, rangeBoxes, rangeText } from "./pageText";
 
 /** Before character `offset` of a page's text; from 0 to the text's length. */
 export interface Position {
@@ -90,7 +91,7 @@ function runningBlocks(texts: Texts, page: PageIndex, text: PageText, own: reado
  * The selected range of one page. Where the selection runs over a page edge it leaves out
  * the page's running headers and footers, unless one of its ends is inside one.
  */
-export function pieceRange(texts: Texts, page: PageIndex, text: PageText, first: Position, last: Position): [number, number] {
+function pieceRange(texts: Texts, page: PageIndex, text: PageText, first: Position, last: Position): [number, number] {
   const start = page === first.page ? first.offset : 0;
   const end = page === last.page ? last.offset : text.chars.length;
   if (first.page === last.page) return [start, end];
@@ -126,4 +127,41 @@ function pastRunning(
     at = far;
   }
   return at;
+}
+
+/** A text mark's part on one page, before its boxes and text are worked out. */
+export type TextPieceRange = Omit<TextPiece, "boxes">;
+
+/**
+ * The selection from `first` to `last` as one range per page, with line and block ends trimmed
+ * from either side. A page left with nothing, as one that is all running blocks, has no range.
+ */
+export function selectionPieces(texts: Texts, first: Position, last: Position): readonly TextPieceRange[] | "page-text-missing" {
+  const pieces: TextPieceRange[] = [];
+  for (let number = first.page; number <= last.page; number++) {
+    const found = pageText(texts, number);
+    if (found === undefined) return "page-text-missing";
+    const [page, text] = found;
+    let [start, end] = pieceRange(texts, page, text, first, last);
+    while (start < end && !shown(text, start)) start++;
+    while (end > start && !shown(text, end - 1)) end--;
+    if (start < end) pieces.push({ page, start, end });
+  }
+  return pieces;
+}
+
+/** A text mark's target over `pieces`: each piece's boxes, one per line, and the text, joined by a space. */
+export function textTarget(texts: Texts, pieces: readonly TextPieceRange[]): TextTarget | "page-text-missing" | "empty-target" {
+  const boxed: TextPiece[] = [];
+  const parts: string[] = [];
+  for (const { page, start, end } of pieces) {
+    const text = texts.get(page);
+    if (text === undefined) return "page-text-missing";
+    const boxes = rangeBoxes(text, start, end);
+    if (boxes.length === 0) continue;
+    boxed.push({ page, start, end, boxes });
+    parts.push(rangeText(text, start, end));
+  }
+  const [one, ...more] = boxed;
+  return one === undefined ? "empty-target" : { kind: "text", text: parts.join(" "), pieces: [one, ...more] };
 }

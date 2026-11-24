@@ -6,7 +6,7 @@ import type { Pending, Tool } from "./marks";
 import type { MarkType, MarkTypeOption } from "../engine/model/markTypes";
 import { PageView } from "./PageView";
 import { PICKER_WIDTH, TypePicker } from "./TypePicker";
-import type { RenderDetail } from "./useEngine";
+import type { RenderDetail } from "./usePageImages";
 import { useTextSelection } from "./useTextSelection";
 
 interface PageListProps {
