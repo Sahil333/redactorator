@@ -10,9 +10,9 @@ import {
   pickType,
   selectText,
   tabTo,
-  wrapEngine,
 } from "./app";
 import { test } from "./coverage";
+import { delayPageText } from "./fakes";
 import { judge } from "./oracle";
 
 test("a drag down to a page's footer leaves out the running header drawn after the body", async ({ page }) => {
@@ -68,12 +68,7 @@ test("a drag that starts inside a page's footer keeps the footer, and still leav
 
 test("a drag released over a page whose text is still coming is marked once the text arrives", async ({ page }) => {
   // Page 2's text reaches the page 8 seconds late, so the drag crosses it before it is here.
-  await wrapEngine(
-    page,
-    `const send = postMessage;
-    self.postMessage = (message, transfer) =>
-      message?.type === "text" && message.page === 1 ? setTimeout(() => send(message, transfer), 8000) : send(message, transfer);`,
-  );
+  await delayPageText(page, 1, 8000);
   await openApp(page);
   await openPdf(page, crossPagePdf);
   await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();

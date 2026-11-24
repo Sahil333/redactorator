@@ -3,41 +3,44 @@ import { test } from "./coverage";
 import {
   addDocuments,
   applyAndDownload,
+  aJaneRoe,
+  approve,
+  approveButton,
+  bStatement,
   dear,
   downloadButton,
   drawBox,
   dropFiles,
   encryptedPdf,
+  inExplorer,
   janeRoe,
+  letterA,
+  letterB,
+  logoA,
+  logoB,
   markText,
+  marks,
+  mostOfLogo,
   oneWordPdf,
   openApp,
   openPdf,
+  reference,
   saved,
   saveFile,
+  show,
   standInForSaveDialog,
-  wrapEngine,
   type PointBox,
 } from "./app";
+import { holdApprovalSearch, holdInspection } from "./fakes";
 import { judge } from "./oracle";
 
-const letterA = new URL("../../fixtures/letter-a.pdf", import.meta.url).pathname;
-const letterB = new URL("../../fixtures/letter-b.pdf", import.meta.url).pathname;
 const lineFeedGlyph = new URL("../../fixtures/line-feed-glyph.pdf", import.meta.url).pathname;
-const logoA = new URL("../../fixtures/logo-a.pdf", import.meta.url).pathname;
-const logoB = new URL("../../fixtures/logo-b.pdf", import.meta.url).pathname;
 const unmatchableImages = new URL("../../fixtures/unmatchable-images.pdf", import.meta.url).pathname;
 const signatures = new URL("../../fixtures/signatures.pdf", import.meta.url).pathname;
 
-// Words of letter-a.pdf and letter-b.pdf, from tests/oracle/README.md, in the app's box convention.
-const aJaneRoe: PointBox = [72, 79.1, 123.4, 95.6];
+// More words of letter-a.pdf, from tests/oracle/README.md, in the app's box convention.
 const aAccount: PointBox = [72, 99.1, 128.7, 115.6];
 const aRoe: PointBox = [72, 119.1, 94.0, 135.6];
-const bStatement: PointBox = [72, 79.1, 126.7, 95.6];
-// A box over the left 90% of logo-a.pdf's logo (x 100–388, y 100–292), spilling past its other edges.
-const mostOfLogo: PointBox = [90, 90, 359.2, 302];
-// "Reference 4471" in logo-a.pdf, under no image.
-const reference: PointBox = [96, 328, 200, 346];
 // Across logo-a.pdf's logo's lower right corner, less than half of it on the logo.
 const offLogo: PointBox = [330, 250, 530, 350];
 // Where logo-b.pdf draws each image, in user space (tests/oracle/README.md).
@@ -48,30 +51,7 @@ const otherImage = [420, 300, 564, 396] as const;
 // "Jane Roe" and the line-feed glyph after it in line-feed-glyph.pdf.
 const janeRoeAndLineFeed: PointBox = [101.3, 79.1, 156.0, 95.6];
 
-const explorer = (page: Page) => page.getByRole("navigation", { name: "Documents" });
-const inExplorer = (page: Page, file: string) => explorer(page).getByRole("button", { name: new RegExp(`^${file.replace(".", "\\.")}`) });
-const marks = (page: Page) => page.getByRole("complementary", { name: "Marks" }).getByRole("listitem");
-const approveButton = (page: Page) => page.getByRole("banner").getByRole("button", { name: "Approve", exact: true });
 const newMarks = (page: Page) => page.getByRole("region", { name: "New marks" });
-
-/**
- * Makes the engine hold its replies of `type` until the returned function releases them: "matched"
- * keeps an approval under way, "inspected" an add.
- */
-async function holdReplies(page: Page, type: "matched" | "inspected"): Promise<() => Promise<void>> {
-  await wrapEngine(
-    page,
-    `const send = globalThis.postMessage.bind(globalThis);
-    const held = [];
-    let holding = true;
-    new BroadcastChannel("held-replies").onmessage = () => {
-      holding = false;
-      for (const [message, options] of held.splice(0)) send(message, options);
-    };
-    globalThis.postMessage = (message, options) => (holding && message.type === "${type}" ? held.push([message, options]) : send(message, options));`,
-  );
-  return () => page.evaluate(() => new BroadcastChannel("held-replies").postMessage("release"));
-}
 
 /** Rewrites the stored project as slice 1 kept it: version 1, no review fields, no stored text or images; and deletes `gone` from its folder. */
 async function storeAsVersion1(page: Page, folder: string, gone: readonly string[] = []): Promise<void> {
@@ -101,22 +81,6 @@ async function openLetters(page: Page): Promise<void> {
   await openApp(page);
   await openPdf(page, letterA, letterB);
   await expect(page.getByRole("tab", { selected: true })).toHaveText(/letter-a\.pdf/);
-}
-
-/** Approves the open document and, when it changes other documents, agrees to the heads-up. */
-async function approve(page: Page, headsUp: RegExp | undefined): Promise<void> {
-  await approveButton(page).click();
-  if (headsUp !== undefined) {
-    const dialog = page.getByRole("dialog", { name: /^Approve/ });
-    await expect(dialog).toContainText(headsUp);
-    await dialog.getByRole("button", { name: "Approve" }).click();
-  }
-  await expect(page.getByRole("banner").getByText("Approved", { exact: true })).toBeVisible();
-}
-
-async function show(page: Page, file: string): Promise<void> {
-  await inExplorer(page, file).click();
-  await expect(page.getByRole("tab", { selected: true })).toHaveText(new RegExp(file.replace(".", "\\.")));
 }
 
 test("approving a document hides its values in another, however they are written there, and sends it back to review", async ({ page }) => {
@@ -450,7 +414,7 @@ test("in a project saved before review states, a document whose original is gone
 });
 
 test("a mark made while an approval is worked out is kept, and approved with the rest", async ({ page }) => {
-  const release = await holdReplies(page, "matched");
+  const release = await holdApprovalSearch(page);
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
@@ -468,7 +432,7 @@ test("a mark made while an approval is worked out is kept, and approved with the
 });
 
 test("a file dropped while an approval is worked out isn't added, and says why", async ({ page }) => {
-  const release = await holdReplies(page, "matched");
+  const release = await holdApprovalSearch(page);
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
@@ -491,7 +455,7 @@ test("a document can't be approved while files are being added, and can once the
   await markText(page, 1, janeRoe, "Person");
   await saved(page);
   // Held from here on: the next file's inspection, which keeps the add under way.
-  const release = await holdReplies(page, "inspected");
+  const release = await holdInspection(page);
   await page.reload();
   await expect(marks(page)).toHaveText([/Jane Roe/]);
 

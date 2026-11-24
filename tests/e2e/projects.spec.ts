@@ -3,18 +3,20 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
+import { failWrites, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
 import {
   addDocuments,
   crossPagePdf,
   dropFiles,
   dear,
   encryptedPdf,
-  fakeEngine,
+  explorer,
   imagePdf,
   inkedPixels,
   janeRoe,
   longPdf,
   markText,
+  marks,
   maskedImagePdf,
   oneWordPdf,
   openApp,
@@ -28,8 +30,6 @@ import {
   twoPagePdf,
 } from "./app";
 
-const explorer = (page: Page) => page.getByRole("navigation", { name: "Documents" });
-const marks = (page: Page) => page.getByRole("complementary", { name: "Marks" }).getByRole("listitem");
 const projectName = (page: Page) => page.getByRole("navigation", { name: "Breadcrumb" });
 const projectRow = (page: Page, name: string) => page.getByRole("listitem").filter({ has: page.getByRole("button", { name, exact: true }) });
 
@@ -225,6 +225,38 @@ test("projects can be renamed, duplicated, archived and deleted, and delete leav
   expect((await storedNames(page)).filter((name) => name !== ".redactorator")).toEqual([]);
 });
 
+test("a project open in another tab can't be renamed, duplicated, archived or deleted here", async ({ page, context }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await saved(page);
+  const other = await context.newPage();
+  await other.goto("/");
+  const refused = "“one-word” is open in another tab. Close it there to change it here.";
+  const changes: Record<string, () => Promise<void>> = {
+    Rename: async () => {
+      await other.getByRole("textbox", { name: "Project name" }).fill("Renamed");
+      await other.getByRole("textbox", { name: "Project name" }).press("Enter");
+    },
+    Duplicate: async () => undefined,
+    Archive: async () => undefined,
+    Delete: async () => {
+      await other.getByRole("dialog", { name: "Delete “one-word”?" }).getByRole("button", { name: "Delete project" }).click();
+    },
+  };
+
+  for (const [action, finish] of Object.entries(changes)) {
+    // A fresh list each time, so each refusal is this action's own.
+    await other.reload();
+    await rowAction(other, "one-word", action);
+    await finish();
+    await expect(other.getByRole("alert")).toHaveText(refused);
+  }
+
+  await other.reload();
+  await expect(other.getByRole("listitem")).toHaveText([/^one-word/]);
+  expect((await storedNames(page)).filter((name) => name !== ".redactorator")).toEqual(["one-word"]);
+});
+
 test("a project open in another tab is not opened twice", async ({ page, context }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf);
@@ -365,27 +397,6 @@ test("a reload with no tabs open keeps them all closed", async ({ page }) => {
   await expect(page.getByText("Open a document from the list, or drop PDFs here to add them.")).toBeVisible();
 });
 
-/** Makes every write to the browser's private storage fail from now on, or only the `nth` one (counting from 1). */
-async function failWrites(page: Page, nth?: number): Promise<void> {
-  await page.evaluate((only) => {
-    const original = FileSystemFileHandle.prototype.createWritable;
-    let count = 0;
-    Reflect.set(globalThis, "restoreWrites", () => {
-      FileSystemFileHandle.prototype.createWritable = original;
-    });
-    FileSystemFileHandle.prototype.createWritable = function (...args) {
-      count++;
-      Reflect.set(globalThis, "writeAttempts", count);
-      if (only === undefined || count === only) return Promise.reject(new DOMException("The disk is full", "QuotaExceededError"));
-      return original.apply(this, args);
-    };
-  }, nth);
-}
-
-const restoreWrites = (page: Page) => page.evaluate(() => Reflect.get(globalThis, "restoreWrites")());
-
-const writeAttempts = (page: Page): Promise<unknown> => page.evaluate(() => Reflect.get(globalThis, "writeAttempts"));
-
 /** The names of the files in a project's folder, leaving out its records. */
 const filesInFolder = (page: Page, folder: string) =>
   page.evaluate(async (name) => {
@@ -511,35 +522,18 @@ test("leaving a project while documents are being added waits for them, so they 
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await saved(page);
-  // Each write to private storage now takes a moment, as on a slow disk.
-  await page.evaluate(() => {
-    const original = FileSystemFileHandle.prototype.createWritable;
-    FileSystemFileHandle.prototype.createWritable = async function (...args) {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      return original.apply(this, args);
-    };
-  });
+  const release = await holdWrites(page);
 
   await addDocuments(page, twoPagePdf);
   await projectName(page).getByRole("link", { name: "Projects" }).click();
+  await release();
 
   await expect(projectRow(page, "one-word")).toContainText("2 documents");
   expect(await filesInFolder(page, "one-word")).toEqual(["one-word.pdf", "two-pages.pdf"]);
 });
 
 test("if the engine stops while files are being added, the rest are listed as not added instead of waiting forever", async ({ page }) => {
-  // Answers the first inspection, then breaks on the next.
-  await fakeEngine(
-    page,
-    `postMessage({ type: "ready" });
-    let seen = 0;
-    addEventListener("message", ({ data }) => {
-      if (data.type !== "inspect") return;
-      seen++;
-      if (seen === 1) { postMessage({ type: "inspected", inspection: data.inspection, reading: { texts: [{ chars: [] }], images: [] } }); return; }
-      throw new Error("engine broke");
-    });`,
-  );
+  await stopWorkerAfter(page, "inspect");
   await openApp(page);
   await openPdf(page, crossPagePdf, oneWordPdf, twoPagePdf);
 

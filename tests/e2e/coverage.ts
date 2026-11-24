@@ -1,9 +1,11 @@
-// With COVERAGE=1 the app is built instrumented (see vite.config.ts). Each test saves the
-// counts from the page and the engine worker, and the run merges them into
-// coverage/coverage-final.json for fallow's complexity scores.
+// The tests' shared fixtures. With COVERAGE=1 the app is built instrumented (see
+// vite.config.ts): each test saves the counts from the page and the engine worker, and the run
+// merges them into coverage/coverage-final.json for fallow's complexity scores. And every test
+// fails if one of its fakes (fakes.ts) did nothing.
 import { glob, mkdir, readFile, writeFile } from "node:fs/promises";
 import { test as base } from "@playwright/test";
 import libCoverage, { type CoverageMapData } from "istanbul-lib-coverage";
+import { checkFakes } from "./fakes";
 
 const enabled = process.env.COVERAGE === "1";
 const resultsDir = new URL("../../test-results/", import.meta.url);
@@ -11,13 +13,20 @@ const coverageDir = new URL("../../coverage/", import.meta.url);
 
 const counts = () => JSON.stringify(Reflect.get(globalThis, "__coverage__") ?? {});
 
-export const test = base.extend<{ coverage: void }>({
+export const test = base.extend<{ coverage: void; fakes: void }>({
   coverage: [
     async ({ page }, use, testInfo) => {
       await use();
       if (!enabled) return;
       const scopes = [await page.evaluate(counts), ...(await Promise.all(page.workers().map((worker) => worker.evaluate(counts))))];
       await writeFile(testInfo.outputPath("coverage.json"), `[${scopes.join(",")}]`);
+    },
+    { auto: true },
+  ],
+  fakes: [
+    async ({ page }, use) => {
+      await use();
+      await checkFakes(page.context());
     },
     { auto: true },
   ],
