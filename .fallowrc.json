@@ -25,7 +25,7 @@
       { "from": "api", "allow": ["model", "storage"] },
       { "from": "core", "allow": ["model", "storage", "api", "pdf-protocol"] },
       { "from": "pdf-apply", "allow": ["model", "pdf-protocol", "pdf", "pdf-write"] },
-      { "from": "pdf-write", "allow": ["model", "pdf-protocol", "pdf"] },
+      { "from": "pdf-write", "allow": ["model", "pdf"] },
       { "from": "pdf", "allow": ["model", "pdf-protocol", "pdf-apply"] },
       { "from": "tests", "allow": ["model", "storage", "pdf-protocol", "api", "core", "pdf-apply", "pdf", "host-browser", "app"] }
     ]
