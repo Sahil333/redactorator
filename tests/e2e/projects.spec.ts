@@ -26,6 +26,7 @@ import {
   saved,
   showPageList,
   storedNames,
+  storedText,
   tablePdf,
   twoPagePdf,
 } from "./app";
@@ -88,14 +89,7 @@ test("marks, custom types and appearance survive a reload", async ({ page }) => 
   await page.keyboard.press("Escape");
   await saved(page);
   // Settings are saved apart from the project: wait until the label setting is stored.
-  await expect
-    .poll(() =>
-      page.evaluate(async () => {
-        const records = await (await navigator.storage.getDirectory()).getDirectoryHandle(".redactorator");
-        return (await (await records.getFileHandle("settings.json")).getFile()).text();
-      }),
-    )
-    .toContain('"label":true');
+  await expect.poll(() => storedText(page, ".redactorator/settings.json")).toContain('"label":true');
 
   await page.reload();
   await goHome(page);

@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { addDocuments, dear, drawBox, janeRoe, markText, oneWordPdf, openApp, openPdf, saved, storedJson, twoPagePdf } from "./app";
+import { addDocuments, dear, drawBox, janeRoe, markText, oneWordPdf, openApp, openPdf, saved, storedJson, storedText, twoPagePdf } from "./app";
 import { countWrites, failWrites, holdWrites, stopWorkerAfter } from "./fakes";
 
 /** The project made from one-word.pdf, as stored. */
@@ -62,5 +62,5 @@ test("settings changed while one is being saved are stored in the order they wer
   await page.getByLabel("Custom colour").fill("#336699");
   await release();
 
-  await expect.poll(() => storedJson(page, ".redactorator/settings.json")).toHaveProperty(["appearance", "colour"], "#336699");
+  await expect.poll(async () => JSON.parse((await storedText(page, ".redactorator/settings.json")) ?? "{}")).toHaveProperty(["appearance", "colour"], "#336699");
 });

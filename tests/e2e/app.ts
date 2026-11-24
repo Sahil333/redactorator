@@ -331,15 +331,30 @@ export async function dropFiles(page: Page, target: Locator, paths: readonly str
   await target.dispatchEvent("drop", { dataTransfer: transfer });
 }
 
-/** The JSON file at `path` in the browser's private storage, unchecked. */
-export async function storedJson(page: Page, path: string): Promise<unknown> {
-  const text = await page.evaluate(async (path) => {
+/**
+ * The text of the file at `path` in the browser's private storage, or undefined while it or its
+ * folder doesn't exist yet or a write is replacing it, so `expect.poll` can wait for the write to
+ * land.
+ */
+export async function storedText(page: Page, path: string): Promise<string | undefined> {
+  return page.evaluate(async (path) => {
     const names = path.split("/");
     const name = names.pop() ?? "";
-    let folder = await navigator.storage.getDirectory();
-    for (const each of names) folder = await folder.getDirectoryHandle(each);
-    return (await (await folder.getFileHandle(name)).getFile()).text();
+    try {
+      let folder = await navigator.storage.getDirectory();
+      for (const each of names) folder = await folder.getDirectoryHandle(each);
+      return await (await (await folder.getFileHandle(name)).getFile()).text();
+    } catch (error) {
+      if (error instanceof DOMException && (error.name === "NotFoundError" || error.name === "NotReadableError")) return undefined;
+      throw error;
+    }
   }, path);
+}
+
+/** The JSON file at `path` in the browser's private storage, unchecked. */
+export async function storedJson(page: Page, path: string): Promise<unknown> {
+  const text = await storedText(page, path);
+  if (text === undefined) throw new Error(`${path} is not in the browser's private storage`);
   return JSON.parse(text);
 }
 
