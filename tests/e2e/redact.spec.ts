@@ -278,7 +278,7 @@ test("changing a mark while apply runs drops the output that arrives after", asy
 });
 
 test("an error about another request while apply runs leaves the apply running, and the output shown has every mark", async ({ page }) => {
-  await delayApplied(page, 2000);
+  await delayApplied(page, 3000);
   const asked = await failRenderUntilApply(page, 1, "Page 2 could not be drawn. Open the PDF again.");
   await openApp(page);
   await openPdf(page, crossPagePdf);
