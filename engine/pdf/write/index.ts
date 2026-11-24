@@ -6,10 +6,7 @@ import { redact, redactionsByPage } from "./redact";
 
 export { CheckFailed } from "./common";
 
-/**
- * Writes the cleaned file from the original's bytes and checks it, in apply's order. A failed
- * check destroys the output it opened before the CheckFailed goes on to the caller.
- */
+/** Writes the cleaned file from the original's bytes and checks it. */
 export function writeAndCheck(
   original: mupdf.PDFDocument,
   bytes: Uint8Array,

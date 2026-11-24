@@ -4,7 +4,6 @@ type Send = (message: PdfReply, transfer?: ArrayBuffer[]) => void;
 
 let send: Send;
 
-/** Sets how replies leave the handler; the worker entry passes the Web Worker's own postMessage. */
 export function setSend(fn: Send): void {
   send = fn;
 }
