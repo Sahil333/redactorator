@@ -18,7 +18,7 @@ export interface SessionView {
  */
 type SessionCommand = "add" | "mark" | "history" | "markDownloaded" | "change" | "open" | "apply" | "approve" | "addDocuments" | "query" | "close";
 
-/** Refused while the PDF worker is starting or stopped. */
+/** Refused while the PDF worker is starting or stopped; `add` is taken during an apply, whose output it leaves out of date. */
 const needsWorker = new Set<SessionCommand>(["add", "history", "apply", "approve"]);
 /** Refused while an apply runs. */
 const waitsForApply = new Set<SessionCommand>(["history", "open", "apply", "approve", "addDocuments"]);
@@ -28,7 +28,7 @@ export function gate({ worker, parts }: SessionView, command: SessionCommand, do
   if (parts.operation.closing) return "session-closed";
   if (document !== undefined && !parts.record.present.project.documents.some(({ id }) => id === document)) return "unknown-document";
   if (waitsForApply.has(command) && parts.operation.operation === "applying") return "busy-applying";
-  if (needsWorker.has(command) && worker.status !== "ready") return "worker-not-ready";
+  if (needsWorker.has(command) && (worker.status === "starting" || worker.status === "stopped")) return "worker-not-ready";
   if (command === "addDocuments" && worker.status === "stopped") return "worker-not-ready";
   if (command === "apply" && parts.viewer.handle === undefined) return "stale-handle";
   return undefined;

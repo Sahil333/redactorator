@@ -11,7 +11,7 @@ import type { PdfClient } from "../pdf-client/client";
 import type { LockHold } from "../ports";
 import type { InterimChange, SessionChange } from "./changes";
 import { applyOutput } from "./effects/apply";
-import { viewerOf } from "./effects/open";
+import { staleHandle, viewerOf } from "./effects/open";
 import { saver } from "./effects/save";
 import { gate, type SessionView } from "./gate";
 import { canStep, validOutput } from "./selectors";
@@ -41,7 +41,6 @@ export interface SessionHost {
 
 const done: Result<void> = { ok: true, value: undefined };
 const closed: Result<never> = { ok: false, error: { code: "session-closed" } };
-const staleHandle: Result<never> = { ok: false, error: { code: "stale-handle" } };
 
 const documentIn = (project: Project, id: DocumentId) => project.documents.find((document) => document.id === id);
 
@@ -139,10 +138,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
     viewer: viewerOf({
       source: { store, folder, client: host.client },
       view,
-      refused: (command, document) => {
-        const at = allowed(command, document);
-        return at.ok ? undefined : at;
-      },
+      allowed,
       dispatch,
     }),
     output: {

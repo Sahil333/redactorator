@@ -15,17 +15,17 @@ import { imagesOf, type ReadingSource } from "./readings";
 export interface ViewerHost {
   readonly source: ReadingSource & { readonly client: PdfClient };
   view(): SessionView | undefined;
-  refused(command: "open" | "query", document?: DocumentId): Result<never> | undefined;
+  allowed(command: "open" | "query", document?: DocumentId): Result<SessionView>;
   dispatch(change: SessionChange): void;
 }
 
-const staleHandle: Result<never> = { ok: false, error: { code: "stale-handle" } };
+export const staleHandle: Result<never> = { ok: false, error: { code: "stale-handle" } };
 
 /**
  * The open document: opening it in the PDF worker, and its pages' images and text. Each page's
  * text is fetched once while its document is open, and kept in the state for `marks.add`.
  */
-export function viewerOf({ source, view, refused, dispatch }: ViewerHost): Session["viewer"] {
+export function viewerOf({ source, view, allowed, dispatch }: ViewerHost): Session["viewer"] {
   const { store, folder, client } = source;
   // Each open is numbered, so one overtaken by a newer open never lands.
   let latest = 0;
@@ -42,11 +42,11 @@ export function viewerOf({ source, view, refused, dispatch }: ViewerHost): Sessi
 
   return {
     async open(document) {
-      const refusal = refused("open", document);
-      if (refusal !== undefined) return refusal;
+      const at = allowed("open", document);
+      if (!at.ok) return at;
       const asked = ++latest;
       texts = new Map();
-      const record = view()?.parts.record.present.project.documents.find(({ id }) => id === document);
+      const record = at.value.parts.record.present.project.documents.find(({ id }) => id === document);
       dispatch({ type: "opening", document });
       if (record === undefined) return staleHandle;
       let bytes: Uint8Array<ArrayBuffer>;
@@ -64,15 +64,14 @@ export function viewerOf({ source, view, refused, dispatch }: ViewerHost): Sessi
       return { ok: true, value: handle };
     },
     async render(handle, from, page, scale) {
-      const refusal = refused("query");
-      if (refusal !== undefined) return refusal;
-      const now = view();
-      const output = now && validOutput(now);
+      const at = allowed("query");
+      if (!at.ok) return at;
+      const output = validOutput(at.value);
       if (from === "output" && output === undefined) return staleHandle;
       // Once the output is out of date, its pages are no longer drawn, and late ones are dropped.
       const current = () => {
-        const at = view();
-        return at?.parts.viewer.handle === handle && (from === "original" || validOutput(at) === output);
+        const now = view();
+        return now?.parts.viewer.handle === handle && (from === "original" || validOutput(now) === output);
       };
       if (!current()) return staleHandle;
       const pixels = await client.render(from, page, scale);
@@ -80,17 +79,17 @@ export function viewerOf({ source, view, refused, dispatch }: ViewerHost): Sessi
       return current() ? { ok: true, value: pixels } : staleHandle;
     },
     pageText(handle, page) {
-      const refusal = refused("query");
-      if (refusal !== undefined) return Promise.resolve(refusal);
+      const at = allowed("query");
+      if (!at.ok) return Promise.resolve(at);
       if (!isOpen(handle)) return Promise.resolve(staleHandle);
       const asked = texts.get(page) ?? fetchText(handle, page);
       texts.set(page, asked);
       return asked;
     },
     async images(document) {
-      const refusal = refused("query", document);
-      if (refusal !== undefined) return refusal;
-      const record = view()?.parts.record.present.project.documents.find(({ id }) => id === document);
+      const at = allowed("query", document);
+      if (!at.ok) return at;
+      const record = at.value.parts.record.present.project.documents.find(({ id }) => id === document);
       try {
         return { ok: true, value: record && (await imagesOf(source, record)) };
       } catch {

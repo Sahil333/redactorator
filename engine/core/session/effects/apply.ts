@@ -2,6 +2,7 @@ import type { Result } from "../../../api/errors";
 import { toEdits } from "../../../model/marks";
 import type { PdfClient } from "../../pdf-client/client";
 import type { OutputTag, SessionChange } from "../changes";
+import { staleHandle } from "./open";
 import type { SessionView } from "../gate";
 
 /**
@@ -13,7 +14,7 @@ export function applyOutput(view: SessionView, client: Pick<PdfClient, "apply">,
   const { handle } = view.parts.viewer;
   const { project, edits } = view.parts.record.present;
   const document = project.documents.find(({ id }) => id === handle?.document);
-  if (document === undefined) return Promise.resolve({ ok: false, error: { code: "stale-handle" } });
+  if (document === undefined) return Promise.resolve(staleHandle);
   const tag: OutputTag = { document: document.id, edits: edits.get(document.id) ?? 0, appearance: view.settings.appearance };
   const written = document.marks.flatMap(toEdits);
   async function run(): Promise<Result<void>> {

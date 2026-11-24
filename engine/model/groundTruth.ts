@@ -48,8 +48,6 @@ interface Occurrence {
  * and each box mark is its own (it has no text to match on). A mark across pages is one
  * entity with an occurrence on each page.
  */
-export type GroundTruth = ReturnType<typeof groundTruth>;
-
 export function groundTruth(marks: readonly Mark[], facts: DocumentFacts, sha256: string) {
   const entities: Entity[] = [];
   const bySpelling = new Map<string, string>();
@@ -79,3 +77,5 @@ export function groundTruth(marks: readonly Mark[], facts: DocumentFacts, sha256
     hidden_occurrences: [],
   };
 }
+
+export type GroundTruth = ReturnType<typeof groundTruth>;

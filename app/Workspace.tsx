@@ -141,7 +141,9 @@ export function Workspace(props: WorkspaceProps) {
               onBack={props.onBack}
               onDownload={async () => {
                 const bytes = session.output.bytes();
-                if (bytes.ok && (await savePdf(new Blob([bytes.value], { type: "application/pdf" }), `${baseName(review.file)}-${checked.ending}.pdf`))) review.onDownloaded();
+                // The banner says the file could not be saved.
+                if (!bytes.ok) throw new Error("The output is out of date");
+                if (await savePdf(new Blob([bytes.value], { type: "application/pdf" }), `${baseName(review.file)}-${checked.ending}.pdf`)) review.onDownloaded();
               }}
             />
           )}

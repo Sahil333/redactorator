@@ -1,15 +1,11 @@
 import { useState } from "react";
-import type { Session, TargetInput } from "../engine/api/facade";
+import type { Session } from "../engine/api/facade";
 import type { DocumentHandle } from "../engine/api/state";
-import type { Mark, MarkTarget } from "../engine/model/marks";
+import type { Mark } from "../engine/model/marks";
 import { builtInMarkTypes, customMarkType, type MarkType, type MarkTypeOption } from "../engine/model/markTypes";
 import type { Pending } from "./marks";
 
 export type Marks = ReturnType<typeof useMarks>;
-
-/** What the Session takes for a new mark: a text mark's pieces, as the preview trimmed them, or the box. */
-const inputOf = (target: MarkTarget): TargetInput =>
-  target.kind === "text" ? { kind: "text", pieces: target.pieces.map(({ page, start, end }) => ({ page, start, end })) } : { kind: "box", page: target.page, box: target.box };
 
 /**
  * The open document's marks, the new mark waiting for its type, and the types on offer.
@@ -31,7 +27,7 @@ export function useMarks(session: Session, handle: DocumentHandle | undefined, m
   function add(type: MarkTypeOption) {
     if (pending === undefined || handle === undefined) return;
     setLastType(type.id);
-    const added = session.marks.add({ handle, type: type.id, target: inputOf(pending.target) });
+    const added = session.marks.add({ handle, type: type.id, target: pending.target });
     setPending(undefined);
     // Highlighted, a new mark shows its type until the pointer or the marks panel moves on.
     if (added.ok) setHighlighted(added.value.markId);
