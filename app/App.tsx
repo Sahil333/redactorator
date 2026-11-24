@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import type { LockHold } from "../engine/core/ports";
 import { Home } from "./Home";
 import { prepareFiles, type Refusal } from "./importFiles";
 import { createProject, duplicateProject, nameFromFile, saveProject, type ProjectEntries, type StoredProject } from "./projects";
@@ -67,7 +68,7 @@ function useAddressedProject(projects: ProjectEntries | undefined, settling: boo
 
 interface OpenProject {
   readonly stored: StoredProject;
-  readonly release: () => void;
+  readonly hold: LockHold;
   /** Files chosen with the ones that made a new project, which could not be added. */
   readonly refused: readonly Refusal[];
 }
@@ -94,7 +95,7 @@ export function App() {
       return;
     }
     setRefused([]);
-    setOpen({ stored: taken.current, release: taken.release, refused: notAdded });
+    setOpen({ stored: taken.current, hold: taken.hold, refused: notAdded });
     navigate(how, projectAddress(stored.project.id));
   }
 
@@ -102,7 +103,7 @@ export function App() {
   async function leaveProject(how: Navigation): Promise<boolean> {
     if (open === undefined) return true;
     if (!((await projectRef.current?.save()) ?? true)) return false;
-    open.release();
+    open.hold.release();
     setOpen(undefined);
     navigate(how, homeAddress());
     await refresh();

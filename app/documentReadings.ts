@@ -4,7 +4,7 @@ import type { PageText, PlacedImage, Reading } from "../engine/model/document";
 import type { DocumentId, ProjectDocument } from "../engine/model/project";
 import { findOriginal, readImages, readTexts, saveImages, saveTexts } from "./projects";
 import type { TextPlace } from "../engine/model/spread";
-import type { Store } from "./storage";
+import type { Store } from "../engine/storage/store";
 import type { Engine } from "./useEngine";
 
 /** A document's reading could not be had, or the engine could not search it, so nothing spread. */
@@ -18,7 +18,7 @@ async function readingOf(store: Store, folder: string, document: ProjectDocument
   // A project from before texts, or images, were kept, or a damaged file: read the original again.
   const original = await findOriginal(store, folder, document);
   if (original === undefined) return undefined;
-  const inspection = await engine.inspect(await original.arrayBuffer());
+  const inspection = await engine.inspect(original);
   if ("error" in inspection) throw new ReadingUnavailable();
   // Kept so the next search needn't read the original again; a newer version's file is left for
   // that version. A failed save costs only that, so it doesn't stop the search.

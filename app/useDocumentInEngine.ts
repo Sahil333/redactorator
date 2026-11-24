@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import type { ProjectDocument } from "../engine/model/project";
 import { readOriginal } from "./projects";
-import type { Store } from "./storage";
+import type { Store } from "../engine/storage/store";
 import type { Engine, OpenDocument } from "./useEngine";
 
 /**
@@ -18,16 +18,14 @@ export function useDocumentInEngine(store: Store, folder: string, document: Proj
     setMissing(undefined);
     if (document === undefined) return;
     const { file, sha256 } = document;
-    readOriginal(store, folder, document)
-      .then((original) => original.arrayBuffer())
-      .then(
-        (bytes) => {
-          if (isCurrent()) engine.open({ name: file, bytes, sha256 });
-        },
-        () => {
-          if (isCurrent()) setMissing(`${file} is missing from the project's folder, so it can't be shown. Add the file again with Add documents.`);
-        },
-      );
+    readOriginal(store, folder, document).then(
+      (bytes) => {
+        if (isCurrent()) engine.open({ name: file, bytes, sha256 });
+      },
+      () => {
+        if (isCurrent()) setMissing(`${file} is missing from the project's folder, so it can't be shown. Add the file again with Add documents.`);
+      },
+    );
   });
 
   useEffect(() => {

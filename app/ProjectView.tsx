@@ -14,7 +14,7 @@ import { NotAdded } from "./NotAdded";
 import type { DocumentId, Project, ProjectDocument, Settings } from "../engine/model/project";
 import type { StoredProject } from "./projects";
 import { newFrom, reachOf } from "../engine/model/spread";
-import type { Store } from "./storage";
+import type { Store } from "../engine/storage/store";
 import { TopBar, type Editing, type History } from "./TopBar";
 import { engineStatus, type Engine, type OpenDocument } from "./useEngine";
 import { useAddDocuments } from "./useAddDocuments";

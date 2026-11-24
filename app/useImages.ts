@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 import type { PlacedImage } from "../engine/model/document";
 import { imagesOf } from "./documentReadings";
 import type { DocumentId, ProjectDocument } from "../engine/model/project";
-import type { Store } from "./storage";
+import type { Store } from "../engine/storage/store";
 import type { Engine } from "./useEngine";
 
 /** The open document's images that a box can spread over, once read from the project; undefined until then, or when unknown. */

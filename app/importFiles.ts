@@ -15,7 +15,7 @@ const isHidden = (file: File) => file.name.startsWith(".");
 
 const pathOf = (file: File) => file.webkitRelativePath || file.name;
 
-async function sha256(bytes: ArrayBuffer): Promise<string> {
+async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -23,7 +23,7 @@ async function sha256(bytes: ArrayBuffer): Promise<string> {
 /** Reads each chosen file and has the engine inspect it, in the order a folder lists them. */
 export async function prepareFiles(
   files: readonly File[],
-  inspect: (bytes: ArrayBuffer) => Promise<Inspection>,
+  inspect: (bytes: Uint8Array) => Promise<Inspection>,
 ): Promise<{ readonly added: NewDocument[]; readonly refused: Refusal[] }> {
   const added: NewDocument[] = [];
   const refused: Refusal[] = [];
@@ -33,14 +33,14 @@ export async function prepareFiles(
       refused.push({ file: file.name, reason: "This is not a PDF." });
       continue;
     }
-    let bytes: ArrayBuffer;
+    let bytes: Uint8Array<ArrayBuffer>;
     try {
-      bytes = await file.arrayBuffer();
+      bytes = new Uint8Array(await file.arrayBuffer());
     } catch {
       refused.push({ file: file.name, reason: "This file could not be read. Choose it again." });
       continue;
     }
-    const inspection = await inspect(bytes.slice(0));
+    const inspection = await inspect(bytes);
     if ("error" in inspection) refused.push({ file: file.name, reason: inspection.error.message });
     else added.push({ id: newDocumentId(), file: file.name, bytes, sha256: await sha256(bytes), reading: inspection });
   }

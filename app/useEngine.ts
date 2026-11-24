@@ -51,7 +51,7 @@ type EngineState = "starting" | "ready" | "applying" | "stopped";
 /** A PDF to open: its name, its bytes and their SHA-256, for labelling mode's ground truth. */
 export interface PdfSource {
   readonly name: string;
-  readonly bytes: ArrayBuffer;
+  readonly bytes: Uint8Array;
   readonly sha256: string;
 }
 
@@ -82,8 +82,8 @@ export interface Engine {
   readonly output: Output | undefined;
   readonly error: string | undefined;
   open(source: PdfSource): void;
-  /** Whether the engine can work on `bytes`, which it takes over. */
-  inspect(bytes: ArrayBuffer): Promise<Inspection>;
+  /** Whether the engine can work on `bytes`. */
+  inspect(bytes: Uint8Array): Promise<Inspection>;
   /** Where each key is in each document, given as each page's characters. */
   match(keys: readonly string[], documents: readonly (readonly (readonly string[])[])[]): Promise<Matches>;
   /** Asks for a page's image from `source` at `detail`, and for the original's text, once each. */
@@ -236,8 +236,9 @@ export function useEngine(): Engine {
     else workerRef.current?.postMessage(request, transfer);
   }
 
-  function inspect(bytes: ArrayBuffer): Promise<Inspection> {
-    return inspections.ask((inspection) => post({ type: "inspect", inspection, bytes }, [bytes]));
+  function inspect(bytes: Uint8Array): Promise<Inspection> {
+    const copy = bytes.slice().buffer;
+    return inspections.ask((inspection) => post({ type: "inspect", inspection, bytes: copy }, [copy]));
   }
 
   function match(keys: readonly string[], documents: readonly (readonly (readonly string[])[])[]): Promise<Matches> {
@@ -259,7 +260,8 @@ export function useEngine(): Engine {
     setTexts(new Map());
     setOutput(undefined);
     setError(undefined);
-    post({ type: "open", file, bytes }, [bytes]);
+    const copy = bytes.slice().buffer;
+    post({ type: "open", file, bytes: copy }, [copy]);
   }
 
   function once(key: string, request: PdfRequest) {
