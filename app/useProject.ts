@@ -4,15 +4,13 @@ import type { EditKind, Edits, Interim } from "../engine/host-browser/interim";
 import type { DocumentId, ProjectDocument } from "../engine/model/project";
 import type { Approval } from "../engine/model/spread";
 
-export type { EditKind as ChangeKind };
-
 /**
  * The open project for the hooks that still change it themselves, until step 6d: the Session
  * holds it, saves it and keeps its undo history; this hook lands their changes in it.
  */
 export function useProject(engine: Engine, session: Session, opened: SessionState, interim: Pick<Interim, "replace" | "approve" | "addDocuments">) {
   /** The project with every change so far, for work that outlasts a render. */
-  const current = () => engine.getState().session?.project ?? opened.project;
+  const current = () => (engine.session() === session ? engine.getState().session?.project : undefined) ?? opened.project;
 
   return {
     folder: opened.folder,

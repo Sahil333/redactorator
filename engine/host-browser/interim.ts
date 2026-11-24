@@ -8,7 +8,6 @@ import {
   readOriginal,
   readTexts,
   saveImages,
-  saveProject,
   saveTexts,
   writeOriginals,
 } from "../core/stored/projects";
@@ -28,7 +27,6 @@ const storedFiles = {
   readOriginal,
   readTexts,
   saveImages,
-  saveProject,
   saveTexts,
   writeOriginals,
 };

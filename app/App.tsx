@@ -104,7 +104,9 @@ function useOpenProject(facade: Engine | undefined, state: EngineState | undefin
   async function leave(how: Navigation): Promise<boolean> {
     if (session === undefined) return true;
     await projectRef.current?.settled();
-    if (!(await session.close()).ok) return false;
+    const closed = await session.close();
+    // Refused as already closing: the close under way leaves.
+    if (!closed.ok) return closed.error.code !== "save-failed";
     navigate(how, homeAddress());
     return true;
   }
