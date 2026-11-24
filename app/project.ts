@@ -6,7 +6,7 @@ import { isPageIndex, parseBox, pointBox } from "../engine/model/geometry";
 import { isOffset, isPositiveNumber, isRecord, isText, parseAll } from "../engine/model/guards";
 import { isFingerprint, parseAppearance, parsePlacedImage } from "../engine/model/parse";
 import type { ImageAnchor } from "../engine/model/images";
-import type { Mark, MarkTarget, TextPiece } from "./marks";
+import type { Mark, MarkTarget, TextPiece } from "../engine/model/marks";
 import type { MarkType } from "../engine/model/markTypes";
 
 declare const brand: unique symbol;

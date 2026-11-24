@@ -2,7 +2,8 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEven
 import type { PageModel } from "../engine/model/document";
 import type { Box, PageIndex } from "../engine/model/geometry";
 import { charAt } from "../engine/model/pageText";
-import { boxesOn, type Pending, type Tool } from "./marks";
+import { boxesOn } from "../engine/model/marks";
+import type { Pending, Tool } from "./marks";
 import {
   extend,
   firstWordIn,

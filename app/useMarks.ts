@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { itemKey, nextId, type Mark, type Pending } from "./marks";
+import { itemKey, nextId, type Mark } from "../engine/model/marks";
+import type { Pending } from "./marks";
 import type { ChangeKind } from "./useProject";
 import { builtInMarkTypes, customMarkType, type MarkType, type MarkTypeOption } from "../engine/model/markTypes";
 

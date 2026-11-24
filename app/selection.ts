@@ -3,7 +3,7 @@
 import type { PageText } from "../engine/model/document";
 import { isPageIndex, type Box, type PageIndex } from "../engine/model/geometry";
 import { bounds, rangeBoxes, rangeText, sharesColumns, wordAt } from "../engine/model/pageText";
-import type { TextPiece, TextTarget } from "./marks";
+import type { TextPiece, TextTarget } from "../engine/model/marks";
 
 /** Before character `offset` of a page's text; from 0 to the text's length. */
 export interface Position {

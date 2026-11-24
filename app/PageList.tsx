@@ -1,7 +1,8 @@
 import type { KeyboardEvent } from "react";
 import type { PageModel, PageText } from "../engine/model/document";
 import type { Box, PageIndex } from "../engine/model/geometry";
-import { markPages, type Mark, type MarkTarget, type Pending, type Tool } from "./marks";
+import { markPages, type Mark, type MarkTarget } from "../engine/model/marks";
+import type { Pending, Tool } from "./marks";
 import type { MarkType, MarkTypeOption } from "../engine/model/markTypes";
 import { PageView } from "./PageView";
 import { PICKER_WIDTH, TypePicker } from "./TypePicker";
