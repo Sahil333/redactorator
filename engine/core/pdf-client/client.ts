@@ -148,8 +148,9 @@ export function pdfClient(channel: WorkerChannel): PdfClient {
 
   function failAboutFile(file: FileNumber, error: PdfError) {
     const stale = isStale(file);
-    if (!stale) doneApplying();
     const request = takeOldest(file);
+    // An error that answers another request leaves the apply running: only its own answer ends it.
+    if (!stale && request?.kind === "apply") doneApplying();
     if (request !== undefined) request.settle(stale ? staleHandle : error);
     // It answers nothing asked, but it is about the open document, so it is still shown.
     else if (!stale) setStatus({ state: status.state, error });

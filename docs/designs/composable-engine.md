@@ -1023,16 +1023,27 @@ type ClientErrorCode = "worker-stopped" | "worker-not-running" | "unexpected-rep
     test fake can delay one page's text past the next one's. An `error` that
     names the open document's file settles its oldest waiting request; when
     none is waiting, it goes to the status, so it is still shown, as today.
-    A reply or error about a document opened earlier settles that request
-    with `stale-handle`, as `isAboutOlderFile` filtered (the filter now
-    lives only in the client). An `error` with no file (`unknown-request`)
-    settles nothing and goes to the status; like today's `error` handler, it
-    also ends `applying`.
+    Only the apply's own answer ends `applying`: an `applied` reply, or an
+    `error` that settles the apply. An error that settles another request,
+    such as a page that could not be drawn, leaves the apply running, so no
+    mark can be added and no second apply started until it answers (issue
+    [#23](https://github.com/Sahil333/redactorator/issues/23), fixed after
+    step 4: before, any error about the open file ended `applying`, and the
+    first apply's output could land as a second's, without the marks added
+    in between). A reply or error about a document opened earlier settles
+    that request with `stale-handle`, as `isAboutOlderFile` filtered (the
+    filter now lives only in the client). An `error` with no file
+    (`unknown-request`) settles nothing and goes to the status; it also ends
+    `applying`, since the request the worker could not read may be the
+    apply.
 *   **Limit: a request the worker cannot read is never settled.** The
     worker answers it with an `error` that names no file, so nothing says
     which request it was, and that request stays waiting. A later reply
     about the same file can then settle it in place of the request the
-    reply answers. Only a client bug can send such a request, since the
+    reply answers. If it was not the apply, ending `applying` lets a second
+    apply start while the first runs, and the first's output can land as
+    the second's, the race of issue #23; the output tag (section 6) closes
+    this from step 6b. Only a client bug can send such a request, since the
     client builds every request from typed values.
 *   **Stopping.** When the worker stops, every waiting request settles with
     the stop's code (`worker-stopped`, `unexpected-reply` or
@@ -1298,7 +1309,8 @@ unload flush, and the race. This design adds:
     [Implementation Plan](../Implementation-Plan.md).
 *   Issues [#13](https://github.com/Sahil333/redactorator/issues/13) (render
     queue) and [#14](https://github.com/Sahil333/redactorator/issues/14)
-    (image-check message).
+    (image-check message); [#23](https://github.com/Sahil333/redactorator/issues/23)
+    (an error during an apply let a second apply start; fixed after step 4).
 
 ## Future Improvements
 
@@ -2018,7 +2030,8 @@ project and folder tests are green.
     index to the id as before. Replies are matched by page as well as kind,
     an `error` about the open document that no waiting request matches goes
     to the status, and an unreadable request is never settled (Technical
-    Plan section 9).
+    Plan section 9). After step 4, in its own PR, an error ends `applying`
+    only when it settles the apply (issue #23).
     `isAboutOlderFile` is deleted from `pdf-protocol/parse.ts`, since its
     one check now lives in the client. `apply`'s bytes are
     `Uint8Array<ArrayBuffer>`, which the download's `Blob` and `writeWhole`

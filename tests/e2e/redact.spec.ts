@@ -21,12 +21,15 @@ import {
   type PointBox,
   downloadButton,
 } from "./app";
-import { delayApplied, tamperApply } from "./fakes";
+import { delayApplied, failRenderUntilApply, tamperApply } from "./fakes";
 import { judge } from "./oracle";
 
 // Geometry from tests/oracle/README.md, in the app's box convention.
 const okonkwo: PointBox = [459.8, 210.3, 479.0, 268.6];
 const imageLeftHalf: PointBox = [100, 200, 228, 392];
+// On page 1 of cross-page.pdf: "7731" in "Claim reference 7731…", and "Jane" ending "…signed by Jane".
+const claimNumber: PointBox = [160, 79.1, 186.7, 95.6];
+const jane: PointBox = [236.1, 99.1, 262.1, 115.6];
 
 test("a marked word is removed from the file, boxed, and its neighbours stay put", async ({ page }) => {
   await openApp(page);
@@ -272,4 +275,28 @@ test("changing a mark while apply runs drops the output that arrives after", asy
   await expect(page.getByRole("status")).toHaveText("Page 1 of 1");
   await expect(page.getByText("Checked:")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Apply and check" })).toBeEnabled();
+});
+
+test("an error about another request while apply runs leaves the apply running, and the output shown has every mark", async ({ page }) => {
+  await delayApplied(page, 2000);
+  const asked = await failRenderUntilApply(page, 1, "Page 2 could not be drawn. Open the PDF again.");
+  await openApp(page);
+  await openPdf(page, crossPagePdf);
+  await markText(page, 1, claimNumber, "Other");
+  await page.locator("#page-2").scrollIntoViewIfNeeded();
+  await asked();
+
+  await page.getByRole("button", { name: "Apply and check" }).click();
+
+  await expect(page.getByRole("alert")).toHaveText("Page 2 could not be drawn. Open the PDF again.");
+  // Until the apply answers, no mark can be added and no second apply started, so its output
+  // cannot land as a later one's.
+  await expect(page.getByRole("status")).toHaveText("Applying and checking…");
+  await expect(page.getByRole("button", { name: "Apply and check" })).toBeDisabled();
+  await expect(page.getByText("Checked:")).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to editing" }).click();
+  await markText(page, 1, jane, "Person");
+  const output = await applyAndDownload(page);
+  await judge(crossPagePdf, output, [{ check: "absent", values: ["7731", "Jane"] }]);
 });
