@@ -25,6 +25,7 @@ import {
   rotatedCroppedPdf,
   saved,
   showPageList,
+  standInForFolderPicker,
   storedNames,
   storedText,
   tablePdf,
@@ -263,6 +264,22 @@ test("a project open in another tab can't be renamed, duplicated, archived or de
   await other.reload();
   await expect(other.getByRole("listitem")).toHaveText([/^one-word/]);
   expect((await storedNames(page)).filter((name) => name !== ".redactorator")).toEqual(["one-word"]);
+});
+
+test("a change to a project that goes through clears the reason an earlier action failed", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await goHome(page);
+  await standInForFolderPicker(page, "Empty");
+  await page.getByRole("button", { name: "Import a project" }).click();
+  await expect(page.getByRole("alert")).toContainText("That folder holds no Redactorator project.");
+
+  await rowAction(page, "one-word", "Rename");
+  await page.getByRole("textbox", { name: "Project name" }).fill("Renamed");
+  await page.getByRole("textbox", { name: "Project name" }).press("Enter");
+
+  await expect(projectRow(page, "Renamed")).toBeVisible();
+  await expect(page.getByRole("alert")).toBeHidden();
 });
 
 test("a project open in another tab is not opened twice", async ({ page, context }) => {

@@ -10,6 +10,8 @@ export function gate({ library, session }: LibraryView, command: LibraryCommand,
   // A project opened or changed while projects move could be left behind in the old store.
   const { phase } = library.place;
   if (phase === "moving" || phase === "opening") return "busy-moving";
+  // A store still loading may yet have projects moved into it, under folder names a new project could take too.
+  if (phase === "loading" && (command === "create" || command === "import")) return "busy-moving";
   if (session !== undefined && (command === "open" || command === "create" || command === "switchTo")) return "session-open";
   if (library.settings.creating && (command === "open" || command === "create")) return "busy-creating";
   // This engine's own Session holds the lock, which would otherwise read as another tab's.

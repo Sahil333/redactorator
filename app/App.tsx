@@ -144,8 +144,9 @@ async function importProject(library: Library, pick: () => Promise<Store | undef
   } catch {
     error = { code: "import-failed" };
   }
+  const text = errorText(error);
   if (error === undefined) problem.drop();
-  else problem.raise(errorText(error));
+  else if (text !== undefined) problem.raise(text);
 }
 
 export function App() {
@@ -178,6 +179,8 @@ export function App() {
     if (facade !== undefined) void act(facade.library);
   };
   const projects = facade?.library.projects;
+  // A change that went through clears the app's own problem too; one that failed has a newer problem of the engine's.
+  const changed = (change: Promise<unknown> | undefined) => void change?.then(problem.drop);
 
   if (opened !== undefined && library !== undefined && interim !== undefined) {
     return (
@@ -217,10 +220,10 @@ export function App() {
         onImport: withLibrary((library) => importProject(library, projectsFolder.pickProjectToImport, problem)),
       }}
       onOpen={(listed) => void project.open(listed.id, "push")}
-      onRename={(listed, name) => void projects?.rename(listed.id, name)}
-      onDuplicate={(listed) => void projects?.duplicate(listed.id)}
-      onArchive={(listed, archived) => void projects?.archive(listed.id, archived)}
-      onDelete={(listed) => void projects?.remove(listed.id)}
+      onRename={(listed, name) => changed(projects?.rename(listed.id, name))}
+      onDuplicate={(listed) => changed(projects?.duplicate(listed.id))}
+      onArchive={(listed, archived) => changed(projects?.archive(listed.id, archived))}
+      onDelete={(listed) => changed(projects?.remove(listed.id))}
     />
   );
 }
