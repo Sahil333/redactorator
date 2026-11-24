@@ -1,4 +1,4 @@
-import { useImperativeHandle, useState, type Ref } from "react";
+import { useEffect, useImperativeHandle, useState, type Ref } from "react";
 import type { PageIndex } from "../engine/model/geometry";
 import { ApproveDialog } from "./ApproveDialog";
 import { baseName, download } from "./download";
@@ -12,7 +12,9 @@ import type { Tool } from "./marks";
 import { NotAdded } from "./NotAdded";
 import type { DocumentId, Project, ProjectDocument, Settings } from "../engine/model/project";
 import type { Refusal } from "../engine/api/errors";
-import type { Interim, StoredFiles, StoredProject } from "../engine/host-browser/interim";
+import type { Engine, Session } from "../engine/api/facade";
+import type { SessionState } from "../engine/api/state";
+import type { Interim, StoredFiles } from "../engine/host-browser/interim";
 import type { Appearance } from "../engine/model/document";
 import { newFrom, reachOf } from "../engine/model/spread";
 import type { Store } from "../engine/storage/store";
@@ -32,16 +34,18 @@ import { initialWidths, Workspace, type Review } from "./Workspace";
 
 /** What the app asks of the open project before leaving it. */
 export interface ProjectHandle {
-  /** Saves every change so far: true once they all landed. */
-  save(): Promise<boolean>;
+  /** Resolves once no add or approval is under way, so each lands in the project before it closes. */
+  settled(): Promise<void>;
 }
 
 interface ProjectViewProps {
   readonly ref: Ref<ProjectHandle>;
-  readonly files: StoredFiles;
-  readonly intake: Interim["intake"];
+  readonly facade: Engine;
+  readonly session: Session;
+  /** The Session's part of the engine's state. */
+  readonly opened: SessionState;
+  readonly interim: Interim;
   readonly store: Store;
-  readonly initial: StoredProject;
   /** Files that could not be added when the project was made, still to be shown. */
   readonly initialRefused: readonly Refusal[];
   readonly engine: PdfEngine;
@@ -99,11 +103,9 @@ function PanelStrip({ panels, onToggle }: { readonly panels: Panels; readonly on
   );
 }
 
-const SAVE_FAILED = "Your latest changes could not be saved. Check that the disk has space; the next change tries again.";
-
 /** Why saving the project, approving, or something outside the project failed. */
 function Alerts({ saveFailed, problems }: { readonly saveFailed: boolean; readonly problems: readonly (string | undefined)[] }) {
-  return [saveFailed ? SAVE_FAILED : undefined, ...problems]
+  return [saveFailed ? errorText({ code: "save-failed" }) : undefined, ...problems]
     .filter((message) => message !== undefined)
     .map((message) => (
       <p key={message} role="alert" className="m-4 mb-0 rounded-md border border-mark/40 bg-fail-wash px-3 py-2 text-mark">
@@ -139,10 +141,10 @@ function useEditing(
   files: StoredFiles,
   store: Store,
   engine: PdfEngine,
+  { session, opened: { can }, onAppearance, onCustomType }: Pick<ProjectViewProps, "session" | "opened" | "onAppearance" | "onCustomType">,
   opened: ReturnType<typeof useProject>,
   active: DocumentId | undefined,
   settings: Settings,
-  { onAppearance, onCustomType }: Pick<ProjectViewProps, "onAppearance" | "onCustomType">,
   adding: boolean,
 ) {
   const approval = useApproval(files, store, opened, engine);
@@ -168,11 +170,11 @@ function useEditing(
   const step = (direction: "undo" | "redo") => () => {
     if (active === undefined) return;
     engine.discardOutput();
-    opened[direction](active);
+    session.history[direction](active);
   };
   const history: History | undefined = active && {
-    canUndo: !busy && opened.canUndo(active),
-    canRedo: !busy && opened.canRedo(active),
+    canUndo: !busy && can.undo.has(active),
+    canRedo: !busy && can.redo.has(active),
     onUndo: step("undo"),
     onRedo: step("redo"),
   };
@@ -258,35 +260,53 @@ function DocumentPanel({ active, shown, missing, pageInView, onPageInView, ...wo
 const addingUnless = (approving: boolean, adder: ReturnType<typeof useAddDocuments>) => (files: readonly File[]) =>
   approving ? adder.refuse(files, "add-while-approving") : adder.add(files);
 
+/** What may start now. Adding and approving each change the whole project, so neither starts while the other runs. */
+function allowed(engine: PdfEngine, adding: boolean, approving: boolean) {
+  const quiet = !adding && !approving;
+  return { canAdd: quiet && engine.state !== "stopped", canSwitch: engine.state !== "applying" && quiet };
+}
+
 function openInTabs(tabs: ReturnType<typeof useTabs>, documents: readonly ProjectDocument[]) {
   for (const document of documents) tabs.open(document.id);
   const [first] = documents;
   if (first !== undefined) tabs.open(first.id);
 }
 
+/** Saves every change so far when the page is left. */
+function useFlushOnLeave(session: Session) {
+  useEffect(() => {
+    const flush = () => void session.flush();
+    addEventListener("pagehide", flush);
+    return () => {
+      removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [session]);
+}
+
 /** An open project: its documents in the explorer and tabs, the open document's pages and marks. */
 export function ProjectView(props: ProjectViewProps) {
-  const { files, store, initial, engine, settings, labelling, onClose } = props;
-  const opened = useProject(files, store, initial);
+  const { interim, store, engine, settings, labelling, onClose } = props;
+  const files = interim.stored;
+  const opened = useProject(props.facade, props.session, props.opened, interim);
+  useFlushOnLeave(props.session);
   const { project } = opened;
   const tabs = useTabs(project.id, project.documents);
   const { active } = tabs;
   const activeDocument = documentOf(project, active);
   const { shown, missing } = useDocumentInEngine(files, store, opened.folder, activeDocument, engine);
-  const adder = useAddDocuments({ stored: files, intake: props.intake }, store, { folder: opened.folder, project }, engine, props.initialRefused, (documents) => {
+  const adder = useAddDocuments(interim, store, { folder: opened.folder, project }, engine, props.initialRefused, (documents) => {
     opened.addDocuments(documents);
     openInTabs(tabs, documents);
   });
-  const { marking, history, editing, tool, focus, labels, approval, images } = useEditing(files, store, engine, opened, active, settings, props, adder.adding);
+  const { marking, history, editing, tool, focus, labels, approval, images } = useEditing(files, store, engine, props, opened, active, settings, adder.adding);
   // Leaving waits for an add or an approval under way: it lands in the project before it is saved and let go.
-  useImperativeHandle(props.ref, () => ({ save: () => adder.settled().then(approval.settled).then(opened.save) }));
+  useImperativeHandle(props.ref, () => ({ settled: () => adder.settled().then(approval.settled) }));
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });
   const [pageInView, setPageInView] = useState<PageInView | undefined>(undefined);
   const [widths, setWidths] = useState(initialWidths);
-  // Adding and approving each change the whole project, so neither starts while the other runs.
-  const quiet = !adder.adding && !approval.working;
   const addFiles = addingUnless(approval.working, adder);
-  const canSwitch = engine.state !== "applying" && quiet;
+  const { canAdd, canSwitch } = allowed(engine, adder.adding, approval.working);
   const byId = new Map(project.documents.map((document) => [document.id, document]));
   const openDocuments = tabs.tabs.flatMap((id) => byId.get(id) ?? []);
 
@@ -298,7 +318,7 @@ export function ProjectView(props: ProjectViewProps) {
         onProjects={onClose}
         saveState={opened.saveState}
         status={statusText(engine, shown, pageOf(pageInView, active))}
-        canAdd={quiet && engine.state !== "stopped"}
+        canAdd={canAdd}
         onAdd={addFiles}
         history={history}
         editing={shown !== undefined && engine.output === undefined ? editing : undefined}

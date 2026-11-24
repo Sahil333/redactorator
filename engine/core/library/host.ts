@@ -2,7 +2,7 @@ import type { IncomingFile } from "../../api/facade";
 import type { EngineState } from "../../api/state";
 import type { Intake } from "../intake";
 import type { LockPort } from "../ports";
-import type { OpenSession } from "../session/facade";
+import type { OpenSession, SessionHost } from "../session/facade";
 import type { LibraryChange } from "./changes";
 import type { LibraryParts } from "./slices";
 
@@ -13,10 +13,14 @@ export interface LibraryView {
   readonly session: OpenSession | undefined;
 }
 
-/** What the engine root gives the Library: its part of the state, the root dispatcher, the lock, and intake over the PDF worker. */
+/**
+ * What the engine root gives the Library: its part of the state, the root dispatcher, the lock,
+ * intake over the PDF worker, and what a Session it opens is given.
+ */
 export interface LibraryHost {
   state(): LibraryView;
   dispatch(change: LibraryChange, ...effects: (() => void)[]): void;
   readonly lock: LockPort;
   intake(files: readonly IncomingFile[]): Promise<Intake>;
+  readonly session: SessionHost;
 }

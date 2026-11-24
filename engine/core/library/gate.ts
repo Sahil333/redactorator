@@ -16,7 +16,7 @@ export function gate({ library, session }: LibraryView, command: LibraryCommand,
   // A project being made is written into the store in use, which a folder chosen now would leave behind.
   if (library.settings.creating && (command === "open" || command === "create" || command === "switchTo")) return "busy-creating";
   // This engine's own Session holds the lock, which would otherwise read as another tab's.
-  if (command === "manage" && session !== undefined && session.project.id === projectId) return "open-here";
+  if (command === "manage" && session !== undefined && session.session.projectId === projectId) return "open-here";
   return undefined;
 }
 

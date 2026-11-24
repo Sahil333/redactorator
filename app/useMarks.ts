@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { itemKey, nextId, type Mark } from "../engine/model/marks";
 import type { Pending } from "./marks";
-import type { ChangeKind } from "./useProject";
+import type { EditKind } from "../engine/host-browser/interim";
 import { builtInMarkTypes, customMarkType, type MarkType, type MarkTypeOption } from "../engine/model/markTypes";
 
 export type Marks = ReturnType<typeof useMarks>;
 
-export type MarksChange = (update: (current: readonly Mark[]) => readonly Mark[], kind: ChangeKind) => void;
+export type MarksChange = (update: (current: readonly Mark[]) => readonly Mark[], kind: EditKind) => void;
 
 const onItem = (mark: Mark, change: (each: Mark) => Mark) => (current: readonly Mark[]) =>
   current.map((each) => (itemKey(each) === itemKey(mark) ? change(each) : each));

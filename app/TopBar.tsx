@@ -4,7 +4,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { PickFiles } from "./PickFiles";
 import type { Tool } from "./marks";
 import type { ReviewState } from "../engine/model/project";
-import type { SaveState } from "./useProject";
+import type { SessionState } from "../engine/api/state";
 
 const tools: readonly { readonly id: Tool; readonly label: string }[] = [
   { id: "text", label: "Select text" },
@@ -40,7 +40,7 @@ interface TopBarProps {
   readonly labelling: boolean;
   readonly projectName: string;
   readonly onProjects: () => void;
-  readonly saveState: SaveState;
+  readonly saveState: SessionState["save"];
   readonly status: string;
   readonly canAdd: boolean;
   readonly onAdd: (files: readonly File[]) => void;
@@ -49,7 +49,7 @@ interface TopBarProps {
   readonly editing: Editing | undefined;
 }
 
-const saveText: Record<SaveState, string> = { saved: "Saved", saving: "Saving…", failed: "Not saved" };
+const saveText: Record<SessionState["save"], string> = { saved: "Saved", saving: "Saving…", failed: "Not saved" };
 
 function ToolPicker({ tool, onTool }: Pick<Editing, "tool" | "onTool">) {
   return (

@@ -1,4 +1,4 @@
-import type { Project, Settings } from "../model/project";
+import type { DocumentId, Project, Settings } from "../model/project";
 import type { EngineError } from "./errors";
 
 /** The engine's state: one immutable value, the same object until something changes. */
@@ -48,7 +48,11 @@ export type ProjectSummary =
   | { readonly folder: string; readonly unreadable: "damaged" | "newer" };
 
 export interface SessionState {
-  /** The project record, as stored when the project opened. */
+  /** The project record, with every change so far; it is saved as each change is made. */
   readonly project: Project;
   readonly folder: string;
+  /** `failed` until the next write lands: the next change, or a flush, tries again. */
+  readonly save: "saved" | "saving" | "failed";
+  /** The documents undo and redo can act on now, from the Session's gate. */
+  readonly can: { readonly undo: ReadonlySet<DocumentId>; readonly redo: ReadonlySet<DocumentId> };
 }

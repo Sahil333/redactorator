@@ -9,7 +9,10 @@ import { firstLibrary, library, type LibraryParts } from "./library/slices";
 import { pdfClient, type PdfClient, type WorkerStatus } from "./pdf-client/client";
 import type { LockPort, WorkerChannel } from "./ports";
 import { problems } from "./problems";
-import type { OpenSession } from "./session/facade";
+import type { SessionChange } from "./session/changes";
+import type { OpenSession, SessionHost } from "./session/facade";
+import { sessionState } from "./session/selectors";
+import { session as sessionParts } from "./session/slices";
 
 /** The engine root's state: the published state's parts, with what stays inside. */
 interface Root {
@@ -20,10 +23,21 @@ interface Root {
   readonly session: OpenSession | undefined;
 }
 
-type Change = LibraryChange | { readonly type: "workerChanged"; readonly worker: EngineState["worker"] };
+type Change =
+  | LibraryChange
+  | { readonly type: "workerChanged"; readonly worker: EngineState["worker"] }
+  /** A change to the Session `from`'s part of the state. */
+  | { readonly type: "session"; readonly from: Session; readonly change: SessionChange };
 
 function reduce(root: Root, change: Change): Root {
   const revision = root.revision + 1;
+  if (change.type === "session") {
+    const open = root.session;
+    // Work a closed Session started never lands in the project open after it.
+    if (open?.session !== change.from) return root;
+    const parts = sessionParts(open.parts, change.change);
+    return parts === open.parts ? root : { ...root, revision, session: { ...open, parts } };
+  }
   const next =
     change.type === "workerChanged"
       ? { ...root, worker: change.worker }
@@ -51,7 +65,7 @@ function publish(root: Root): EngineState {
       can: can(root),
       ...(list.projects === undefined ? {} : { projects: list.projects }),
     },
-    ...(root.session === undefined ? {} : { session: { project: root.session.project, folder: root.session.folder } }),
+    ...(root.session === undefined ? {} : { session: sessionState({ worker: root.worker, parts: root.session.parts }, root.session.folder) }),
   };
 }
 
@@ -60,7 +74,7 @@ const workerOf = ({ state, error }: WorkerStatus): EngineState["worker"] => (err
 /** What the app's hooks that have not moved into the engine yet take from it (engine/host-browser/interim.ts). */
 export interface EngineInterim {
   readonly client: PdfClient;
-  /** The open Session's store, folder and project as read; undefined for a Session no longer open. */
+  /** The open Session's store and folder, and how the app's hooks land their changes; undefined for a Session no longer open. */
   opened(session: Session): OpenSession | undefined;
   /** Reads chosen files and has the PDF worker inspect them, for adding them to the open project. */
   intake(files: readonly IncomingFile[]): Promise<Intake>;
@@ -73,7 +87,11 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
   const root: Root = { revision: 0, worker: { status: "starting" }, problems: [], library: firstLibrary, session: undefined };
   const dispatcher = createDispatcher(root, reduce);
   const take = (files: readonly IncomingFile[]) => intake(files, client);
-  const { library: facade, addCustomType } = createLibrary({ state: dispatcher.getState, dispatch: dispatcher.dispatch, lock: start.lock, intake: take }, start);
+  const session: SessionHost = {
+    state: dispatcher.getState,
+    dispatch: (from, change, ...effects) => dispatcher.dispatch({ type: "session", from, change }, ...effects),
+  };
+  const { library: facade, addCustomType } = createLibrary({ state: dispatcher.getState, dispatch: dispatcher.dispatch, lock: start.lock, intake: take, session }, start);
   client.onStatus((status) => dispatcher.dispatch({ type: "workerChanged", worker: workerOf(status) }));
 
   let publishedFrom = dispatcher.getState();

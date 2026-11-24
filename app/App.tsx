@@ -100,14 +100,20 @@ function useOpenProject(facade: Engine | undefined, state: EngineState | undefin
     else if (how === "none") navigate("replace", homeAddress());
   }
 
-  /** False, and the project stays open, when its changes could not be saved. */
-  async function leave(how: Navigation): Promise<boolean> {
-    if (session === undefined) return true;
-    if (!((await projectRef.current?.save()) ?? true)) return false;
-    const closing = session.close();
+  const leaving = useRef<Promise<boolean>>(undefined);
+
+  async function close(opened: Session, how: Navigation): Promise<boolean> {
+    await projectRef.current?.settled();
+    if (!(await opened.close()).ok) return false;
     navigate(how, homeAddress());
-    await closing;
     return true;
+  }
+
+  /** False, and the project stays open, when its changes could not be saved. A second leave waits for the one under way. */
+  function leave(how: Navigation): Promise<boolean> {
+    if (session === undefined) return Promise.resolve(true);
+    leaving.current ??= close(session, how).finally(() => (leaving.current = undefined));
+    return leaving.current;
   }
 
   /** Back or Forward: leave the open project if the address no longer names it, then open the one it names. */
@@ -182,20 +188,21 @@ export function App() {
   // A change that went through clears the app's own problem too; one that failed has a newer problem of the engine's.
   const changed = (change: Promise<unknown> | undefined) => void change?.then(problem.drop);
 
-  if (opened !== undefined && library !== undefined && interim !== undefined) {
+  if (opened !== undefined && state?.session !== undefined && started !== undefined) {
     return (
       <ProjectView
         key={opened.folder}
         ref={project.projectRef}
-        files={interim.stored}
-        intake={interim.intake}
+        facade={started.engine}
+        session={opened.session}
+        opened={state.session}
+        interim={started.interim}
         store={opened.store}
-        initial={opened}
         initialRefused={project.carried}
         engine={engine}
-        settings={library.settings}
+        settings={state.library.settings}
         onAppearance={(appearance) => facade?.library.settings.update({ appearance })}
-        onCustomType={interim.addCustomType}
+        onCustomType={started.interim.addCustomType}
         labelling={labelling}
         problem={problem.shown(state)}
         onClose={() => void project.leave("push")}

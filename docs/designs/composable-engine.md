@@ -188,6 +188,7 @@ the code, not reproduced.
     | `bad-message` is split into five codes, each keeping today's sentence | 28 | No |
     | While approval works out what spreads, the page and the marks panel take no edits. Today they do, and approval works it out again (`useApproval.ts:42-46`) | 48 | Yes: marking waits for the approval search |
     | Adding documents is refused while a document is being applied, or while the heads-up is open. Today an add can start during an apply (`ProjectView.tsx:281, 295`) | 49 | Yes: Add is disabled during an apply |
+    | A closing Session takes no changes: while the save that leaving starts runs, Undo and Redo are disabled and a mark made then is dropped. Today it is kept, and saved perhaps after the lock is let go (owner, step 6a) | 4 | Yes, only while a slow save runs on leaving |
 
 *   **Changes to stored files.** No format version bump, no migration; the
     existing v1 and v2 migrations stay (decision 6).
@@ -554,7 +555,7 @@ interface Session {
     exportGroundTruth(document: DocumentId, facts: DocumentFacts): Result<GroundTruth>;
   };
   flush(): Promise<boolean>;                   // true once every change is written; no await before store.write
-  close(): Promise<Result<void>>;              // settles, saves, releases, refreshes the list
+  close(): Promise<Result<void>>;              // settles, saves, releases, starts listing the projects again
 }
 
 type TargetInput =
@@ -672,7 +673,10 @@ The rules:
    `EngineState` is a projection of the internal state plus the selectors:
    the output's bytes, the undo snapshots and the edit counters stay
    internal. A unit test dispatches from an effect and from a listener
-   (item 33).
+   (item 33). A Session's records reach the root as
+   `{ type: "session", from, change }`, naming the Session that dispatched
+   them; the root runs them through the Session's slices alone, and drops
+   one whose Session is no longer open (section 7).
 2. **Every state-changing command produces one typed change record**, built
    by the facade from the command and the current state, carrying everything
    any slice needs, for example `{ type: "markAdded", document, mark }` or
@@ -736,7 +740,7 @@ The rules:
 | `approval` | The plan waiting for confirmation | `planned`, `approved`, `approvalCancelled` |
 | `viewer` | The open-document handle, and the open document's page texts (internal) | `opened`, `pageTextLoaded` |
 | `output` | The cleaned file's bytes (internal) and its tag: document, edit counter, appearance | `applied`, `outputDiscarded`, `opened` |
-| `operation` | `idle`, `adding`, `planning`, `confirming` or `applying`, and the save state | the start and end record of each operation, `saved`, `saveFailed` |
+| `operation` | `idle`, `adding`, `planning`, `confirming` or `applying`, the save state, and whether the Session is closing | the start and end record of each operation, every record that changes the project record (the save state becomes `saving`), `saved`, `saveFailed`, `closeStarted`, `closeFailed` |
 
 `worker.status` is `applying` while the Session's `operation` is `applying`;
 gates read `operation`.
@@ -784,6 +788,11 @@ interface SessionState {
   newFrom: readonly string[];          // file names of the documents whose approval brought the open document's new marks
 }
 ```
+
+Until step 6b the engine knows no open document, so from 6a to 6b `can` is
+`{ undo: ReadonlySet<DocumentId>; redo: ReadonlySet<DocumentId> }`: the
+documents undo, or redo, may act on now (the gate allows it and there is a
+snapshot to go back to). Step 6b gives `can` its shape above.
 
 **Problems** keep today's rules (`App.tsx:138, 149`, `ProjectView.tsx:306`,
 `useProjectStore.ts:131-132, 199, 278`, `useApproval.ts:39`):
@@ -850,7 +859,9 @@ or confirming. `marks.add`, `history.undo`, `history.redo`, `output.apply`
 and `approval.plan` are also refused while the worker is starting or stopped
 (`worker-not-ready`), as `busy` does today (`ProjectView.tsx:161`), and
 `documents.add` while it is stopped (`ProjectView.tsx:295`). Undo while the
-app has a pending (untyped) mark is refused by the app.
+app has a pending (untyped) mark is refused by the app. Undo or redo with
+nothing to go back to is allowed and changes nothing, as today
+(`useProject.ts:104-128`).
 
 #### Session operation states
 
@@ -925,14 +936,24 @@ sequenceDiagram
     Session-->>App: error save-failed (the Session stays open)
   else saved
     Session->>Library: release the lock hold
-    Library->>Library: refresh the list
+    Library->>Library: start listing the projects again
     Session-->>App: ok
   end
 ```
 
+From `close` until it fails or the Session is gone, the Session is closing
+(`closeStarted`): it refuses every command but `flush` with `session-closed`,
+so a change made during the final save is dropped (Non-Goals). A failed
+save ends closing (`closeFailed`). `close` resolves once the lock is let go
+and the list is being read again, not once the list has landed: the app
+changes the address as soon as the project closes, so a project row opened
+next can never be navigated away from by a leave that finished after it.
+
 A closed Session refuses every command with `session-closed`. The dispatcher
 drops records from the effects of a Session that is no longer the open one,
 so work a closed Session started can never land in the next project.
+`interim`'s `replace`, `approve` and `addDocuments` (steps 6a to 6d) name
+their Session for the same reason.
 
 ### 8. The Library
 
@@ -1422,9 +1443,9 @@ app's not-yet-moved hooks what they took from today's modules:
 | `addCustomType(name)`, adding a custom type to the Library's settings | 5a | 6b |
 | `store()`, the Library's current store, for Home's create, changes and import while they stay in the app | 5a | 5b |
 | `intake` | 5b | 6d |
-| `replace(document, marks, shown, kind)`, dispatching a temporary `replaced` record | 6a | 6b |
-| `approve(pending)`, dispatching `approved` | 6a | 6c |
-| `addDocuments(added)`, dispatching `documentsAdded` | 6a | 6d |
+| `replace(session, document, marks, shown, kind)`, dispatching a temporary `replaced` record | 6a | 6b |
+| `approve(session, pending)`, dispatching `approved` | 6a | 6c |
+| `addDocuments(session, added)`, dispatching `documentsAdded` | 6a | 6d |
 | `readings`, giving `documentReadings` and `findPlaces` | 6b | 6d |
 
 Step 6d deletes the file, and `createBrowserEngine` returns the engine alone.
@@ -2324,6 +2345,24 @@ are green.
     `flush`, `close`. The change records `approved`, `documentsAdded` and
     `downloaded` also land now, because the adapter (item 40) dispatches them
     before their commands arrive.
+*   **As built** (owner, step 6a): `can.undo` and `can.redo` are the sets of
+    documents each may act on, until 6b's open document (section 6).
+    Undo and redo reach `marks` as a `restored` record built by `history`;
+    keeping link ids is the marks slice's rule. `operation` also holds
+    whether the Session is closing (`closeStarted`, `closeFailed`), which
+    the gate reads, so a closing Session refuses every command but `flush`
+    (section 7, Non-Goals). No `operation` value yet: no operation has moved.
+    The edit counters are kept from now, though nothing reads them before
+    6b's output slice. `close` resolves once the lock is let go and the list
+    is being read again (section 7). The gate refuses undo and redo with
+    `busy-applying` while `worker.status` is `applying`, until the Session's
+    own `applying` comes in 6b; with `unknown-document` for a document the
+    project does not hold; and with `session-closed` once closed or closing.
+    Session records reach the root naming their Session (section 5, rule 1),
+    and `LibraryHost` gains `session`, the host it hands each Session it
+    opens. `flush` keeps today's write chain: with no write in flight, the
+    write starts in a microtask of the same task, and `saveProject` calls
+    `store.write` at once.
 
 #### 40. `app/useProject.ts` (Modify into an adapter; deleted in step 6d); `engine/host-browser/interim.ts` (Modify)
 
@@ -2337,6 +2376,13 @@ are green.
     dispatch `approved` and `documentsAdded` through `interim`; `current`
     reads the state's record; `undo`, `redo`, `downloaded`, `save` call the
     Session.
+*   **As built** (owner, step 6a): `replace`, `approve` and `addDocuments`
+    take the Session first, so a late call from a project already left
+    never lands in the next one (section 7). The adapter has no `undo`,
+    `redo`, `canUndo`, `canRedo` or `save`: ProjectView calls
+    `session.history` and `App` calls `session.close` (item 41), so nothing
+    else called them. `current` reads the state's record only while its own
+    Session is open. `interim.stored` loses `saveProject`.
 
 #### 41. `app/ProjectView.tsx`, `app/TopBar.tsx`, `app/useUndoKeys.ts`, `app/App.tsx` (Modify)
 
@@ -2349,6 +2395,14 @@ are green.
     which now saves first. `TopBar.tsx` takes its save state type from
     `SessionState["save"]` in `engine/api` instead of `useProject.ts:7`'s
     `SaveState`.
+*   **As built**: `useUndoKeys.ts` needed no change: it reads `History`,
+    whose flags now come from `can`. `ProjectHandle` becomes `settled()`,
+    and `App`'s `leave` calls `session.close()`, navigating home once it is
+    ok; a second leave (Back during a slow save) waits for the one under
+    way. The `pagehide` listener also flushes when ProjectView unmounts, as
+    today. `app/errors.ts` gains `save-failed`. New browser test
+    (`saving.spec.ts`): "leaving a project saves it first, and while that
+    save runs the project takes no more changes".
 
 **Done when:** `history.spec.ts`, `saving.spec.ts` and the golden test are
 green.

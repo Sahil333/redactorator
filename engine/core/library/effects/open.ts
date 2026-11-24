@@ -33,9 +33,9 @@ export async function openProject(host: LibraryHost, listed: { readonly folder: 
     return { ok: false, error: { code: library.place.store === store ? "session-open" : "busy-moving" } };
   }
   if (current !== undefined && "project" in current && current.project.id === listed.id) {
-    const opened = openSession({ store, folder: listed.folder, project: current.project }, hold, async () => {
+    const opened = openSession(host.session, { store, folder: listed.folder, project: current.project }, hold, () => {
       host.dispatch({ type: "closed" });
-      await refresh(host);
+      void refresh(host);
     });
     host.dispatch({ type: "opened", session: opened });
     return { ok: true, value: opened.session };
