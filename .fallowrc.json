@@ -11,7 +11,9 @@
       { "name": "pdf-protocol", "patterns": ["engine/pdf-protocol/**"] },
       { "name": "api", "patterns": ["engine/api/**"] },
       { "name": "core", "patterns": ["engine/core/**"] },
-      { "name": "pdf", "patterns": ["engine/worker.ts", "engine/glyphs.ts", "engine/glyphs.test.ts"] },
+      { "name": "pdf-apply", "patterns": ["engine/pdf/apply.ts"] },
+      { "name": "pdf-write", "patterns": ["engine/pdf/write/**"] },
+      { "name": "pdf", "patterns": ["engine/pdf/**"] },
       { "name": "host-browser", "patterns": ["engine/host-browser/**"] },
       { "name": "app", "patterns": ["app/**"] },
       { "name": "tests", "patterns": ["tests/**"] }
@@ -21,7 +23,11 @@
       { "from": "storage", "allow": [] },
       { "from": "pdf-protocol", "allow": ["model"] },
       { "from": "api", "allow": ["model", "storage"] },
-      { "from": "core", "allow": ["model", "storage", "api", "pdf-protocol"] }
+      { "from": "core", "allow": ["model", "storage", "api", "pdf-protocol"] },
+      { "from": "pdf-apply", "allow": ["model", "pdf-protocol", "pdf", "pdf-write"] },
+      { "from": "pdf-write", "allow": ["model", "pdf-protocol", "pdf"] },
+      { "from": "pdf", "allow": ["model", "pdf-protocol", "pdf-apply"] },
+      { "from": "tests", "allow": ["model", "storage", "pdf-protocol", "api", "core", "pdf-apply", "pdf", "host-browser", "app"] }
     ]
   }
 }

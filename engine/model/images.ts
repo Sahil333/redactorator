@@ -96,3 +96,27 @@ export function placesOnCopies(anchor: ImageAnchor, images: readonly PlacedImage
 
 /** The key a box over an image spreads by. Text keys are folded to lower case, so none starts "Image". */
 export const imageKey = (anchor: ImageAnchor): string => `Image ${anchor.fingerprint} ${anchor.frame.join(" ")}`;
+
+// Images that can't be told apart from others are not listed, so a box over one stays put.
+export const MIN_IMAGE_SIDE = 32;
+/** How far apart, of 255, the darkest and lightest cells of the grey copy must be. */
+const MIN_IMAGE_CONTRAST = 12;
+export const GRID_COLUMNS = 9;
+export const GRID_ROWS = 8;
+
+/** The grid's difference hash (see `PlacedImage`), or undefined when it is too plain to tell apart. */
+export function fingerprintOf(cells: readonly number[]): string | undefined {
+  if (Math.max(...cells) - Math.min(...cells) < MIN_IMAGE_CONTRAST) return undefined;
+  let hex = "";
+  for (let row = 0; row < GRID_ROWS; row++) {
+    for (let half = 0; half < 2; half++) {
+      let nibble = 0;
+      for (let column = half * 4; column < half * 4 + 4; column++) {
+        const at = row * GRID_COLUMNS + column;
+        nibble = (nibble << 1) | ((cells[at] ?? 0) < (cells[at + 1] ?? 0) ? 1 : 0);
+      }
+      hex += nibble.toString(16);
+    }
+  }
+  return hex;
+}

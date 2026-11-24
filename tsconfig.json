@@ -18,5 +18,5 @@
     "noEmit": true
   },
   "include": ["app", "engine", "tests", "*.config.ts"],
-  "exclude": ["engine/model", "engine/storage", "engine/pdf-protocol", "engine/api", "engine/core", "engine/globals.ts"]
+  "exclude": ["engine/model", "engine/storage", "engine/pdf-protocol", "engine/api", "engine/core", "engine/pdf", "engine/globals.ts"]
 }
