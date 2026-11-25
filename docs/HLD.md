@@ -73,7 +73,7 @@ Each format gets one adapter that knows how to read it, how to remove content fr
 
 | Format | Read | Redact (remove for good) | Pseudonymise | Hidden carriers to scrub | Browser building block (candidate) |
 | --- | --- | --- | --- | --- | --- |
-| PDF, text-based | Glyph-level text with a box per character, all layers on, no clipping | Delete glyphs from the content stream, blank image pixels under the box, full rewrite of the file. Glyphs outside each box stay where they were | Remove as for redaction, then draw the surrogate fitted into the box with a fallback font | Our PDF leak-vector list (Implementation Plan, phase 3): metadata, XMP, annotations, form values, bookmarks, attachments, scripts, thumbnails, structure tree, ActualText, old revisions | MuPDF.js (MuPDF compiled to WebAssembly); PDF.js as an independent cross-check |
+| PDF, text-based | Glyph-level text with a box per character, as the page shows it (default layers, invisible OCR text included) | Delete glyphs from the content stream, blank image pixels under the box, full rewrite of the file. Glyphs outside each box stay where they were | Remove as for redaction, then draw the surrogate fitted into the box with a fallback font | Everything that does not change what a reader shows is removed by an allowlist of what each object needs to draw; visible form values and annotations are flattened into the page first. Our PDF leak-vector list (Implementation Plan, phase 3) is the test set | MuPDF.js (MuPDF compiled to WebAssembly) |
 | Image (PNG, JPEG, WebP; TIFF if MuPDF.js decodes it) and scanned PDF | OCR to words with boxes | Overwrite the pixels, re-encode from the pixel buffer, drop any OCR text layer under the box | Paint the box, draw the surrogate on it | EXIF, XMP, embedded thumbnails, trailing data after the image end marker | Tesseract.js for OCR; canvas for pixels |
 | DOCX | Walk the OOXML parts and map runs to character offsets: body, tables, headers, footers, footnotes, text boxes, comments | Rewrite run text in the XML; resolve tracked changes; drop comments and document properties | Replace run text, keeping the run's formatting | Core, app and custom properties; comments; tracked insertions and deletions; hidden text; field codes; hyperlink targets; alt text; custom XML; embedded objects; thumbnails; revision ids | A zip library and the browser's XML parser |
 | Text and Markdown | Read as is | Replace the span | Replace the span | None | None needed |
@@ -231,11 +231,11 @@ Limits to be honest about:
 
 ## Irreversibility and verification
 
-Redaction is trusted only after the written file is re-opened and searched for what was removed. Each adapter brings its own checks before it ships.
+Redaction is trusted only after the written file is re-opened and checked. Each adapter brings its own checks before it ships. For PDF (decided 25 Nov 2026), the app checks the writer's own guarantees with MuPDF alone, and the outside checker in our tests, which shares no code with the app, searches for the removed values.
 
 | Format | How content is destroyed | What the verifier checks on the written bytes |
 | --- | --- | --- |
-| PDF | Glyphs deleted from content streams, image pixels blanked, file fully rewritten as a single revision | No text under any box; removed values absent from two independent text extractors, metadata, links, annotations, form values, bookmarks and every raw object; no scripts, attachments or thumbnails; pattern detectors find nothing |
+| PDF | Visible form values and annotations flattened, glyphs deleted from content streams, image pixels blanked, everything off the allowlist removed, file fully rewritten as a single revision | In the app: one revision, no encryption, nothing outside the allowlist, no annotations or forms; no text under any box; no unmarked text removed or moved; image pixels blank under each box; no drawing partly under a box unless it is a single rectangle or straight line. In the tests: removed values absent from the text and every raw object under every stream filter |
 | Image | Pixels overwritten, image re-encoded from the pixel buffer | Redacted regions are uniform; no metadata blocks; no bytes after the image end marker; a second OCR pass finds no removed value |
 | DOCX | Run text rewritten, tracked changes resolved, comments and properties dropped, package rebuilt | Removed values absent from every XML part, relationship and binary part of the package; no comment or revision parts; pattern detectors find nothing |
 | Text | Span replaced | Removed values absent from the output |
@@ -341,7 +341,6 @@ The language is TypeScript (D1, decided); the table below records the options th
 | Concern | Candidate | Why | To confirm |
 | --- | --- | --- | --- |
 | PDF read, redact, rewrite | [MuPDF.js](https://github.com/ArtifexSoftware/mupdf.js) | Official WebAssembly build of MuPDF; has `applyRedactions` | The image-pixel redaction option; results on our PDF leak suite; the licence, below |
-| PDF cross-check | PDF.js text extraction | An independent second reader for the verifier |  |
 | OCR | [Tesseract.js](https://github.com/naptha/tesseract.js), Apache-2.0 | The engine used in the OCR spike, in WebAssembly | Speed and accuracy on real scans (D6) |
 | NER models | [Transformers.js](https://huggingface.co/docs/transformers.js/index) on ONNX Runtime; WebGPU with a WebAssembly fallback | Runs models in the browser with no server; quantised weights cut the download | Which models fit a browser (D5) |
 | DOCX | A zip library and the browser's XML parser | A DOCX is a zip of XML parts | Leak-vector list comes first |
@@ -433,12 +432,14 @@ Nine decisions are open; the first two shape everything else and are worth settl
 - **D9. Trust in served code:** MVP has public source, reproducible builds, a signed hash per release in a public log, and the release hash shown in the app. v1 adds a browser extension that checks served files against the log. An installable pinned build is not planned.
 - **D1. Implementation language:** TypeScript for the UI and the engine, calling the WebAssembly modules through their JavaScript APIs. The spikes measure speed and memory; they do not choose the language.
 - **D11. Working-set storage (21 Nov 2026):** JSON files and originals in a folder per set, behind one storage interface; a folder on the user's disk, the origin-private file system until one is picked; Chrome only in v1; no database engine; no encryption at rest and no vault passphrase in v1. Shown in the app as projects. Decisions spread when a document is approved.
+- **No second PDF reader in the app (24 Nov 2026):** the app reads, writes and checks PDFs with MuPDF.js only; PDF.js is not shipped. Independence comes from the outside checker that the tests run, which shares no code with the app or MuPDF. The per-export certificate (RED-4, P1) moves from phase 3 to v1.
+- **PDF leak suite (25 Nov 2026):** removal by allowlist; visible form values, annotations and signature stamps flattened, signature data stripped; hidden-layer and off-page text removed; invisible OCR text kept with marked values removed; XFA forms refused; a mark's text and boxes are its identity and its offsets are re-anchored whenever text is read differently. Text that is drawn but not seen (white, covered, clipped) is kept with marked values removed (issue #34).
 - **D5. Models in the browser:** chosen per device as Full, Standard or Basic detection (see Detection stack). The level is always shown to the user, who can choose a higher one. Which models fill the levels is still open (D10).
 
 | Technical risk | Effect | Mitigation |
 | --- | --- | --- |
 | Hosted code can change on any visit | The privacy claim rests on our release process | D9; no upload route; a strict Content Security Policy; a claim users can test offline |
-| A vector drawing only partly under a box stays in the file | MuPDF removes a path only when the box covers all of it (`REDACT_LINE_ART_REMOVE_IF_COVERED`, used since phase 1), so a box over most of a vector logo hides it on screen while its drawing commands remain under the box | A leak fixture in phase 3; then cut paths at the box edge, or remove every path the box touches and check what else that removes |
+| A vector drawing only partly under a box stays in the file | MuPDF removes a path only when the box covers all of it (`REDACT_LINE_ART_REMOVE_IF_COVERED`, used since phase 1), so a box over most of a vector logo hides it on screen while its drawing commands remain under the box | Phase 3 refuses a document when a box partly covers a drawing that is not a single rectangle or straight line, and asks the user to cover it fully. Cutting paths at the box edge is not planned (decided 25 Nov 2026) |
 | MuPDF.js leaves content behind or moves text after redaction | Redaction or scrubbing gaps; shifted layout | Our PDF leak suite (Implementation Plan, phase 3); a glyph-position test from phase 1; MuPDF.js pinned to an exact version |
 | Models are heavy for a browser | Slow first load, memory limits, weak devices without WebGPU | Patterns work at once; quantised models cached after first load; a device check picks the detection level and the app shows it |
 | Large files in a browser tab | Memory pressure or a crashed tab on long PDFs | Page-at-a-time processing in workers; progress saved per page |
@@ -470,4 +471,4 @@ External pages opened on 15 Nov 2026.
 - [MDN: storage quotas and eviction](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)
 - [Stripe subscriptions guide](https://docs.stripe.com/billing/subscriptions/build-subscriptions)
 
-Not verified against a primary source: the gitleaks rule count and TruffleHog's licence, both taken from third-party comparisons. Also unverified: that GLiNER2-PII runs in a browser, that MuPDF.js exposes image-pixel redaction, and that PDF.js is a good enough second extractor. The licence of every building block needs a check before launch.
+Not verified against a primary source: the gitleaks rule count and TruffleHog's licence, both taken from third-party comparisons. Also unverified: that GLiNER2-PII runs in a browser, and that MuPDF.js exposes image-pixel redaction. The licence of every building block needs a check before launch.

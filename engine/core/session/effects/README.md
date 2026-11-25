@@ -1,0 +1,105 @@
+# Session effects
+
+## Overview
+
+The asynchronous work behind the Session's commands: opening a document in the
+PDF worker, applying (writing the cleaned file), planning and confirming an
+approval, adding documents, reading stored readings, and saving the project
+record. Each effect receives its dependencies (store, folder, PDF client, the
+gate's `allowed`, `view`, `dispatch` and `change`, and for adding, `intake`,
+which reads the chosen files and has the PDF worker inspect them) from
+[`../facade.ts`](../facade.ts), and reports what happened as `SessionChange`
+records that the [slices](../slices/README.md) reduce.
+
+## Interface
+
+- `open.ts`
+  - `viewerOf(host)`: builds `Session["viewer"]` with `open`, `render`,
+    `pageText` and `images`.
+  - `staleHandle`: the `stale-handle` error result, shared with `apply.ts` and
+    the facade.
+- `apply.ts`
+  - `applyOutput(view, client, dispatch)`: writes and checks the open
+    document's cleaned file through `PdfClient.apply`.
+- `plan.ts`
+  - `approvalOf(host)`: builds `Session["approval"]` (`plan`, `confirm`,
+    `cancel`) plus `settled()`.
+- `add.ts`
+  - `adderOf(host)`: builds `documents.add` plus `settled()`.
+- `readings.ts`
+  - `ReadingSource`: `store`, `folder` and a `PdfClient` with `inspect`.
+  - `documentReadings(source, documents)`: each document's reading (page texts
+    and images); documents whose original is gone are left out.
+  - `imagesOf(source, document)`: a document's placed images.
+  - `findPlaces(client, keys, documents)`: every place `PdfClient.match` finds
+    each key in each document's text.
+- `save.ts`
+  - `saver({ store, folder, latest, dispatch })`: returns `flush()` and
+    `changed()` for one Session's project record.
+
+## Invariants
+
+- Every command built here first asks the gate through `allowed(...)` and
+  returns its refusal unchanged (`viewerOf`, `approvalOf`, `adderOf`).
+  `apply.ts:applyOutput` does not call the gate; the facade calls
+  `allowed("apply")` before it and passes the allowed view
+  (`facade.ts:openSession`, `output.apply`).
+- Opens are numbered; an open overtaken by a newer one never dispatches
+  `opened`. It returns `staleHandle` when it is overtaken after reading the
+  original or after `PdfClient.open` answers; a failed read
+  (`original-missing`) or a worker error is returned as is, even when a newer
+  open has started (`open.ts:viewerOf`, `latest`, `isLatest`).
+- Each page's text is fetched once per open document and cached as a promise
+  (`open.ts:viewerOf`, `texts`, `pageText`).
+- `images` returns success with no value when reading the images throws, so
+  the images are only not shown as such (`open.ts:viewerOf`, `images`).
+- `render` of `"output"` refuses when there is no valid output, and drops a
+  page that arrives after the output went out of date (`open.ts:render`,
+  `current`, using `selectors.ts:validOutput`).
+- The cleaned file is tagged with the document, its edit count and the
+  appearance at the time the apply started, so a change made during the write
+  leaves the output out of date (`apply.ts:applyOutput`, `OutputTag`). The
+  edits written are `document.marks.flatMap(toEdits)`.
+- An approval lands only on the project record it was worked out from: `run`
+  and `confirm` dispatch `approvalFailed` when the current record differs
+  (`plan.ts:approvalOf`). A plan with no changes elsewhere and nothing changed
+  in the approved document lands at once without a heads-up (`plan.ts:run`).
+- `confirm` and `cancel` act only on the waiting plan whose `planId` matches;
+  otherwise they return `no-plan` (`plan.ts:waiting`).
+- Adding searches for the project's hidden values before writing any file, so
+  no document joins without them spread in; a failed search or write refuses
+  every chosen file and adds none (`add.ts:run`, `add-search-failed`,
+  `add-save-failed`). Any other failure, such as `intake` rejecting, also
+  refuses every chosen file with `add-save-failed` (`add.ts:adderOf`).
+- Project saves run one after another, so an older project never lands after
+  a newer one; changes made during a save are saved together next, and a failed
+  save is retried by the next change or flush (`save.ts:saver`, `writing`,
+  `queued`, `unsaved`).
+- A reading that is missing or damaged is read again from the original through
+  `PdfClient.inspect`; a file written by a newer version is left alone
+  (`readings.ts:readingOf`, `"newer"`). A document whose original is gone has
+  no reading (`readings.ts:readingOf`).
+- `findPlaces` and `readingOf` throw `ReadingUnavailable` when the PDF worker
+  returns an error (`readings.ts`).
+
+## Side Effects
+
+- Storage reads through `Store` (via `engine/core/stored/projects`):
+  `readOriginal` (`open.ts`), `readTexts`, `readImages` and `findOriginal`
+  (`readings.ts`).
+- Storage writes through `Store`: `saveProject` (`save.ts`), `writeOriginals`
+  (`add.ts`), and `saveTexts` and `saveImages` when a reading is read again
+  (`readings.ts:readingOf`; a failed write there is ignored).
+- PDF worker calls through `PdfClient`: `open`, `text`, `render` (`open.ts`),
+  `apply` (`apply.ts`), `inspect` (`readings.ts`) and `match`
+  (`readings.ts:findPlaces`, used by `add.ts` and `plan.ts`).
+- Dispatches `SessionChange` records to the engine state, including
+  `opening`, `opened`, `pageTextLoaded`, `applyStarted`, `applied`,
+  `applyFailed`, `planning`, `planned`, `approved`, `approvalFailed`,
+  `approvalCancelled`, `addStarted`, `documentsAdded`, `addFailed`, `saved` and
+  `saveFailed`.
+- No network requests are made in this directory.
+
+## Verification
+
+- Run: `pnpm test`
