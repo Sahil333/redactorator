@@ -1229,6 +1229,329 @@ def marked_elsewhere(where: str) -> bytes:
         shown += f"/Span << /ActualText\0({value}) >> BDC 0 0 1 rg 72 600 100 100 re f EMC\n"
     return write_pdf(page_objects("/MediaBox [0 0 612 792]", stream("", shown.encode()), resources) + extra, "/Root 1 0 R")
 
+
+def one_image(dictionary: str, data: bytes, extra: list[bytes] | None = None) -> bytes:
+    """A page that draws one image XObject, object 6, whose dictionary and data are given; `extra` objects follow it."""
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", f"q {placed((100, 600, 228, 696))} cm /Im Do Q\n".encode()), "/XObject << /Im 6 0 R >>")
+    return write_pdf(objects + [stream(dictionary, data)] + (extra or []), "/Root 1 0 R")
+
+
+IMAGE_HEAD = f"/Type /XObject /Subtype /Image /Width {SPACES_SIZE[0]} /Height {SPACES_SIZE[1]} /BitsPerComponent 8"
+RGB_PIXELS = bytes((x * 8 + y * 3) % 256 for y in range(SPACES_SIZE[1]) for x in range(SPACES_SIZE[0]) for _ in range(3))
+GREY_PIXELS = bytes(min(255, x * 8) for _ in range(SPACES_SIZE[1]) for x in range(SPACES_SIZE[0]))
+
+
+# kept-names.pdf: free text in keys preparation keeps as they are, by decision ("What preparation
+# promises"): font, CMap and CID names, resource and glyph names, colorant names, an image's intent,
+# a palette and the file's ID. Names can't hold spaces, so values in names join their words with "_".
+KEPT = {"base-font": "Kept4400_8101", "font-name": "Kept4400_8102", "font-family": "Kept 4400 8103", "char-set": "Kept4400_8104",
+        "panose": "Kept44008105", "cmap-name": "Kept4400_8106", "registry": "Kept4400_8107", "ordering": "Kept4400_8108",
+        "font-resource": "Kept4400_8109", "graphics-state-resource": "Kept4400_8110", "colour-space-resource": "Kept4400_8111",
+        "pattern-resource": "Kept4400_8112", "shading-resource": "Kept4400_8113", "glyph-name": "Kept4400_8115",
+        "type3-glyph-name": "Kept4400_8116", "separation-colorant": "Kept4400_8117", "devicen-colorant": "Kept4400_8118",
+        "colorants-key": "Kept4400_8119", "halftone-colorant": "Kept4400_8120", "intent": "Kept4400_8122",
+        "palette": "Kept4400_8123xx", "file-id": "Kept4400_8124ab", "transfer": "Kept4400_8125", "black-generation": "Kept4400_8126",
+        "undercolour-removal": "Kept4400_8127", "halftone-name": "Kept4400_8128"}
+# A resource name step 5 renames, so it does not stay.
+RENAMED_RESOURCE = "Kept4400_8114"
+
+
+def kept_names() -> bytes:
+    v = KEPT
+    tint = "<< /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [0 0 1] /N 1 >>"
+    halftone = "<< /Type /Halftone /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction /Round >>"
+    content = (
+        f"BT /{v['font-resource']} 12 Tf 72 740 Td (Kept names A) Tj ET\n"
+        "BT /Cid 12 Tf 72 710 Td <0024> Tj ET\n"
+        "BT /T3 12 Tf 72 680 Td (a) Tj ET\n"
+        f"q /{v['graphics-state-resource']} gs /{v['colour-space-resource']} cs 1 sc 72 600 50 50 re f Q\n"
+        "q /Gs2 gs /Gs3 gs /Gs4 gs /Gs5 gs 0 g 72 540 20 20 re f Q\n"
+        "q /DevN cs 1 sc 150 600 50 50 re f Q\n"
+        f"q /Pattern cs /{v['pattern-resource']} scn 230 600 50 50 re f Q\n"
+        f"q 300 600 50 50 re W n /{v['shading-resource']} sh Q\n"
+        f"q {placed((100, 400, 228, 496))} cm /{RENAMED_RESOURCE} Do Q\n"
+    )
+    resources = (
+        f"/Font << /{v['font-resource']} 4 0 R /Cid 6 0 R /T3 10 0 R >> "
+        f"/ExtGState << /{v['graphics-state-resource']} << /Type /ExtGState /TR /{v['transfer']} >> "
+        f"/Gs2 << /Type /ExtGState /BG2 /{v['black-generation']} >> /Gs3 << /Type /ExtGState /UCR2 /{v['undercolour-removal']} >> "
+        f"/Gs4 << /Type /ExtGState /HT /{v['halftone-name']} >> "
+        f"/Gs5 << /Type /ExtGState /HT << /Type /Halftone /HalftoneType 5 /Default {halftone} /{v['halftone-colorant']} {halftone} >> >> >> "
+        f"/ColorSpace << /{v['colour-space-resource']} [/Separation /{v['separation-colorant']} /DeviceRGB {tint}] "
+        f"/DevN [/DeviceN [/{v['devicen-colorant']}] /DeviceRGB {tint} << /Colorants << /{v['colorants-key']} [/Separation /Spot /DeviceRGB {tint}] >> >>] >> "
+        f"/Pattern << /{v['pattern-resource']} 12 0 R >> "
+        f"/Shading << /{v['shading-resource']} << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [300 600 350 650] /Function {tint} >> >> "
+        f"/XObject << /{RENAMED_RESOURCE} 13 0 R >>"
+    )
+    descriptor = "/Type /FontDescriptor /Flags 32 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80"
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()), resources)
+    objects[3] = (f"<< /Type /Font /Subtype /Type1 /BaseFont /{v['base-font']} /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding "
+                  f"/Differences [65 /{v['glyph-name']}] >> /FirstChar 32 /LastChar 126 /Widths [{' '.join(['500'] * 95)}] /FontDescriptor 11 0 R >>").encode()
+    objects += [
+        b"<< /Type /Font /Subtype /Type0 /BaseFont /CidFont /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 9 0 R >>",
+        f"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /CidFont /CIDSystemInfo << /Registry ({v['registry']}) "
+        f"/Ordering ({v['ordering']}) /Supplement 0 >> /FontDescriptor 8 0 R /DW 600 >>".encode(),
+        f"<< {descriptor} /FontName /CidFont /Style << /Panose ({v['panose']}) >> >>".encode(),
+        stream(f"/Type /CMap /CMapName /{v['cmap-name']} /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >>",
+               b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap 1 begincodespacerange <0000> <FFFF> endcodespacerange "
+               b"1 beginbfchar <0024> <0041> endbfchar endcmap CMapName currentdict /CMap defineresource pop end end"),
+        f"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /{v['type3-glyph-name']} 14 0 R >> "
+        f"/Encoding << /Type /Encoding /Differences [97 /{v['type3-glyph-name']}] >> /FirstChar 97 /LastChar 97 /Widths [1000] /Resources << >> >>".encode(),
+        f"<< {descriptor} /FontName /{v['font-name']} /FontFamily ({v['font-family']}) /CharSet (/{v['char-set']}) >>".encode(),
+        stream("/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >>", b"0 0 1 rg 0 0 5 5 re f"),
+        stream(f"{IMAGE_HEAD} /Intent /{v['intent']} /ColorSpace [/Indexed /DeviceRGB 4 ({v['palette']})]",
+               bytes(x // 8 for _ in range(SPACES_SIZE[1]) for x in range(SPACES_SIZE[0]))),
+        stream("", b"1000 0 d0 0 0 500 500 re f"),
+    ]
+    return write_pdf(objects, f"/Root 1 0 R /ID [({v['file-id']}) (Second4400_8124b)]")
+
+
+# drawings.pdf: a grid, a shaded band with hatching and a barcode, each with a value inside, for
+# boxes that cover some parts of a drawing wholly and others in part (Risks: the drawing rule).
+DRAWINGS = {"grid": "4400 8201", "shading": "4400 8202", "barcode": "4400 8203"}
+
+
+def drawings() -> bytes:
+    v = DRAWINGS
+    grid = "".join(f"{x} 600 m {x} 700 l " for x in range(72, 373, 100)) + "".join(f"72 {y} m 372 {y} l " for y in (600, 650, 700))
+    hatch = "".join(f"{x} 380 m {x + 60} 440 l " for x in range(72, 313, 10))
+    bars = "".join(f"{100 + 3 * i} 250 {1 + i % 2} 50 re " for i in range(40))
+    content = "".join([
+        line(72, 740, 12, "Drawings page"),
+        f"q 0.5 w {grid}S Q\n",
+        line(185, 668, 12, v["grid"]),
+        # A tick in the same cell, a drawing part that is neither a rectangle nor a line.
+        "q 2 w 240 672 m 248 662 l 266 690 l S Q\n",
+        "q 0.9 g 72 450 300 30 re f Q\n",
+        line(80, 460, 12, f"Shaded {v['shading']}"),
+        f"q 0.5 w {hatch}S Q\n",
+        f"q 0 g {bars}f Q\n",
+        line(110, 235, 12, v["barcode"]),
+    ])
+    return write_pdf(page_objects("/MediaBox [0 0 612 792]", stream("", content.encode())), "/Root 1 0 R")
+
+
+# layer-states.pdf: content and annotations on a layer that is off only by the default
+# configuration's /BaseState /OFF, and on a layer rule (an OCMD, /P /AllOn) that is not met.
+LAYER_STATES = {"base-state-annotation": "4400 8801", "rule-annotation": "4400 8802", "base-state-text": "4400 8803", "rule-text": "4400 8804"}
+
+
+def layer_states() -> bytes:
+    v = LAYER_STATES
+    free_text = "/Type /Annot /Subtype /FreeText /DA (/Helv 12 Tf 0 g) /F 4"
+    content = "".join([
+        line(72, 740, 12, "Layer states page"),
+        f"/OC /On BDC\n{line(72, 720, 12, 'Shown on a layer')}EMC\n",
+        f"/OC /Off BDC\n{line(72, 700, 12, f'Base {v['base-state-text']}')}EMC\n",
+        f"/OC /Rule BDC\n{line(72, 680, 12, f'Rule {v['rule-text']}')}EMC\n",
+    ])
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [6 0 R 7 0 R] /D << /BaseState /OFF /ON [6 0 R] >> >> >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> "
+        b"/Properties << /On 6 0 R /Off 7 0 R /Rule 8 0 R >> >> /Contents 5 0 R /Annots [9 0 R 10 0 R] >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        stream("", content.encode()),
+        b"<< /Type /OCG /Name (On) >>",
+        b"<< /Type /OCG /Name (Off) >>",
+        b"<< /Type /OCMD /OCGs [6 0 R 7 0 R] /P /AllOn >>",
+        f"<< {free_text} /Rect [72 600 300 630] /OC 7 0 R /AP << /N 11 0 R >> >>".encode(),
+        f"<< {free_text} /Rect [72 550 300 580] /OC 8 0 R /AP << /N 12 0 R >> >>".encode(),
+        appearance((228, 30), note(f"Base {v['base-state-annotation']}")),
+        appearance((228, 30), note(f"Rule {v['rule-annotation']}")),
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+def jpeg_thumbnail() -> bytes:
+    """A JPEG whose JFIF APP0 segment carries a 3 x 1 thumbnail, its nine RGB bytes a value."""
+    jpeg = encoded("JPEG", quality=90, subsampling=0)
+    app0 = 4 + int.from_bytes(jpeg[4:6], "big")
+    jfif = segment(0xE0, b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x03\x01" + b"4400 8301")
+    return one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /Filter /DCTDecode", jpeg[:2] + jfif + jpeg[app0:])
+
+
+# actual-text-only.pdf: text in a Type 3 font whose glyph names map to no Unicode, with no ToUnicode,
+# whose only reading is the ActualText around it. Step 5 removes the ActualText, so the text then
+# reads as other letters (Risks).
+ACTUAL_TEXT_ONLY = "4400 8401"
+# Where its glyphs are drawn, in user space: eight 10 pt squares from x 72, on the line at y 600.
+UNMAPPED_TEXT = (72, 598, 160, 612)
+
+
+def actual_text_only() -> bytes:
+    names = " ".join(f"/Gx{i}" for i in range(8))
+    procs = " ".join(f"/Gx{i} {7 + i} 0 R" for i in range(8))
+    content = line(72, 740, 12, "Unmapped text") + f"/Span << /ActualText ({ACTUAL_TEXT_ONLY}) >> BDC BT /T3 10 Tf 72 600 Td (abcdefgh) Tj ET EMC\n"
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()), "/Font << /F1 4 0 R /T3 6 0 R >>")
+    objects.append(f"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << {procs} >> "
+                   f"/Encoding << /Type /Encoding /Differences [97 {names}] >> /FirstChar 97 /LastChar 104 /Widths [{' '.join(['1100'] * 8)}] "
+                   "/Resources << >> >>".encode())
+    objects += [stream("", f"1100 0 0 0 1000 1000 d1 0 0 {200 + 100 * i} 1000 re f".encode()) for i in range(8)]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+def wide_letter_boxes() -> bytes:
+    """A sans-serif font, not embedded, declared half as wide again as Helvetica draws it: each letter's box
+    reaches past its ink (CUJ 8). Not named Helvetica, so every reader takes the declared widths."""
+    content = line(72, 700, 12, "Dear Jane Roe here")
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()))
+    widths = " ".join(str(round(HELVETICA.get(chr(code), 556) * 1.5)) for code in range(32, 127))
+    objects[3] = (f"<< /Type /Font /Subtype /Type1 /BaseFont /WideSans /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [{widths}] "
+                  "/FontDescriptor 6 0 R >>").encode()
+    objects.append(b"<< /Type /FontDescriptor /FontName /WideSans /Flags 32 /FontBBox [-166 -225 1000 931] /ItalicAngle 0"
+                   b" /Ascent 718 /Descent -207 /CapHeight 718 /StemV 88 >>")
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+def lzw_encode(data: bytes) -> bytes:
+    """LZW codes for `data` with no compression: a clear code, one 9-bit code a byte, a clear code
+    every 200 bytes so the codes stay 9 bits, then end of data."""
+    codes = []
+    for at in range(0, len(data), 200):
+        codes += [256, *data[at : at + 200]]
+    codes.append(257)
+    bits = "".join(f"{code:09b}" for code in codes)
+    bits += "0" * (-len(bits) % 8)
+    return bytes(int(bits[i : i + 8], 2) for i in range(0, len(bits), 8))
+
+
+def run_length_encode(data: bytes) -> bytes:
+    return b"".join(bytes([len(data[at : at + 128]) - 1]) + data[at : at + 128] for at in range(0, len(data), 128)) + b"\x80"
+
+
+# data-after-end-filters.pdf: four images whose data, under LZW, ASCII85, ASCIIHex and RunLength,
+# is followed by bytes no reader decodes, each holding a value.
+DATA_AFTER_END_FILTERS = {"LZWDecode": "4400 8701", "ASCII85Decode": "4400 8702", "ASCIIHexDecode": "4400 8703", "RunLengthDecode": "4400 8704"}
+DATA_AFTER_END_RECTS = {"LZWDecode": (100, 600, 228, 696), "ASCII85Decode": (300, 600, 428, 696),
+                        "ASCIIHexDecode": (100, 400, 228, 496), "RunLengthDecode": (300, 400, 428, 496)}
+
+
+def data_after_end_filters() -> bytes:
+    encoders = {"LZWDecode": lzw_encode, "ASCII85Decode": lambda data: base64.a85encode(data) + b"~>",
+                "ASCIIHexDecode": lambda data: data.hex().encode() + b">", "RunLengthDecode": run_length_encode}
+    names = list(DATA_AFTER_END_FILTERS)
+    content = "".join(f"q {placed(DATA_AFTER_END_RECTS[name])} cm /Im{i} Do Q\n" for i, name in enumerate(names))
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()), "/XObject << " + " ".join(f"/Im{i} {6 + i} 0 R" for i in range(len(names))) + " >>")
+    for name in names:
+        data = encoders[name](RGB_PIXELS) + f"Tail {DATA_AFTER_END_FILTERS[name]}".encode()
+        objects.append(stream(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /Filter /{name}", data))
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# name-trees.pdf: a catalog /Names with only a JavaScript tree and an appearance (AP) tree, so each
+# tree's kind is recorded on its own: scripts-actions, and app-data for any tree but Dests,
+# EmbeddedFiles and JavaScript.
+NAME_TREES = {"javascript": "4400 8705", "other": "4400 8706"}
+
+
+def name_trees() -> bytes:
+    v = NAME_TREES
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", line(72, 740, 12, "Name trees page").encode()))
+    objects[0] = b"<< /Type /Catalog /Pages 2 0 R /Names << /JavaScript << /Names [(js) 6 0 R] >> /AP << /Names [(ap) 7 0 R] >> >> >>"
+    objects += [f"<< /S /JavaScript /JS (app.alert\\('{v['javascript']}'\\)) >>".encode(),
+                appearance((228, 30), note(f"Appearance {v['other']}"))]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+def grey_array_soft_mask() -> bytes:
+    """An RGB image whose soft mask's colour space is the array [/DeviceGray], which reads as grey."""
+    return one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /SMask 7 0 R /Filter /FlateDecode", zlib.compress(RGB_PIXELS),
+                     [stream(f"{IMAGE_HEAD} /ColorSpace [/DeviceGray]", GREY_PIXELS, compress=True)])
+
+
+# Files step 7's allowlist deletes from, where a key can't be kept as it is.
+DELETED = {"wrong-type": "4400 8601", "jpx-parameters": "4400 8602", "postscript-left": "4400 8603"}
+
+
+def wrong_type_value() -> bytes:
+    """A page whose /Rotate, kept for a number, holds a string."""
+    return write_pdf(page_objects(f"/MediaBox [0 0 612 792] /Rotate ({DELETED['wrong-type']})", stream("", line(72, 740, 12, "Wrong type").encode())), "/Root 1 0 R")
+
+
+def jpx_parameters() -> bytes:
+    """A JPEG 2000 image with parameters for JPXDecode, which takes none."""
+    return one_image(f"/Type /XObject /Subtype /Image /Width {SPACES_SIZE[0]} /Height {SPACES_SIZE[1]} /Filter /JPXDecode "
+                     f"/DecodeParms << /Note ({DELETED['jpx-parameters']}) >>", without_comments(encoded("JPEG2000", no_jp2=True)))
+
+
+def postscript_left() -> bytes:
+    """A PostScript XObject with no /Subtype2 in the page tree's own resources, which no page draws, so
+    step 5's filter never meets it; it fits two roles we delete."""
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", line(72, 740, 12, "PostScript left").encode()))
+    objects[1] = b"<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /XObject << /PS1 6 0 R >> >> >>"
+    objects.append(stream("/Type /XObject /Subtype /PS", f"72 600 moveto (Client {DELETED['postscript-left']}) show".encode()))
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+def refused_font(font: str) -> bytes:
+    """A page whose text is drawn in `font`."""
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", line(72, 740, 12, "Refused font").encode()))
+    objects[3] = font.encode()
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+def jpeg_without_end() -> bytes:
+    jpeg = encoded("JPEG", quality=90, subsampling=0)
+    return one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /Filter /DCTDecode", jpeg[: jpeg.rindex(b"\xff\xd9")])
+
+
+def jpeg_unwalkable() -> bytes:
+    """A JPEG with stray bytes between two of its segments, where a marker must start."""
+    jpeg = encoded("JPEG", quality=90, subsampling=0)
+    app0 = 4 + int.from_bytes(jpeg[4:6], "big")
+    return one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /Filter /DCTDecode", jpeg[:app0] + b"Stray 4400 8507" + jpeg[app0:])
+
+
+def codestream_without_end() -> bytes:
+    raw = without_comments(encoded("JPEG2000", no_jp2=True))
+    return one_image(f"/Type /XObject /Subtype /Image /Width {SPACES_SIZE[0]} /Height {SPACES_SIZE[1]} /Filter /JPXDecode", raw[: raw.rindex(b"\xff\xd9")])
+
+
+def jp2_without_codestream() -> bytes:
+    """A JP2 file with no codestream box. MuPDF can't read it, wherever it sits, so step 5 refuses it before
+    step 7's rule for it is reached."""
+    jp2 = encoded("JPEG2000")
+    return one_image(f"/Type /XObject /Subtype /Image /Width {SPACES_SIZE[0]} /Height {SPACES_SIZE[1]} /Filter /JPXDecode", jp2[: jp2.index(b"jp2c") - 4])
+
+
+def two_roles_reversed() -> bytes:
+    """two-roles.pdf with the soft mask's user drawn first, so the walk meets the shared image in the role
+    that keeps /Matte first."""
+    content = f"q {placed((300, 600, 428, 696))} cm /A Do Q\nq {placed((100, 600, 228, 696))} cm /B Do Q\n"
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()), "/XObject << /A 6 0 R /B 7 0 R >>")
+    objects += [
+        stream(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /SMask 7 0 R", RGB_PIXELS, compress=True),
+        stream(f"{IMAGE_HEAD} /ColorSpace /DeviceGray /Matte [0 0 0]", GREY_PIXELS, compress=True),
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# The files preparation refuses under a rule of Appendix A.1 or A.2 that no other fixture reaches,
+# each holding a value: refused, nothing of them is kept.
+REFUSED = {
+    "no-role": lambda: refused_font("<< /Type /Font /Subtype /Bogus /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Note (4400 8501) >>"),
+    "role-tie": lambda: refused_font("<< /Type /Font /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Note (4400 8502) >>"),
+    "wrong-element": lambda: refused_font(f"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 34 "
+                                          "/Widths [278 (4400 8503) 355] >>"),
+    "parameters-without-filter": lambda: one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /DecodeParms << /Predictor 1 /Note (4400 8504) >>", RGB_PIXELS),
+    "crypt-filter": lambda: one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /Filter [/Crypt] /DecodeParms [<< /Type /CryptFilterDecodeParms /Name /Identity >>]",
+                                      RGB_PIXELS),
+    "filter-before-image-filter": lambda: one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /Filter [/CCITTFaxDecode /DCTDecode]",
+                                                    with_metadata(encoded("JPEG", quality=90, subsampling=0), "4400 8506", extra=False)),
+    "jpeg-unwalkable": jpeg_unwalkable,
+    "separation-soft-mask": lambda: one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /SMask 7 0 R", RGB_PIXELS, [
+        stream(f"{IMAGE_HEAD} /ColorSpace [/Separation /Spot /DeviceGray << /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>]", GREY_PIXELS)]),
+    "parameters-array-element": lambda: one_image(f"{IMAGE_HEAD} /ColorSpace /DeviceRGB /Filter [/ASCIIHexDecode /FlateDecode] "
+                                                  "/DecodeParms [<< /Note (4400 8509) >> null]", zlib.compress(RGB_PIXELS).hex().encode() + b">"),
+    "element-without-place": lambda: one_image(f"{IMAGE_HEAD} /ColorSpace [/ICCBased 7 0 R (4400 8510)]", RGB_PIXELS,
+                                               [stream("/N 3 /Alternate /DeviceRGB", b"not a profile")]),
+    "two-roles-reversed": two_roles_reversed,
+    "jpeg-without-end": jpeg_without_end,
+    "codestream-without-end": codestream_without_end,
+    "jp2-without-codestream": jp2_without_codestream,
+}
+
 if __name__ == "__main__":
     for name, build in [("one-word", one_word), ("image", image), ("rotated-cropped", rotated_cropped),
                         ("encrypted", encrypted), ("cross-page", cross_page), ("masked-image", masked_image),
@@ -1247,6 +1570,12 @@ if __name__ == "__main__":
                         ("two-roles", two_roles), ("jpx-data", jpx_data), ("data-after-end", data_after_end), ("tight-lines", tight_lines), ("inherited-text-state", inherited_text_state), ("shading-graphics-state", shading_graphics_state),
                         ("abbreviated-stream-keys", abbreviated_stream_keys), ("hybrid-xfa", hybrid_xfa), ("grey-soft-masks", grey_soft_masks), ("image-prefilters", image_prefilters), ("jpeg-extension", jpeg_extension), ("jpeg-long-adobe", jpeg_long_adobe), ("icc-under-dct", icc_under_dct), ("inline-jpeg", inline_jpeg),
                         ("tall-letter-boxes", tall_letter_boxes), ("signature-stroke", signature_stroke),
-                        *[(f"marked-{where}", lambda where=where: marked_elsewhere(where)) for where in MARKED]]:
+                        *[(f"marked-{where}", lambda where=where: marked_elsewhere(where)) for where in MARKED],
+                        ("kept-names", kept_names), ("drawings", drawings), ("layer-states", layer_states),
+                        ("jpeg-thumbnail", jpeg_thumbnail), ("actual-text-only", actual_text_only), ("wide-letter-boxes", wide_letter_boxes),
+                        ("data-after-end-filters", data_after_end_filters), ("name-trees", name_trees),
+                        ("grey-array-soft-mask", grey_array_soft_mask), ("wrong-type-value", wrong_type_value),
+                        ("jpx-parameters", jpx_parameters), ("postscript-left", postscript_left),
+                        *[(f"refused-{name}", build) for name, build in REFUSED.items()]]:
         (FIXTURES / f"{name}.pdf").write_bytes(build())
         print(f"wrote fixtures/{name}.pdf")

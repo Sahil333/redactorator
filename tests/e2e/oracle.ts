@@ -7,8 +7,14 @@ import { promisify } from "node:util";
 /** PDF user space as the outside checker reads it: points, origin bottom-left. */
 type UserBox = readonly [number, number, number, number];
 
+/** A box on a 1-based page, in PDF user space. */
+type Region = { readonly page: number; readonly box: UserBox };
+
 type OracleCheck =
   | { readonly check: "absent"; readonly values: readonly string[] }
+  | { readonly check: "kept"; readonly values: readonly string[] }
+  | { readonly check: "drawings"; readonly boxes: readonly Region[] }
+  | { readonly check: "glyphs-absent"; readonly regions: readonly Region[] }
   | { readonly check: "present"; readonly text: string }
   | { readonly check: "metadata" }
   | { readonly check: "covered"; readonly word: string }
@@ -17,7 +23,7 @@ type OracleCheck =
   | { readonly check: "unchanged"; readonly at: UserBox }
   | { readonly check: "image-metadata" }
   | { readonly check: "structure" }
-  | { readonly check: "rendered"; readonly exceptions?: readonly { readonly page: number; readonly box: UserBox }[] };
+  | { readonly check: "rendered"; readonly exceptions?: readonly Region[] };
 
 const oracleProject = new URL("../oracle", import.meta.url).pathname;
 const datasetProject = new URL("../../tools/dataset", import.meta.url).pathname;

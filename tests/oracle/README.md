@@ -2,8 +2,12 @@
 
 Judges every file the app exports, with tools that share no code with the app or
 MuPDF: pdfminer.six for text and geometry, Pillow for image pixels, PDFium
-(pypdfium2) to draw pages, and our own raw scan (`oracle/raw.py`) that inflates
-every stream and decodes every string.
+(pypdfium2) to draw pages, and our own raw scan (`oracle/raw.py`). The raw scan
+finds streams, their filters and strings with its own code, and decodes them with
+pdfminer's stream decoders: every stream through its chain of lossless filters,
+with each filter's output, its undecoded bytes and the bytes after its zlib data's
+end; every string as UTF-16 with or without a byte-order mark, UTF-8,
+PDFDocEncoding and Latin-1; and every name with its `#xx` escapes undone.
 
 ```
 uv run --project tests/oracle python -m oracle spec.json
@@ -18,18 +22,28 @@ Browser tests call it through `tests/e2e/oracle.ts`.
 { "input": "fixtures/one-word.pdf", "output": "/tmp/out.pdf", "checks": [ { "check": "metadata" } ] }
 ```
 
-| Check | Fields | Passes when |
-| --- | --- | --- |
-| `absent` | `values` | No value is in the output's text layer, any stream (inflated), any string object, or metadata. Whitespace is ignored, and strings in one stream are also joined, so text split across a `TJ` array is found |
-| `present` | `text` | The text is in the output's text layer (for example a `[PERSON]` label) |
-| `metadata` | — | No Info dictionary, no XMP, exactly one revision, and no encryption (which would hide streams from `absent`) |
-| `covered` | `word` | A filled shape in the output covers the word's box as pdfminer reads it in the input |
-| `positions` | `words` | Every glyph of the input outside the given words is in the output at the same place (0.5 pt) |
-| `pixels` | `region`, `mask`?, `at`? | Image pixels wholly inside the region are one colour; pixels wholly outside are unchanged. With `mask`, the image's soft mask is judged. With `at`, the image drawn over that box is judged; without it, the file must draw one image |
-| `unchanged` | `at` | Every pixel of the image drawn over `at` is as it was (within 8 levels) |
-| `structure` | — | Every key reachable from the trailer is one its type keeps: the type read from the vendored Arlington PDF Model (`vendor/arlington`), with a walker of its own (`oracle/structure.py`), and the keeps written there from the design's rules; it shares no code with the app's allowlist |
-| `image-metadata` | — | No JPEG holds an APPn segment other than Adobe's APP14, a comment segment, or bytes after its end-of-image marker, and no JPEG 2000 image holds a box other than those that draw it or a comment in its codestream; a JPEG under lossless filters such as a Flate layer is judged with that layer undone. It reads the images' own bytes with its own parser |
-| `rendered` | `exceptions`? | Every page, drawn by PDFium as for printing with annotations and form fields at 72 dpi, looks as it did (within 8 levels a channel), outside the exceptions: `{ "page": n, "box": [x0, y0, x1, y1] }`, a 1-based page and points from the drawn page's bottom-left corner |
+Each check has a sort (`CHECKS` in `oracle/__main__.py`). A **leak** check proves
+something is gone, so it fails on the uncleaned file; a **keep** check proves
+something stayed, so it passes there.
+
+| Check | Sort | Fields | Passes when |
+| --- | --- | --- | --- |
+| `absent` | leak | `values` | No value is in the output's text layer, or anywhere the raw scan reads: a stream at any stage of its decoding, a string, a name or metadata. Whitespace is ignored, and strings in one stream are also joined, so text split across a `TJ` array is found |
+| `metadata` | leak | — | No Info dictionary, no XMP, exactly one revision, and no encryption (which would hide streams from `absent`) |
+| `covered` | leak | `word` | A filled shape in the output covers the word's box as pdfminer reads it in the input |
+| `pixels` | leak | `region`, `mask`?, `at`? | Image pixels wholly inside the region are one colour; pixels wholly outside are unchanged. With `mask`, the image's soft mask is judged. With `at`, the image drawn over that box is judged; without it, the file must draw one image |
+| `structure` | leak | — | Every key reachable from the trailer is one its type keeps: the type read from the vendored Arlington PDF Model (`vendor/arlington`), with a walker of its own (`oracle/structure.py`), and the keeps written there from the design's rules; it shares no code with the app's allowlist. A soft mask keeps only a name as its colour space, and parameters need a filter at their place |
+| `image-metadata` | leak | — | No JPEG holds an APPn segment other than Adobe's APP14, a comment segment, or bytes after its end-of-image marker, and no JPEG 2000 image holds a box other than those that draw it or a comment in its codestream; a JPEG under lossless filters such as a Flate layer is judged with that layer undone. It reads the images' own bytes with its own parser |
+| `drawings` | leak | `boxes` | No drawing part lies wholly under a box, and a part a box covers in part is a single rectangle or straight line. A part is one subpath, as pdfminer splits a path at each move; its bounds are every point of its path, control points included, grown by half its line width when stroked. A filled rectangle the size of a box (within 0.5 pt) is the box itself |
+| `glyphs-absent` | leak | `regions` | No glyph's box has its centre inside a region, so text whose letters have no Unicode map is judged by where it is drawn |
+| `present` | keep | `text` | The text is in the output's text layer (for example a `[PERSON]` label) |
+| `kept` | keep | `values` | Each value is still somewhere the raw scan reads: a value kept by decision ("What preparation promises" in the design) is recorded where it stays |
+| `positions` | keep | `words` | Every glyph of the input outside the given words is in the output at the same place (0.5 pt) |
+| `unchanged` | keep | `at` | Every pixel of the image drawn over `at` is as it was (within 8 levels) |
+| `rendered` | keep | `exceptions`? | Every page, drawn by PDFium as for printing with annotations and form fields at 72 dpi, looks as it did (within 8 levels a channel), outside the exceptions |
+
+`boxes`, `regions` and `exceptions` are lists of `{ "page": n, "box": [x0, y0, x1, y1] }`:
+a 1-based page and points from the drawn page's bottom-left corner.
 
 A pixel's place on the page follows the matrix the image is drawn with, so a
 turned or resized image is judged where its pixels actually land. Images are read
@@ -114,15 +128,60 @@ rotation and crop applied):
 | `visibility-expression.pdf` | 612 × 792 | "Rule page" and a free-text note "On a rule" over `[72 600 300 630]` on a layer rule written as a `/VE` expression, which preparation refuses |
 | `tall-letter-boxes.pdf` | 612 × 792 | Helvetica under a font descriptor that declares its letters 2,000 units tall (`/Ascent 1000 /Descent -1000`): "Above the name" at x 72, baseline y 700, and "Dear Jane Roe here" 13 pt below ("Jane" at x 101.3–127.4). MuPDF's redaction removes a letter whose declared box meets the area, so removing "Jane" would also remove "name" above it (CUJ 8) |
 | `signature-stroke.pdf` | 612 × 792, two pages | Page 1: "Dear Jane Roe, thank you for writing to us." Page 2: "Signed" at x 100, baseline y 680, and a signature drawn as one stroke of four curves, 1.5 pt wide, from (100, 620) to (300, 605), whose control points reach x 100–300, y 560–690 (CUJ 3) |
+| `kept-names.pdf` | 612 × 792 | "Kept names A" and drawings that use free text in keys kept by decision: `Kept4400_81nn` as the font's `BaseFont`, `FontName`, `CharSet` and a `Differences` glyph name; `Kept 4400 8103` as `FontFamily`; a CID font's `Registry`, `Ordering` and `Panose` (`Kept44008105`); a ToUnicode `CMapName`; a Type 3 glyph name; the names content uses for a font, graphics state, colour space, pattern and shading; `Separation`, `DeviceN`, `Colorants` and type 5 halftone colorant names; an image's `Intent` and `Indexed` palette (`Kept4400_8123xx`); `TR`, `BG2`, `UCR2` and `HT` given as names; and the first `ID` string (`Kept4400_8124ab`). The image's own resource name, `Kept4400_8114`, is named anew by step 5 |
+| `drawings.pdf` | 612 × 792 | A grid of 0.5 pt lines over user space x 72–372, y 600–700, with `4400 8201` at x 185, y 668 and a 2 pt tick (240, 672)–(266, 690) in one cell; a grey band `[72 450 372 480]` with "Shaded 4400 8202" on it and 0.5 pt hatching from (x, 380) to (x + 60, 440) for x 72–312 every 10; a barcode of 40 bars, one path of `re` parts, over x 100–219, y 250–300, with `4400 8203` under it at y 235 |
+| `layer-states.pdf` | 612 × 792 | Layers `On` and `Off` under `/BaseState /OFF` with `/ON [On]`, and an OCMD `/P /AllOn` over both, not met. Page text "Base 4400 8803" on `Off` and "Rule 4400 8804" on the rule; free-text notes "Base 4400 8801" on `Off` over `[72 600 300 630]` and "Rule 4400 8802" on the rule over `[72 550 300 580]`, which PDFium draws |
+| `jpeg-thumbnail.pdf` | 612 × 792 | A 32 × 24 JPEG over `[100 600 228 696]` whose JFIF APP0 segment carries a 3 × 1 thumbnail, its nine bytes `4400 8301` |
+| `actual-text-only.pdf` | 612 × 792 | "Unmapped text", and eight 10 pt glyphs of a Type 3 font whose glyph names (`/Gx0`…) map to no Unicode, over user space `[72 598 160 612]`, inside `/ActualText (4400 8401)` |
+| `wide-letter-boxes.pdf` | 612 × 792 | "Dear Jane Roe here" at x 72, baseline y 700, in a font named `WideSans`, not embedded, whose `/Widths` are Helvetica's half as wide again: "Jane" at x 116.0–155.0 (app box y 79.1–95.6) |
+| `data-after-end-filters.pdf` | 612 × 792 | Four 32 × 24 RGB images whose data, under `LZWDecode`, `ASCII85Decode`, `ASCIIHexDecode` and `RunLengthDecode`, is followed by `Tail 4400 8701` to `8704`, over `[100 600 228 696]`, `[300 600 428 696]`, `[100 400 228 496]` and `[300 400 428 496]` |
+| `name-trees.pdf` | 612 × 792 | "Name trees page", and a catalog `/Names` holding only a `JavaScript` tree (`4400 8705`) and an `AP` tree whose appearance draws `4400 8706` |
+| `grey-array-soft-mask.pdf` | 612 × 792 | A 32 × 24 RGB image over `[100 600 228 696]` whose soft mask's colour space is the array `[/DeviceGray]` |
+| `wrong-type-value.pdf` | 612 × 792 | "Wrong type", on a page whose `/Rotate` holds the string `4400 8601` |
+| `jpx-parameters.pdf` | 612 × 792 | A 32 × 24 J2K codestream over `[100 600 228 696]` with `/DecodeParms << /Note (4400 8602) >>`, though `JPXDecode` takes none |
+| `postscript-left.pdf` | 612 × 792 | "PostScript left", and a PostScript XObject with no `/Subtype2`, showing `Client 4400 8603`, in the page tree's own resources, which no page draws |
+| `refused-no-role.pdf` | 612 × 792 | A font with `/Subtype /Bogus` and `/Note (4400 8501)`, which no font role fits; preparation refuses it |
+| `refused-role-tie.pdf` | 612 × 792 | A font with no `/Subtype` (`4400 8502`), which every font role fits equally; preparation refuses it |
+| `refused-wrong-element.pdf` | 612 × 792 | A font whose `/Widths` hold the string `4400 8503` among numbers; preparation refuses it |
+| `refused-parameters-without-filter.pdf` | 612 × 792 | An image over `[100 600 228 696]` with `/DecodeParms` (`4400 8504`) and no `/Filter`; preparation refuses it |
+| `refused-crypt-filter.pdf` | 612 × 792 | An image over `[100 600 228 696]` under `[/Crypt]` with Identity crypt-filter parameters; preparation refuses it |
+| `refused-filter-before-image-filter.pdf` | 612 × 792 | A JPEG with EXIF (`4400 8506`) under `[/CCITTFaxDecode /DCTDecode]`; preparation refuses it |
+| `refused-jpeg-unwalkable.pdf` | 612 × 792 | A JPEG with `Stray 4400 8507` between two segments, where a marker must start; preparation refuses it |
+| `refused-separation-soft-mask.pdf` | 612 × 792 | An RGB image whose soft mask is under a one-channel `Separation`; preparation refuses it |
+| `refused-parameters-array-element.pdf` | 612 × 792 | An image under `[/ASCIIHexDecode /FlateDecode]` whose `/DecodeParms` array gives `ASCIIHexDecode`, which takes none, `<< /Note (4400 8509) >>`; preparation refuses it |
+| `refused-element-without-place.pdf` | 612 × 792 | An image whose colour space `[/ICCBased s (4400 8510)]` has an element the model has no place for; preparation refuses it |
+| `refused-two-roles-reversed.pdf` | 612 × 792 | `two-roles.pdf` with the image whose soft mask the grey image is drawn first; preparation refuses it |
+| `refused-jpeg-without-end.pdf` | 612 × 792 | A JPEG with no end-of-image marker; preparation refuses it |
+| `refused-codestream-without-end.pdf` | 612 × 792 | A J2K codestream with no end-of-codestream marker; preparation refuses it |
+| `refused-jp2-without-codestream.pdf` | 612 × 792 | A JP2 file with no `jp2c` box, which MuPDF can't read; preparation refuses it at step 5 |
 
 ## Leak vectors
 
 `leak-vectors.json` lists ways a PDF can leak, each with a fixture, the mark a test makes
 and the checks that judge the output (fields as in `docs/designs/pdf-leak-suite.md`, Detailed
-item 28). `tests/e2e/leak-suite.spec.ts` runs one browser test per entry that makes a mark:
-the fixture is added, marked, written and judged. Entries that make none are what preparation
-alone must clean: one browser test per fixture adds it and judges the working copy the app
-stored, which is what a document with no marks downloads as. The list so far covers:
+item 28). Each entry expects one of three outcomes:
+
+- `"clean"`: the value is gone. `tests/e2e/leak-suite.spec.ts` runs one browser test per entry
+  that makes a mark: the fixture is added, marked, written and judged. Entries that make none
+  are what preparation alone must clean: one browser test per fixture adds it and judges the
+  working copy the app stored, which is what a document with no marks downloads as, and checks
+  that preparing it recorded each entry's kind.
+- `"kept"`: the value stays, by decision ("What preparation promises"), and its `kept` check
+  shows it is still in the working copy, so a change in what preparation keeps is seen.
+- `{ "refusal": code, "at": "add" | "preview" }`: the file is refused with that code's sentence
+  when it is added, or on Preview after its mark, and nothing is downloaded. Only refusals a
+  synthetic file reaches are listed; `text-moved`, `check-failed` and `apply-failed` are
+  reached through the fake worker (`tests/e2e/preview.spec.ts`), and `mark-lost` through edited
+  stored text (`tests/e2e/anchoring.spec.ts`).
+
+`tests/test_manifest.py` is the meta-test. It runs each entry's checks with its uncleaned
+fixture as both input and output, what an export would be if the app removed nothing. Every leak
+check must then fail, as its negative control, except `structure`, which may pass where the
+fixture holds only kept keys, as a guard on what the app writes; and an entry expecting `"clean"`
+needs at least one leak check that fails. A `"kept"` entry's checks all pass there. It also
+fails an entry with a malformed field, a check not in `CHECKS`, or no fixture file.
+
+The list covers:
 
 - what MuPDF patch 0003 changed on the write path: image redaction in CMYK, Indexed and
   Separation colour spaces, through a one-pixel image's soft mask and in an inline image, text
@@ -130,10 +189,27 @@ stored, which is what a document with no marks downloads as. The list so far cov
   `/P /AnyOff` layer rule;
 - the text step 5's content filter must drop from a content stream;
 - each preparation rule path: annotations deleted before flattening (hidden, not viewed, on a
-  layer that is off, pending redactions, pop-ups), flattened (comments, links, attachments),
-  and their flattened text marked; form fields, a hidden one and a signed signature, and a
-  flattened value marked; the carriers the allowlist deletes from the catalog, the page and an
-  image, and an earlier revision; keys that must be read as the model's alone, a rectangle that
-  is not four numbers, and a PostScript XObject; content on a layer that is off, beyond the crop box and the
-  media box; image pixels past the page's edge and outside a clip; and metadata inside JPEG
-  and JPEG 2000 data.
+  layer that is off by its group, by `BaseState /OFF` or by a rule, pending redactions,
+  pop-ups), flattened (comments, links, attachments), and their flattened text marked; form
+  fields, a hidden one and a signed signature, and a flattened value marked; the carriers the
+  allowlist deletes from the catalog, the page and an image, each name tree's kind, and an
+  earlier revision; keys that must be read as the model's alone, a rectangle that is not four
+  numbers, a value of a type the model does not allow, parameters for a filter that takes none,
+  and a PostScript XObject, drawn or left in the page tree's resources; content on a layer that
+  is off, beyond the crop box and the media box; image pixels past the page's edge and outside
+  a clip; metadata inside JPEG and JPEG 2000 data, a JFIF thumbnail included; and bytes after
+  the end of a Flate, LZW, ASCII85, ASCIIHex or RunLength stream;
+- the writer's line art: a grid, a shaded band with hatching, a barcode and a signature stroke
+  under a box, judged by `drawings`; text with no Unicode map under a box, judged by
+  `glyphs-absent`; and a font declaring its letters wider than drawn;
+- the free text in keys kept by decision: font, CMap and CID names, resource, glyph and colorant
+  names, an image's intent, a palette, graphics-state function names and the file ID;
+- one entry per refusal a synthetic file reaches: an XFA form, an encrypted file, a file with
+  no pages, each `prepare-failed` rule of Appendix A.1 and A.2, letters declared taller than
+  drawn (CUJ 8) and a partly covered drawing (CUJ 3).
+
+Two refusal rules have no entry: no array the walk reaches can hold a PostScript XObject, so
+"a role we delete met as an array element" can't be reached, and a JP2 file with no `jp2c` box
+is refused at step 5, where MuPDF fails to read it, before step 7's rule. The structural check's
+cases that only check mode reaches, a filter left ahead of image data and an `Encrypt` left in
+the trailer, are unit tests in `engine/pdf/allowlist.test.ts`.

@@ -74,6 +74,7 @@ test("a box over part of a drawing is refused until it covers the whole drawing;
   await judge(signatureStroke, output, [
     { check: "absent", values: ["Signed"] },
     { check: "structure" },
+    { check: "drawings", boxes: [{ page: 2, box: [80, 532, 330, 712] }] },
     { check: "rendered", exceptions: [{ page: 2, box: [80, 532, 330, 712] }] },
   ]);
 });
