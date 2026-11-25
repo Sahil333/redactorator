@@ -235,15 +235,15 @@ No real document was used. The probe scripts become the first fixtures
     - **Problem 2, stale page objects.** After flattening, the page objects
       already open still list the old annotations. The document has to be
       saved and opened again before redaction runs.
-    - **Not yet probed:** a signed signature widget. The patch spike probes it
-      (part 5), because CUJ 2 depends on it.
+    - **A signed signature widget keeps its stamp** (patch spike, below).
 *   **Text extraction replaces letters with ActualText.** If a passage is
     tagged "this reads as X", the app's text today is X, not the letters drawn
     on the page. The option `ignore-actualtext` reads the drawn letters.
     Phase 3 removes ActualText, so the reading uses that option.
 *   **Text outside the crop box is skipped by default.** With
     `mediabox-clip=no`, extraction also returns text off the page, or in the
-    gap between the crop box and the media box.
+    gap between the crop box and the media box. MuPDF 1.28.6 warns that
+    `mediabox-clip` is deprecated; `clip=no` sets the same flag.
 *   **Layers.** MuPDF reports each layer and whether it is on. Text extraction
     skips layers that are off. A device sees where a layer begins and ends, but
     not what is inside. Switching a layer on in memory is not saved into the
@@ -277,6 +277,160 @@ No real document was used. The probe scripts become the first fixtures
 *   **Invisible text.** A device sees invisible (render mode 3) text through
     `ignoreText` and visible text through `fillText`. Text extraction returns
     both.
+
+### The patch spike (slice 1)
+
+The spike ran on 25 Nov 2026, on synthetic PDFs only. Patch 0003 builds, and
+`vendor/mupdf/upstream/0003-repro.mjs` passes all its checks: each option on
+its own, and the three together with `clean,sanitize` as step 5 runs them.
+Every checked page renders byte for byte as before the save.
+
+The patch also edits code the app runs today: image redaction's pixel code
+moved into two helpers, the content filter that text redaction uses gained
+branches that only the new options turn on, and the layer rule fix below.
+- **The writer's output is unchanged.** A differential probe ran the calls of
+  `engine/pdf/write/redact.ts` on one synthetic page with MuPDF before and
+  after patch 0003. The page reaches every branch the patch edits on that
+  path:
+  - images in RGB, CMYK, Indexed and Separation colour spaces, an image mask,
+    a soft-masked image, the 1 x 1 masked image, a JPEG and an inline image;
+  - an image wholly covered, and one with two boxes;
+  - text in `Tj` and `TJ`, inside marked content, a layer that is off, a
+    clip and a Type 3 font.
+
+  The two outputs are byte for byte the same, apart from the file ID that
+  every save makes anew.
+- **The existing tests still pass.** The oracle-judged browser tests of image
+  redaction (`image.pdf` and `masked-image.pdf` in
+  `tests/e2e/redact.spec.ts`) pass on the rebuilt MuPDF.
+- **The layer rule fix changes what MuPDF draws and reads, not what it
+  writes.** The writer never asks what is hidden: with no usage,
+  `pdf_is_ocg_hidden` treats everything as shown. Text extraction and the
+  view do change for files with `/P /AllOn` or `/AnyOff` rules.
+- **Oracle-judged fixtures cover the edited branches** (the owner's call,
+  25 Nov 2026: only the fixtures slice 1's changes need, before slice 2).
+  `tests/oracle/leak-vectors.json` holds twelve entries, run by
+  `tests/e2e/leak-suite.spec.ts`:
+  - image redaction in CMYK, Indexed and Separation colour spaces, through a
+    one-pixel image's soft mask, and in an inline image
+    (`fixtures/image-spaces.pdf`);
+  - text redaction inside marked content with and without a property list,
+    after marked-content points, inside a clip, on a layer that is on, and
+    in a form XObject (`fixtures/marked-text.pdf`);
+  - a value on a `/P /AnyOff` rule that is met, which MuPDF used to hide, so
+    the user could not mark it (`fixtures/layer-rules.pdf`).
+
+  Two boxes on one image take one entry's single mark twice, so that case
+  is a browser test in `tests/e2e/redact.spec.ts`. Two edited branches have
+  no entry, and the differential probe covers both: Type 3 glyph
+  procedures, which redaction never filters (it runs with `recurse = 0`,
+  skipping patterns, soft masks and Type 3 fonts), and text on a layer that
+  is off, which the app cannot show or mark today. A further browser test
+  checks that content on a `/P /AllOn` rule that is not met is no longer
+  drawn. Both layer tests fail on the unpatched MuPDF.
+  The outside checker now also reads CMYK, Indexed, Separation and inline
+  images.
+  The stencil-mask branch was already judged (`signatures.pdf`).
+- **The text the content filter drops is judged too** (owner, 25 Nov 2026).
+  Seven entries, with no mark, plant a value in `fixtures/content-strings.pdf`
+  where no reader draws it: a BDC's ActualText, Alt and E, a DP's
+  properties, an extra key in an inline image's dictionary, a comment, and
+  an unknown operator's operand inside BX/EX. Until the app prepares files,
+  `tests/e2e/preparation-saves.spec.ts` puts the fixture through step 5's
+  and step 8's saves, and the outside checker judges step 8's file with
+  `absent` and `rendered`: every value is gone and the page draws the same.
+  Step 5's own file still holds the replaced content stream, unreferenced,
+  until step 8 drops it; step 8's file is what is stored (owner, 25 Nov
+  2026). The oracle's `rendered` check (pypdfium2) came forward from
+  slice 5 for this. Hidden
+  `/AllOn` content now stays in today's output unmarked, like any content on
+  a layer that is off, until slice 2's preparation drops it.
+
+*   **What the patch touches.** `source/pdf/pdf-op-filter.c` (hidden layers
+    and marked content), `source/pdf/pdf-clean.c` (pixel blanking, next to
+    image redaction, whose pixel code it now shares through two helpers),
+    `source/pdf/pdf-write.c` (the save options), `source/pdf/pdf-layer.c` (a
+    fix, below), `source/pdf/pdf-imp.h`, and `include/mupdf/pdf/interpret.h`
+    and `document.h`. Each option runs the sanitize filter, so it implies
+    `sanitize`.
+*   **`drop-hidden-oc` works as designed.** The filter sets the interpreter's
+    usage to "View", so it hides exactly what MuPDF hides when drawing. Text
+    after hidden text in the same text object keeps its place. How it
+    behaves at the edges:
+    - **A hidden clipping path is kept, painting nothing**, because MuPDF
+      still clips with it when drawing. Its outline stays in the file.
+    - **Hidden text in a clipping render mode** (`Tr` 4 to 7) is removed.
+      As when redaction removes such text, the filter then clips away
+      everything after it until the next `Q`. Visible text lost this way
+      makes step 9 refuse the document.
+    - **Content that is off only for viewing** (a group whose `/Usage`
+      says off for View but on for Print) is dropped.
+    - **An OCMD with a `/VE` expression** counts as visible, as MuPDF draws
+      it, so its content stays and the user sees it.
+*   **MuPDF judged two layer rules wrongly, and the patch fixes them.**
+    `pdf_is_ocg_hidden` treated `/P /AllOn` as on whenever any group was on,
+    and `/P /AnyOff` as off whatever the groups were. The view showed, and
+    `drop-hidden-oc` would have kept, content that should be hidden. Step 2
+    judges annotations by the specification, so the two would have
+    disagreed. The patch now tests every group as ISO 32000-2 8.11.2.2
+    defines, and a rule with no groups has no effect. This also changes what
+    the app draws for such files. The owner keeps it (25 Nov 2026).
+*   **`drop-mc-properties` works as designed**, and also turns a `DP` with
+    properties into an `MP`. Inline `DP` properties are content-stream data
+    that step 7's allowlist cannot reach. The owner confirmed this (25 Nov
+    2026).
+*   **`blank-unshown-pixels` works as designed.** It finds the clips with
+    MuPDF's own drawing: a device pass records every image placement and the
+    clips in force there, and the draw device then paints each image's shown
+    area in its own pixels. Clips that are not rectangles (a triangle in the
+    repro) blank exactly. A pixel counts as shown if it shows on screen or in
+    print, so a print-only annotation keeps its image's pixels. Images with
+    identical data are treated as one, which can only leave more pixels. How
+    it behaves at the edges:
+    - **The shown area is widened by one pixel**, so smooth scaling at a clip
+      edge looks the same.
+    - **Images drawn inside a tiling pattern** count as fully shown.
+    - **Images inside Type 3 glyphs** are not seen, and stay as they are.
+    - **A soft-mask group** counts as a rectangular clip at its bounds.
+    - **A blanked image is stored with Flate**, as image redaction stores
+      it. A blanked JPEG grows: five half-hidden 300 dpi scans went from
+      1.2 MB to 4.4 MB after step 8. Images with 16 bits per component come out with 8,
+      and indexed images in their base colour space, as with redaction.
+    - **Pixels placed only in hidden content** are kept until
+      `drop-hidden-oc`, in the same save, drops the placement. The image is
+      then used nowhere, and step 8's garbage collection removes it.
+    - **An image MuPDF cannot load** (an unknown colour space, say) cannot be
+      blanked, so the save fails and step 5 refuses the document. An image
+      whose data does not decode is drawn blank by MuPDF, and its data is
+      replaced by those blank pixels.
+*   **A signed signature widget keeps its stamp when flattened.** MuPDF calls
+    a signature signed when its `/V` is a `/Sig` dictionary, and never
+    re-synthesises a signed widget's look. After `bake`, the stamp "Digitally
+    signed by Jane Roe" is page content and page text, and renders exactly
+    as before. After a `garbage=4` save, the `/Sig` dictionary and the form
+    are gone. An **unsigned** signature widget renders differently: MuPDF
+    draws its own "sign here" look on screen, but `bake` flattens the stored
+    look. So the working copy can look different from the original view in
+    that box.
+*   **`bake` hides its own failures.** `pdf_bake_document` catches any error,
+    abandons its operation, and returns as if it worked. Slice 2 has to
+    check, after step 4, that no annotation or widget is left, and refuse
+    the document if one is.
+*   **A drawing wholly outside the page that turns a corner is kept** by step
+    6. `REDACT_LINE_ART_REMOVE_IF_COVERED` removes a part only when its bounds
+    fit inside one redaction area. A line from (-50, 10) to (10, -50), and an
+    L-shaped stroke round the bottom-left corner, lie wholly outside the page
+    but fit inside neither the left nor the bottom area, so both stay in the
+    file. Their bounds also overlap the page, so no test on bounds can tell
+    them from a drawing that shows. A square inside the corner, a square
+    left of the page, and a glyph past the corner are removed. The owner
+    accepts this (Risks).
+*   **`UserUnit` is applied by `page.getBounds()`.** A 612 x 792 page with
+    `/UserUnit 2` has bounds [0 0 1224 1584], so step 6's areas in page space
+    are right.
+*   **`saveToBuffer(...).asUint8Array()` is a view into MuPDF's memory**, and
+    goes stale when that memory grows. Opening it again needs a copy first
+    (`.slice()`).
 
 ## Decisions Made During Drafting and Review
 
@@ -502,7 +656,7 @@ The order of the steps matters:
    the crop box. Then add four redaction areas, one on each side of the
    visible page, each running from its edge out to ±100,000 pt. The areas are
    in MuPDF page space, the space of `page.getBounds()`, which already applies
-   `Rotate`, the crop box and `UserUnit`; the spike confirms `UserUnit`. Then
+   `Rotate`, the crop box and `UserUnit` (the spike confirmed `UserUnit`). Then
    call:
 
    `applyRedactions(false, REDACT_IMAGE_NONE, REDACT_LINE_ART_REMOVE_IF_COVERED, REDACT_TEXT_REMOVE)`
@@ -682,7 +836,7 @@ three run together in step 5's single save.
     (`pdf_is_ocg_hidden`), including layer rules;
   - the `/OC` markers around content that stays are removed.
 - **`drop-mc-properties`:** a `BDC` whose properties are not a layer reference
-  becomes a `BMC` with the same tag.
+  becomes a `BMC` with the same tag, and a `DP` becomes an `MP`.
 - **`blank-unshown-pixels`:** for each image, the pixels that no placement of
   that image shows are blanked. A placement shows the part of the image inside
   the crop box and inside every clip in force. The code reuses MuPDF's
@@ -1118,8 +1272,13 @@ tests.
 
 | Risk | Mitigation |
 | --- | --- |
-| The third MuPDF patch cannot be built as designed, and three guarantees rest on it | It is slice 1, before anything depends on it (part 5). If an option fails, the owner decides its replacement before slice 2 |
-| Flattening a signed signature widget drops the stamp | The patch spike probes it (part 5). CUJ 2 is a browser test |
+| The third MuPDF patch cannot be built as designed, and three guarantees rest on it | Built in slice 1, and all three options pass their repro checks (Probe Findings, patch spike) |
+| Flattening a signed signature widget drops the stamp | Probed in the spike: the stamp is kept and becomes page text. CUJ 2 is a browser test |
+| A drawing wholly outside the page that turns a corner survives step 6 (Probe Findings, patch spike) | Accepted by the owner (25 Nov 2026): it is a vector drawing only, never text or pixels, and rare. No check or refusal for it; tracked under cutting line art at the box edge (Future Improvements) |
+| Patch 0003 edits code the writer runs (image redaction's pixel code, and the content filter), so AGENTS.md asks for a leak fixture the outside checker judges | Oracle-judged leak-vector entries cover each edited branch and the corrected layer rules (Probe Findings, patch spike), and the writer's output is byte for byte unchanged on them |
+| `bake` fails without saying so, and a widget or annotation stays live in the working copy | Slice 2 checks after step 4 that none is left, and refuses the document if one is |
+| Blanked images make the working copy larger, since they are stored with Flate | Accepted as for image redaction; measured in the NFRs |
+| Preparing a file with many partly hidden scans runs out of WebAssembly memory | Measured in the NFRs (865 MB for 40 scans, against a 2 GB limit); the save then fails and preparation refuses the document, so nothing leaks. Today's image redaction grows the same way and peaks higher, so the owner accepts it (25 Nov 2026) |
 | The drawing rule refuses many ordinary files | Grids, shading and barcodes pass, because MuPDF judges each part. The grid, shading, barcode and signature-stroke fixtures measure it (Detailed item 29) |
 | Scanned pages with misplaced OCR boxes can leave parts of letters visible (#6), against PRD DOC-4 ("refused or flagged, never passed through silently") | Left to the OCR phase by the owner (25 Nov 2026). Recorded here as a known gap |
 | White, covered or clipped text keeps unmarked data (#34) | Out of Phase 3, named in the Overview, tracked in #34 |
@@ -1148,8 +1307,46 @@ tests.
     - Adding a file now includes preparation. Opening a project after a reader
       tag change re-prepares each document once.
     - Export no longer repeats preparation.
-    - The patch spike measures preparation time and peak memory on the largest
-      synthetic fixtures, and records them here before slice 2.
+    - **Measured in the patch spike** (25 Nov 2026), in Node 24 on an Apple
+      silicon Mac, with the patched MuPDF.js. Phase 3's own fixtures do not
+      exist yet, so the spike generated stress files. The times cover the
+      MuPDF steps 1 to 6 and 8. Step 7 (the allowlist) and step 9 (the
+      check) are not written yet. Peak memory is the process's maximum
+      resident size, which includes about 120 MB for Node and MuPDF alone.
+
+      | Synthetic file | Time | Peak memory |
+      | --- | --- | --- |
+      | 500 pages of text, each with a typed note and a filled field (0.7 MB) | 4.6 s, 2.5 s of it in `bake` | 183 MB |
+      | 20 full-page 300 dpi scans, all shown (4.8 MB) | 0.5 s | 180 MB |
+      | 5 such scans, half past the page edge (1.2 MB in, 4.4 MB out) | 1.8 s | 287 MB |
+      | 20 such scans (4.8 MB in, 17.9 MB out) | 7.1 s | 758 MB |
+      | 40 such scans (9.7 MB in, 35.9 MB out) | 14.0 s | 865 MB |
+
+      Without the patch's options, step 5 (`clean,sanitize` alone) takes
+      0.2 s on the text file and 0.01 s on the scans. Blanking costs about
+      0.35 s per blanked 300 dpi scan. Finding the placements draws every
+      page twice, for viewing and for printing. A fully shown image is not decoded.
+    - **Memory grows with the number of blanked images.** Natively, MuPDF
+      frees each image's decoded pixels, and the peak stays at 168 MB for 5
+      and for 20 such scans. In WebAssembly the heap never shrinks and
+      fragments around the compressed data kept for each image, so the
+      peak grows: by about 31 MB per scan up to 20, and 5 MB per scan from
+      20 to 40. MuPDF.js's heap stops at 2 GB, so a file with many more
+      partly hidden scans could fail to prepare and be refused. A first
+      version that kept each blanked image decoded reached 1.3 GB on 5
+      scans; the patch now keeps only the compressed data.
+    - **Today's image redaction grows the same way, and peaks higher.**
+      The writer's image pass (`REDACT_IMAGE_PIXELS`) with a box over each
+      scan's hidden half, then its save, on the same files:
+
+      | Half-hidden 300 dpi scans | Today's redaction, unpatched MuPDF | Today's redaction, patched MuPDF | `blank-unshown-pixels` |
+      | --- | --- | --- | --- |
+      | 5 | 392 MB | 391 MB | 287 MB |
+      | 20 | 784 MB | 784 MB | 758 MB |
+      | 40 | 1,348 MB | 1,349 MB | 865 MB |
+
+      The owner accepts the growth, since the unpatched MuPDF shows it too
+      (25 Nov 2026).
     - The worker holds one document per open file, as today: the working copy
       replaces the original.
 *   **Rollback:** an older build opens the project as it last saw it (part 3).
@@ -1181,7 +1378,9 @@ tests.
 *   **Flagging text whose only mapping was ActualText.**
 *   **Taking image fingerprints from the original image**, so box spreading
     matches cropped copies of the same image.
-*   **Cutting line art at the box edge**, if refusals prove common.
+*   **Cutting line art at the box edge**, if refusals prove common. It would
+    also remove a drawing that lies wholly outside the page but turns a
+    corner, which step 6 keeps (Probe Findings, patch spike).
 *   **Batch export.**
 
 --------------------------------------------------------------------------------
@@ -1195,11 +1394,11 @@ summary matches those tags.
 
 | Slice | Content | Items |
 | --- | --- | --- |
-| 1 | **The patch spike:** patch 0003, the rebuild, the hand-run repro scripts, and the probes for the signed widget and the straddling path. The existing browser tests must pass on the rebuilt MuPDF | 1–2 |
+| 1 | **The patch spike:** patch 0003, the rebuild, the hand-run repro scripts, and the probes for the signed widget and the straddling path. The existing browser tests must pass on the rebuilt MuPDF. The first leak-vector entries, for the write-path branches the patch edits, the corrected layer rules and the text the content filter drops, and the oracle's `rendered` check | 1–2, 27–29 and 31 (those entries and `rendered` only) |
 | 2 | **Preparation, reading, storage and anchoring:** the protocol change together with its test fakes, the golden files re-recorded, and the first anchoring test | 3–10, 12–24, 27–29 (preparation vectors only), 32 (first case), 33 (fakes and protocol) |
 | 3 | **The writer and the gate:** refusal codes and their app sentences, Preview, zero-mark export, `textMoved` removed | 11, 21 (`apply.ts`), 26 (refusal parts), 32 (second case), 33 (the rest) |
 | 4 | **The approval dialog:** removed kinds shown on approval | 21 (`plan.ts`), 25, 26 (dialog and status parts) |
-| 5 | **The rest of the leak suite:** the manifest, the meta-test, the remaining fixtures and `rendered`; every leak vector passes | 27–31 |
+| 5 | **The rest of the leak suite:** the manifest, the meta-test and the remaining fixtures; every leak vector passes | 27–31 |
 
 Slice 2 keeps `textMoved` next to the new `missingGlyphs` and `movedGlyphs`,
 so `write/check.ts` still builds. Slice 3 removes it. Slice 2's `fail()`
@@ -1214,11 +1413,14 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 
 *   **Type / Scope**: C patch to MuPDF 1.28.6, made with `git format-patch`
     (`build.sh` applies patches with `git am`). It touches
-    `source/pdf/pdf-op-filter.c`, the save-option parser in
-    `source/pdf/pdf-write.c`, and the headers that declare the filter and
-    write options (`include/mupdf/pdf/*.h`). The spike confirms the full list.
+    `source/pdf/pdf-op-filter.c`, `source/pdf/pdf-clean.c` (pixel
+    blanking), the save-option parser in `source/pdf/pdf-write.c`,
+    `source/pdf/pdf-layer.c` (the layer rule fix), `source/pdf/pdf-imp.h`,
+    and the headers that declare the filter and write options
+    (`include/mupdf/pdf/interpret.h`, `document.h`). Done in the spike.
 *   **Proposed Changes**: the three options of part 5: `drop-hidden-oc`,
-    `drop-mc-properties` and `blank-unshown-pixels`.
+    `drop-mc-properties` and `blank-unshown-pixels`, and the fix to layer
+    rules (Probe Findings, patch spike).
 
 #### 2. Vendored build files (Modify / Create) — slice 1
 
@@ -1618,7 +1820,7 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
       `statusText` show "Updating documents…" while `operation` is
       `"updating"`. `Workspace` passes the operation.
 
-#### 27. Outside checker files (Modify) — slices 2 and 5
+#### 27. Outside checker files (Modify) — slices 1, 2 and 5
 
 *   **Type / Scope**: Outside checker.
 *   **Files:**
@@ -1632,7 +1834,8 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
       name escapes, PDFDocEncoding, and UTF-16 without a byte-order mark. Its
       docstring changes.
     - **`checks.py`** gains `structure`, `drawings`, `glyphs-absent`,
-      `image-metadata` and `rendered`.
+      `image-metadata` and `rendered`. `rendered`, with `pypdfium2`, came
+      in slice 1 (owner, 25 Nov 2026).
       - `image-metadata` drops COM segments in every J2K codestream, raw or
         inside `jp2c`.
       - Each check is tagged `leak` or `keep` (part 9).
@@ -1646,7 +1849,7 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
       regions use `{ page: number /* 1-based */; box: UserBox }`, where
       `UserBox` is the oracle's existing bottom-left PDF user space.
 
-#### 28. `tests/oracle/leak-vectors.json` (Create) — slices 2 and 5
+#### 28. `tests/oracle/leak-vectors.json` (Create) — slices 1, 2 and 5
 
 *   **Type / Scope**: The leak-vector list.
 *   **Proposed Changes**: an array of entries:
@@ -1687,7 +1890,7 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     Entries start from the brainstorm's list (`concepts_brief.md`) and the
     probe cases, then the walk of the specification's object types.
 
-#### 29. `tests/oracle/make_fixtures.py` (Modify), fixtures (Create) — slices 2 and 5
+#### 29. `tests/oracle/make_fixtures.py` (Modify), fixtures (Create) — slices 1, 2 and 5
 
 *   **Type / Scope**: Synthetic fixtures.
 *   **Proposed Changes**:
@@ -1721,7 +1924,7 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     That each entry passes in the browser is enforced by
     `leak-suite.spec.ts`, inside `pnpm test`.
 
-#### 31. `tests/e2e/leak-suite.spec.ts` (Create) — slice 5
+#### 31. `tests/e2e/leak-suite.spec.ts` (Create) — slices 1 and 5
 
 *   **Type / Scope**: Browser tests.
 *   **Proposed Changes**: one test per entry in `leak-vectors.json`. Each test:
@@ -1732,6 +1935,9 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 
     Refusal entries assert the refusal's sentence from `app/errors.ts` at the
     stage in `expect`, and that nothing was downloaded.
+
+    Slice 1's version runs its entries through the preview download, as the
+    browser tests of redaction do. Slice 5 adds approval and refusal entries.
 
 #### 32. Anchoring and golden tests (Create / Modify) — slices 2 and 3
 

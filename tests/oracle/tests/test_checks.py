@@ -81,6 +81,47 @@ def test_pixels_judges_the_soft_mask_on_its_own():
         "the image under the box still has")
 
 
+def left_half(rect: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    x0, y0, x1, y1 = rect
+    return (x0, y0, (x0 + x1) // 2, y1)
+
+
+def test_pixels_reads_cmyk_indexed_separation_and_inline_images():
+    for at in (fx.SPACES_RECTS["Cmyk"], fx.SPACES_RECTS["Indexed"], fx.SPACES_RECTS["Separation"], fx.INLINE_RECT):
+        assert checks.pixels(fx.image_spaces(), fx.image_spaces(cleaned=True), left_half(at), at=at) == []
+        assert checks.pixels(fx.image_spaces(), fx.image_spaces(), left_half(at), at=at)[0].startswith(
+            "the image under the box still has")
+
+
+def test_pixels_judges_the_soft_mask_of_a_one_pixel_image():
+    at = fx.SPACES_RECTS["OnePixel"]
+    assert checks.pixels(fx.image_spaces(), fx.image_spaces(cleaned=True), left_half(at), mask=True, at=at) == []
+    assert checks.pixels(fx.image_spaces(), fx.image_spaces(), left_half(at), mask=True, at=at) != []
+
+
+def test_absent_and_positions_on_the_marked_text_and_layer_rule_fixtures():
+    for build, values in ((fx.marked_text, [value for _, value, _, _ in fx.MARKED_LINES] + [fx.MARKED_FORM[1]]),
+                          (fx.layer_rules, [fx.LAYER_SHOWN[1]])):
+        assert checks.absent(build(cleaned=True), values) == []
+        assert len(checks.absent(build(), values)) == 2 * len(values)
+        assert checks.positions(build(), build(cleaned=True), values) == []
+
+
+def test_absent_finds_values_hidden_in_a_content_stream():
+    values = list(fx.CONTENT_STRINGS.values())
+    assert checks.absent(fx.content_strings(cleaned=True), values) == []
+    assert len(checks.absent(fx.content_strings(), values)) == len(values)
+    assert checks.rendered(fx.content_strings(), fx.content_strings(cleaned=True), []) == []
+
+
+def test_rendered_compares_every_page_as_drawn():
+    assert checks.rendered(fx.one_word(), fx.one_word(), []) == []
+    # The cleaned file draws a box where "Jane Roe" was.
+    assert checks.rendered(fx.one_word(), fx.one_word(cleaned=True), [])[0].endswith("pixels of page 1 are drawn differently")
+    assert checks.rendered(fx.one_word(), fx.one_word(cleaned=True), [{"page": 1, "box": [95, 670, 160, 700]}]) == []
+    assert checks.rendered(fx.one_word(), fx.cross_page(), []) == ["the output has 3 pages, not 1"]
+
+
 # Where logo-b.pdf draws each image, in user space.
 LOGO_HALF = (100, 550, 244, 646)
 LOGO_TURNED = (304, 550, 400, 694)

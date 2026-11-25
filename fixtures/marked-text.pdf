@@ -1,0 +1,60 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [7 0 R] /D << /ON [7 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> /XObject << /Fm 6 0 R >> /Properties << /On 7 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 394 >>
+stream
+/Span <</Lang (en-GB)>> BDC
+BT /F1 12 Tf 72 700 Td (Tagged 4400 1111 here) Tj ET
+EMC
+/Artifact BMC
+BT /F1 12 Tf 72 680 Td (Header 4400 2222 here) Tj ET
+EMC
+/Pt <</Note (n)>> DP /Pt MP
+BT /F1 12 Tf 72 660 Td (Point 4400 3333 here) Tj ET
+q 60 630 420 30 re W n
+BT /F1 12 Tf 72 640 Td (Clipped 4400 4444 here) Tj ET
+Q
+/OC /On BDC
+BT /F1 12 Tf 72 620 Td (Layer 4400 5555 here) Tj ET
+EMC
+q /Fm Do Q
+
+endstream
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Length 51 >>
+stream
+BT /F1 12 Tf 72 600 Td (Form 4400 6666 here) Tj ET
+
+endstream
+endobj
+7 0 obj
+<< /Type /OCG /Name (On) >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000119 00000 n 
+0000000176 00000 n 
+0000000355 00000 n 
+0000000452 00000 n 
+0000000898 00000 n 
+0000001088 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1131
+%%EOF

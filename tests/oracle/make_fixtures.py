@@ -15,7 +15,9 @@ FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 # Helvetica advance widths (AFM, 1/1000 em) for the characters the fixtures mark.
 HELVETICA = {" ": 278, ",": 278, "a": 556, "e": 556, "n": 556, "o": 556, "k": 500, "w": 722,
              "r": 333, "D": 722, "J": 500, "R": 722, "O": 778, "A": 667, "c": 500, "u": 556,
-             "t": 278, "h": 556, "l": 222, "d": 556, ":": 278, "m": 833}
+             "t": 278, "h": 556, "l": 222, "d": 556, ":": 278, "m": 833,
+             "T": 611, "g": 556, "H": 722, "P": 667, "i": 222, "C": 722, "p": 556, "L": 556, "y": 500,
+             "F": 611, "S": 667, **{digit: 556 for digit in "0123456789"}}
 
 
 def width(text: str, size: float) -> float:
@@ -411,6 +413,153 @@ def unmatchable_images() -> bytes:
     return write_pdf(objects, "/Root 1 0 R")
 
 
+# image-spaces.pdf: one page of 32 x 24 images, 4 points a pixel, in the colour spaces image
+# redaction converts each its own way: CMYK (blanked to 0, as it is subtractive), Indexed
+# (blanked in its base RGB), Separation (blanked in CMYK, its alternate), and a 1 x 1 RGB image
+# whose shape lives in a 32 x 24 soft mask, where redaction blanks the mask, not the image.
+# Below them, a 32 x 24 RGB inline image.
+SPACES_SIZE = (32, 24)
+SPACES_RECTS = {"Cmyk": (100, 600, 228, 696), "Indexed": (300, 600, 428, 696),
+                "Separation": (100, 400, 228, 496), "OnePixel": (300, 400, 428, 496)}
+INLINE_RECT = (300, 200, 428, 296)
+SEPARATION = "[/Separation /Spot /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 0.2 0] /N 1 >>]"
+# Four colours, then white for a blanked pixel.
+PALETTE = bytes([200, 30, 40, 30, 120, 200, 240, 200, 40, 20, 20, 20, 255, 255, 255])
+
+
+def space_samples(space: str, blank_left_columns: int) -> bytes:
+    """The samples of one image; with `blank_left_columns`, those columns are white in its space."""
+    w, h = SPACES_SIZE
+
+    def sample(x: int, y: int) -> tuple[int, ...]:
+        blank = x < blank_left_columns
+        if space == "Cmyk":
+            return (0, 0, 0, 0) if blank else (x * 8, y * 10, 40 + (x + y) % 50, 20)
+        if space == "Indexed":
+            return (4,) if blank else ((x // 4 + y // 4) % 4,)
+        if space == "Separation":
+            return (0,) if blank else (40 + x * 6,)
+        if space == "Inline":
+            return (255, 255, 255) if blank else (x * 8, y * 10, 90)
+        # The soft mask: opaque where blanked, as image redaction leaves a mask.
+        return (255,) if blank else ((x * 7 + y * 11) % 256,)
+
+    return bytes(value for y in range(h) for x in range(w) for value in sample(x, y))
+
+
+def image_spaces(cleaned: bool = False) -> bytes:
+    w, h = SPACES_SIZE
+    blank = w // 2 if cleaned else 0
+    content = "".join(f"q {placed(rect)} cm /{name} Do Q\n" for name, rect in SPACES_RECTS.items())
+    content += (f"q {placed(INLINE_RECT)} cm BI /W {w} /H {h} /CS /RGB /BPC 8 /F /AHx ID "
+                f"{space_samples('Inline', blank).hex()}> EI Q\n")
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()),
+                           "/XObject << /Cmyk 6 0 R /Indexed 7 0 R /Separation 8 0 R /OnePixel 9 0 R >>")
+    head = f"/Type /XObject /Subtype /Image /Width {w} /Height {h} /BitsPerComponent 8"
+    objects += [
+        stream(f"{head} /ColorSpace /DeviceCMYK", space_samples("Cmyk", blank), compress=True),
+        stream(f"{head} /ColorSpace [/Indexed /DeviceRGB 4 <{PALETTE.hex()}>]", space_samples("Indexed", blank), compress=True),
+        stream(f"{head} /ColorSpace {SEPARATION}", space_samples("Separation", blank), compress=True),
+        stream("/Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB "
+               "/SMask 10 0 R", bytes([30, 60, 160])),
+        stream(f"{head} /ColorSpace /DeviceGray", space_samples("Mask", blank), compress=True),
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# marked-text.pdf: one account number a line, each inside a different construct that text
+# redaction carries through the content filter: marked content with a property list, a marked
+# point, a clip, a layer that is on, and a form XObject.
+MARKED_LINES = [
+    ("Tagged ", "4400 1111", " here", "/Span <</Lang (en-GB)>> BDC\n{}EMC\n"),
+    ("Header ", "4400 2222", " here", "/Artifact BMC\n{}EMC\n"),
+    ("Point ", "4400 3333", " here", "/Pt <</Note (n)>> DP /Pt MP\n{}"),
+    ("Clipped ", "4400 4444", " here", "q 60 {clip} 420 30 re W n\n{}Q\n"),
+    ("Layer ", "4400 5555", " here", "/OC /On BDC\n{}EMC\n"),
+]
+MARKED_FORM = ("Form ", "4400 6666", " here")
+MARKED_TOP = 700
+
+
+def marked_text(cleaned: bool = False) -> bytes:
+    def drawn(y: int, before: str, value: str, after: str) -> str:
+        return cleaned_line(72, y, 12, before, value, after) if cleaned else line(72, y, 12, before + value + after)
+
+    content = ""
+    for index, (before, value, after, wrap) in enumerate(MARKED_LINES):
+        y = MARKED_TOP - 20 * index
+        content += wrap.replace("{clip}", str(y - 10)).format(drawn(y, before, value, after))
+    content += "q /Fm Do Q\n"
+    form_y = MARKED_TOP - 20 * len(MARKED_LINES)
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()),
+                           "/Font << /F1 4 0 R >> /XObject << /Fm 6 0 R >> /Properties << /On 7 0 R >>")
+    objects[0] = b"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [7 0 R] /D << /ON [7 0 R] >> >> >>"
+    objects += [
+        stream("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >>",
+               drawn(form_y, *MARKED_FORM).encode()),
+        b"<< /Type /OCG /Name (On) >>",
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# layer-rules.pdf: content on layer rules (optional content membership dictionaries) over one
+# layer that is on and one that is off. Page 1's rule is /AnyOff, which is met because one layer
+# is off, so its line is shown. Page 2's rule is /AllOn, which is not met, so its line is hidden;
+# page 2 also draws a line on no layer, above it.
+LAYER_PAGE_TWO = (72, 740, 12, "Page two")
+LAYER_SHOWN = ("Statement ", "4400 7777", " here")
+LAYER_HIDDEN = ("Hidden ", "4400 8888", " here")
+
+
+def layer_rules(cleaned: bool = False) -> bytes:
+    shown = cleaned_line(72, 700, 12, *LAYER_SHOWN) if cleaned else line(72, 700, 12, "".join(LAYER_SHOWN))
+    page = ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> "
+            "/Properties << /Rule %d 0 R >> >> /Contents %d 0 R >>")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [8 0 R 9 0 R] /D << /ON [8 0 R] /OFF [9 0 R] >> >> >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        (page % (10, 6)).encode(),
+        (page % (11, 7)).encode(),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        stream("", f"/OC /Rule BDC\n{shown}EMC\n".encode()),
+        stream("", f"{line(*LAYER_PAGE_TWO)}/OC /Rule BDC\n{line(72, 700, 12, ''.join(LAYER_HIDDEN))}EMC\n".encode()),
+        b"<< /Type /OCG /Name (On) >>",
+        b"<< /Type /OCG /Name (Off) >>",
+        b"<< /Type /OCMD /OCGs [8 0 R 9 0 R] /P /AnyOff >>",
+        b"<< /Type /OCMD /OCGs [8 0 R 9 0 R] /P /AllOn >>",
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# content-strings.pdf: values hidden in a page's content stream, where no reader shows them:
+# marked-content properties (ActualText, Alt, E), a marked point's properties, an extra key in
+# an inline image's dictionary, a comment, and the operand of an unknown operator inside BX/EX.
+# The cleaned variant is the content as a correct clean writes it.
+CONTENT_STRINGS = {"actual-text": "4400 9001", "alt": "4400 9002", "expansion": "4400 9003",
+                   "point": "4400 9004", "inline-key": "4400 9005", "comment": "4400 9006",
+                   "unknown-operand": "4400 9007"}
+
+
+def content_strings(cleaned: bool = False) -> bytes:
+    v = CONTENT_STRINGS
+
+    def marked(tag: str, key: str, value: str) -> str:
+        return f"/{tag} BMC\n" if cleaned else f"/{tag} <</{key} ({value})>> BDC\n"
+
+    note = "" if cleaned else f" /Note ({v['inline-key']})"
+    content = "".join([
+        marked("Span", "ActualText", v["actual-text"]), line(72, 700, 12, "Shown line one"), "EMC\n",
+        marked("Figure", "Alt", v["alt"]), "0 0 1 rg 72 640 40 20 re f\nEMC\n",
+        marked("Span", "E", v["expansion"]), line(72, 600, 12, "Shown abbreviation"), "EMC\n",
+        "/Pt MP\n" if cleaned else f"/Pt <</Note ({v['point']})>> DP\n",
+        f"q 40 0 0 40 72 520 cm BI /W 2 /H 2 /CS /G /BPC 8{note} /F /AHx ID 00ff80c0> EI Q\n",
+        "" if cleaned else f"% {v['comment']}\n",
+        "BX EX\n" if cleaned else f"BX ({v['unknown-operand']}) Frob EX\n",
+        line(72, 480, 12, "Shown line two"),
+    ])
+    return write_pdf(page_objects("/MediaBox [0 0 612 792]", stream("", content.encode())), "/Root 1 0 R")
+
+
 def encrypted() -> bytes:
     import io
 
@@ -447,6 +596,8 @@ if __name__ == "__main__":
                         ("letter-a", lambda: letter(LETTER_A)), ("letter-b", lambda: letter(LETTER_B)),
                         ("line-feed-glyph", line_feed_glyph), ("tj-strings", tj_strings),
                         ("logo-a", logo_a), ("logo-b", logo_b), ("unmatchable-images", unmatchable_images),
-                        ("signatures", signatures), ("edit-locked", edit_locked)]:
+                        ("signatures", signatures), ("edit-locked", edit_locked),
+                        ("image-spaces", image_spaces), ("marked-text", marked_text), ("layer-rules", layer_rules),
+                        ("content-strings", content_strings)]:
         (FIXTURES / f"{name}.pdf").write_bytes(build())
         print(f"wrote fixtures/{name}.pdf")

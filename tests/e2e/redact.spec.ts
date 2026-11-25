@@ -141,6 +141,18 @@ test("a box over a masked image blanks the image and its mask under the box", as
   ]);
 });
 
+test("two boxes side by side over one image blank the pixels under both", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, imagePdf);
+  // The image's left half, drawn as two boxes: redaction blanks the second into the pixels the first left.
+  await drawBox(page, 1, [100, 200, 164, 392], "Photo");
+  await drawBox(page, 1, [164, 200, 228, 392], "Photo");
+
+  const output = await applyAndDownload(page);
+
+  await judge(imagePdf, output, [{ check: "pixels", region: [100, 400, 228, 592] }]);
+});
+
 test("a mark on one line keeps the line below, though their character boxes overlap", async ({ page }) => {
   await openApp(page);
   await openPdf(page, crossPagePdf);

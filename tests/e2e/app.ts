@@ -6,6 +6,8 @@ import { expect, type Locator, type Page } from "@playwright/test";
 export const twoPagePdf = new URL("../../fixtures/two-pages.pdf", import.meta.url).pathname;
 export const noPagesPdf = new URL("../../fixtures/no-pages.pdf", import.meta.url).pathname;
 export const oneWordPdf = new URL("../../fixtures/one-word.pdf", import.meta.url).pathname;
+/** A path under the repository, such as a leak-vector entry's fixture, as a file path. */
+export const fixturePath = (fixture: string) => new URL(`../../${fixture}`, import.meta.url).pathname;
 export const imagePdf = new URL("../../fixtures/image.pdf", import.meta.url).pathname;
 export const rotatedCroppedPdf = new URL("../../fixtures/rotated-cropped.pdf", import.meta.url).pathname;
 export const encryptedPdf = new URL("../../fixtures/encrypted.pdf", import.meta.url).pathname;

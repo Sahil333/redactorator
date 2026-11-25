@@ -14,7 +14,8 @@ from pdfminer.layout import LTChar, LTComponent, LTCurve, LTFigure, LTImage, LTL
 from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdfparser import PDFParser
 from pdfminer.pdftypes import resolve1
-from PIL import Image
+import pypdfium2
+from PIL import Image, ImageChops
 
 from . import raw
 
@@ -121,14 +122,44 @@ def positions(source: bytes, output: bytes, words: list[str]) -> list[str]:
     return reasons
 
 
-def colour_mode(space: object) -> str:
-    """The Pillow mode for a device or ICC-based colour space, by its number of components."""
+MODES = {1: "L", 3: "RGB", 4: "CMYK"}
+# With the short names an inline image may use.
+DEVICE_COMPONENTS = {"DeviceGray": 1, "DeviceRGB": 3, "DeviceCMYK": 4, "G": 1, "RGB": 3, "CMYK": 4}
+# An inline image's dictionary may use short keys.
+INLINE_KEYS = {"W": "Width", "H": "Height", "CS": "ColorSpace", "BPC": "BitsPerComponent", "IM": "ImageMask"}
+
+
+def components(space: object) -> int:
+    """The number of components of a device or ICC-based colour space."""
     space = resolve1(space)
     if isinstance(space, list) and resolve1(space[0]).name == "ICCBased":
-        components = resolve1(space[1]).attrs["N"]
-    else:
-        components = {"DeviceRGB": 3, "DeviceGray": 1}[space.name]
-    return {3: "RGB", 1: "L"}[components]
+        return resolve1(space[1]).attrs["N"]
+    return DEVICE_COMPONENTS[space.name]
+
+
+def colour_image(space: object, bits: int, size: tuple[int, int], data: bytes) -> Image.Image:
+    """An image's samples in its colour space, as a Pillow image."""
+    space = resolve1(space)
+    family = resolve1(space[0]).name if isinstance(space, list) else None
+    if bits == 1 and family is None and components(space) == 1:
+        # One bit a pixel, rows padded to a byte, as Pillow's "1" mode packs them.
+        return Image.frombytes("1", size, data)
+    if bits != 8:
+        raise LookupError(f"only 8-bit images are read, not {bits}-bit")
+    if family == "Indexed":
+        base, lookup = resolve1(space[1]), resolve1(space[3])
+        table = lookup.get_data() if hasattr(lookup, "get_data") else lookup
+        n = components(base)
+        return Image.frombytes(MODES[n], size, b"".join(table[i * n:(i + 1) * n] for i in data))
+    if family == "Separation":
+        alternate, tint = resolve1(space[2]), resolve1(space[3])
+        # Only the exponential tint transform (type 2): C0 + t^N (C1 - C0).
+        if resolve1(tint["FunctionType"]) != 2:
+            raise LookupError("only a type 2 tint transform is read")
+        c0, c1, n = resolve1(tint["C0"]), resolve1(tint["C1"]), resolve1(tint["N"])
+        values = bytes(round(255 * (a + (t / 255) ** n * (b - a))) for t in data for a, b in zip(c0, c1))
+        return Image.frombytes(MODES[components(alternate)], size, values)
+    return Image.frombytes(MODES[components(space)], size, data)
 
 
 Matrix = tuple[float, float, float, float, float, float]
@@ -149,18 +180,16 @@ def image_of(pdf: bytes, mask: bool = False, at: Box | None = None) -> tuple[Mat
         raise LookupError(f"expected one image, found {len(found)}")
     matrix, item = found[0]
     stream = resolve1(item.stream.attrs["SMask"]) if mask else item.stream
-    attrs = stream.attrs
+    attrs = {INLINE_KEYS.get(key, key): value for key, value in stream.attrs.items()}
     size = (resolve1(attrs["Width"]), resolve1(attrs["Height"]))
     filters = stream.get_filters()
-    if any(name.name == "DCTDecode" for name, _ in filters):
+    if any(name.name in ("DCTDecode", "DCT") for name, _ in filters):
         picture = Image.open(io.BytesIO(stream.get_rawdata()))
+    elif resolve1(attrs.get("ImageMask", False)):
+        # A stencil mask has no colour space: one bit a pixel, where to paint.
+        picture = Image.frombytes("1", size, stream.get_data())
     else:
-        # A stencil mask (ImageMask) has no colour space: one bit a pixel, where to paint.
-        mode = "1" if resolve1(attrs.get("ImageMask", False)) else colour_mode(attrs["ColorSpace"])
-        # One bit a pixel, rows padded to a byte, as Pillow's "1" mode packs them.
-        if mode == "L" and resolve1(attrs.get("BitsPerComponent", 8)) == 1:
-            mode = "1"
-        picture = Image.frombytes(mode, size, stream.get_data())
+        picture = colour_image(attrs["ColorSpace"], resolve1(attrs.get("BitsPerComponent", 8)), size, stream.get_data())
     return matrix, picture.convert("RGB")
 
 
@@ -201,6 +230,38 @@ def pixels(source: bytes, output: bytes, region: Box, mask: bool = False, at: Bo
         reasons.append(f"the image under the box still has {len(inside)} colours")
     if changed:
         reasons.append(f"{changed} image pixels outside the box changed")
+    return reasons
+
+
+def renders(pdf: bytes) -> list[Image.Image]:
+    """Each page as PDFium draws it for printing, annotations included, at 72 dpi."""
+    document = pypdfium2.PdfDocument(pdf)
+    return [page.render(scale=1, draw_annots=True, optimize_mode="print").to_pil().convert("RGB") for page in document]
+
+
+def rendered(source: bytes, output: bytes, exceptions: list[dict]) -> list[str]:
+    """Every page looks as it did, within 8 levels a channel, outside the `exceptions`.
+
+    An exception is `{"page": n, "box": [x0, y0, x1, y1]}`: a 1-based page and a box in points
+    from the drawn page's bottom-left corner."""
+    before, after = renders(source), renders(output)
+    if len(before) != len(after):
+        return [f"the output has {len(after)} pages, not {len(before)}"]
+    reasons = []
+    for number, (old, new) in enumerate(zip(before, after, strict=True), start=1):
+        if old.size != new.size:
+            reasons.append(f"page {number} is drawn at {new.size}, not {old.size}")
+            continue
+        changed = ImageChops.difference(old, new).point(lambda level: 255 if level > 8 else 0).convert("L")
+        changed = changed.point(lambda level: 255 if level else 0)
+        height = old.size[1]
+        for exception in exceptions:
+            if exception["page"] == number:
+                x0, y0, x1, y1 = exception["box"]
+                changed.paste(0, (int(x0), int(height - y1), int(x1) + 1, int(height - y0) + 1))
+        count = changed.histogram()[255]
+        if count:
+            reasons.append(f"{count} pixels of page {number} are drawn differently")
     return reasons
 
 

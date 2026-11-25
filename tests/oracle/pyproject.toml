@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
   "pdfminer.six==20260107",
   "pillow==13.0.0",
+  "pypdfium2==5.15.2",
 ]
 
 [dependency-groups]
