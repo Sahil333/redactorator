@@ -25,6 +25,7 @@ const SETTINGS_FORMAT = "redactorator-settings";
 // Version 1 (phase 2 slice 1) had no review states and no hidden values; version 2 (slice 2) no
 // image anchors, so its boxes are anchored when their document is next approved. From Phase 3 a
 // text piece may carry its letters; one without them, as every version 3 file before, reads as "".
+// A document may carry the removed kinds its approval dialog listed; one without, as before, lists none.
 const PROJECT_VERSION = 3;
 // Version 1 had no reader tag and no removed kinds; it is read only to migrate marks from it.
 const TEXT_VERSION = 2;
@@ -89,11 +90,12 @@ function parseMark(value: unknown, version: number): Mark | undefined {
 
 /** A document's review fields. Version 1 had none: its marks stay its own, and a marked document is in review. */
 function parseReview(value: Record<string, unknown>, version: number, marks: readonly Mark[]) {
-  if (version === 1) return { review: marks.length > 0 ? "in-review" : "not-started", download: "none", shown: [] } as const;
+  if (version === 1) return { review: marks.length > 0 ? "in-review" : "not-started", download: "none", shown: [], removedSeen: [] } as const;
   const review = oneOf(reviewStates, value.review);
   const download = oneOf(downloadStates, value.download);
   const shown = parseStrings(value.shown);
-  return review && download && shown && { review, download, shown };
+  const removedSeen = value.removedSeen === undefined ? [] : parseAll(value.removedSeen, parseRemovalKind);
+  return review && download && shown && removedSeen && { review, download, shown, removedSeen };
 }
 
 function parseDocument(value: unknown, version: number): ProjectDocument | undefined {

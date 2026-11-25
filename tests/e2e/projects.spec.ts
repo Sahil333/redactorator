@@ -633,15 +633,16 @@ test("leaving a project while documents are being added waits for them, so they 
 test("leaving a project while an approval is worked out waits for it, so it lands", async ({ page }) => {
   const release = await holdApprovalSearch(page);
   await openApp(page);
-  await openPdf(page, oneWordPdf);
-  await markText(page, 1, janeRoe, "Person");
+  // Preparing letter-a.pdf removes nothing, so its approval lands with no dialog.
+  await openPdf(page, letterA);
+  await markText(page, 1, aJaneRoe, "Person");
   await approveButton(page).click();
   await expect(approveButton(page)).toBeDisabled();
 
   await projectName(page).getByRole("link", { name: "Projects" }).click();
   await release();
 
-  await expect(projectRow(page, "one-word")).toContainText("1 of 1 approved");
+  await expect(projectRow(page, "letter-a")).toContainText("1 of 1 approved");
 });
 
 test("leaving a project with the approval heads-up open approves nothing", async ({ page }) => {

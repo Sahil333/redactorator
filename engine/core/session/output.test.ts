@@ -6,7 +6,7 @@ import type { SessionChange } from "./changes";
 import { sessionState } from "./selectors";
 import { firstParts, session } from "./slices";
 
-const document = (file: string): ProjectDocument => ({ id: newDocumentId(), file, sha256: "00", pages: 1, marks: [], review: "in-review", download: "none", shown: [] });
+const document = (file: string): ProjectDocument => ({ id: newDocumentId(), file, sha256: "00", pages: 1, marks: [], review: "in-review", download: "none", shown: [], removedSeen: [] });
 
 /** The Session's published state after `changes`, with the PDF worker ready. */
 function after(project: Project, changes: readonly SessionChange[]) {

@@ -1,5 +1,5 @@
 import type { Brand } from "./brand";
-import type { Appearance } from "./document";
+import type { Appearance, RemovalKind } from "./document";
 import type { ImageAnchor } from "./images";
 import type { Mark } from "./marks";
 import type { MarkType } from "./markTypes";
@@ -37,6 +37,8 @@ export interface ProjectDocument {
   readonly download: DownloadState;
   /** Keys of hidden values the user chose not to hide in this document ("Don't hide here"). */
   readonly shown: readonly string[];
+  /** What preparing it removed, by kind, as the approval dialog last listed it: a later approval lists only other kinds. */
+  readonly removedSeen: readonly RemovalKind[];
 }
 
 /**

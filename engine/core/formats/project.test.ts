@@ -45,7 +45,7 @@ describe("parseProject", () => {
     const anchored = first.marks.map((mark) => (mark.target.kind === "box" ? { ...mark, target: { ...mark.target, image } } : mark));
     const approved: Project = {
       ...project,
-      documents: [{ ...first, marks: anchored }, ...project.documents.slice(1)],
+      documents: [{ ...first, marks: anchored, removedSeen: ["metadata", "form-data"] }, ...project.documents.slice(1)],
       hidden: [
         { key: "jane roe", text: "Jane Roe", type: "person", from: first.id },
         { key: "Image 0f0f0f0f0f0f0f0f 0 0 0.9 1", text: "Box", type: "person", from: first.id, image },
@@ -103,6 +103,11 @@ describe("text pieces", () => {
 
   test("reads a piece stored without its letters as having none", () => {
     expect(pieceOf(parseProject(withPieces({ page: 0, start: 5, end: 9, boxes: [box] })))).toMatchObject({ pieces: [{ text: "" }] });
+  });
+
+  test("reads a document stored without the removed kinds its approval listed as having listed none", () => {
+    const project = parseProject(withPieces({ page: 0, start: 5, end: 9, boxes: [box], text: "Jane" }));
+    expect(typeof project === "string" ? project : project.documents[0]?.removedSeen).toEqual([]);
   });
 
   test("reads back a piece's letters", () => {

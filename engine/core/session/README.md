@@ -63,7 +63,9 @@ parts into the published `SessionState`.
   own codes (`gate.ts:addRefused`).
 - While documents are prepared again for this build, `add`, `mark`, `history`,
   `open`, `apply`, `approve`, `confirm`, `addDocuments` and `markDownloaded`
-  are refused with `busy-updating` (`gate.ts:waitsForUpdate`).
+  are refused with `busy-updating` (`gate.ts:waitsForUpdate`). `approve` is
+  also refused with it for a document whose prepared files are not read yet,
+  since the approval dialog lists what preparing it removed (`gate.ts:gate`).
 - When the Session becomes the open one, `begin` reads each document's
   prepared files in the tag folder, places its marks again on that text, and
   starts the update when the project was just migrated or any document's

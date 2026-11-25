@@ -119,7 +119,7 @@ available are the ones declared in `engine/globals.ts`.
 - `Reach`, `reachOf`, `newFrom`.
 - `TextPlace`, `Change`, `changed`.
 - `hiddenTextKeys`, `keysToFind`.
-- `Approval`, `approve(project, id, readings, textPlaces)`.
+- `Approval`, `approve(project, id, readings, textPlaces, removed)`.
 - `spreadToAdded(project, added, readings, textPlaces)`.
 
 ### Ground truth (`groundTruth.ts`)
@@ -171,6 +171,9 @@ available are the ones declared in `engine/globals.ts`.
     value leaves `project.hidden`, its marks are dropped from every document, and
     each dropped mark counts in `Change.shown` (`spread.ts:approve`,
     `spread.ts:keptMarks`).
+  - The approved document's `removedSeen` becomes the `removed` kinds it was
+    given, and `Approval.removed` holds those not in its `removedSeen` before,
+    which the approval dialog lists.
   - `approve` returns `undefined` for an unknown document id.
 - When a selection runs over a page edge, `selectionPieces` leaves out running
   headers and footers. A running block repeats on a neighbouring page within

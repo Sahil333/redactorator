@@ -52,17 +52,25 @@ export const approveButton = (page: Page) => page.getByRole("banner").getByRole(
 /**
  * Approves the open document, agreeing to the approval dialog whenever it opens: when the approval
  * changes other documents it must, and holds `headsUp`; it also opens to list what preparing the
- * document removed.
+ * document removed that no earlier approval of it listed.
  */
 export async function approve(page: Page, headsUp: RegExp | undefined): Promise<void> {
   await approveButton(page).click();
+  await approvalLands(page, headsUp);
+}
+
+/** Waits for the approval under way to land, agreeing to its dialog if it opens, as `approve` does. */
+export async function approvalLands(page: Page, headsUp: RegExp | undefined): Promise<void> {
   const dialog = page.getByRole("dialog", { name: /^Approve/ });
   const approved = page.getByRole("banner").getByText("Approved", { exact: true });
   if (headsUp === undefined) await expect(dialog.or(approved)).toBeVisible();
   else await expect(dialog).toContainText(headsUp);
   if (await dialog.isVisible()) {
     // A dialog that opens only to list what was removed says nothing about other places.
-    if (headsUp === undefined) await expect(dialog).not.toContainText(/hides/);
+    if (headsUp === undefined) {
+      await expect(dialog.getByRole("region", { name: "Removed from this file" })).toBeVisible();
+      await expect(dialog).not.toContainText(/hides/);
+    }
     await dialog.getByRole("button", { name: "Approve" }).click();
   }
   await expect(approved).toBeVisible();
@@ -367,7 +375,7 @@ export async function storedJson(page: Page, path: string): Promise<unknown> {
 }
 
 /** The id of document `file` in the project kept in `folder`. */
-async function documentId(page: Page, folder: string, file: string): Promise<string> {
+export async function documentId(page: Page, folder: string, file: string): Promise<string> {
   const project = await storedJson(page, `${folder}/.redactorator/pdf-3/project.json`);
   const documents: unknown = typeof project === "object" && project !== null ? Reflect.get(project, "documents") : undefined;
   const document: unknown = Array.isArray(documents) ? documents.find((each: unknown) => typeof each === "object" && each !== null && Reflect.get(each, "file") === file) : undefined;

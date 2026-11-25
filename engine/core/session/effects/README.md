@@ -26,7 +26,9 @@ records that the [slices](../slices/README.md) reduce.
     refused as `mark-lost`, naming its first page, before the worker is asked.
 - `plan.ts`
   - `approvalOf(host)`: builds `Session["approval"]` (`plan`, `confirm`,
-    `cancel`) plus `settled()`.
+    `cancel`) plus `settled()`. A plan waits for the heads-up when it changes
+    other places, or when the document's removed kinds (`documentStatus`)
+    hold one no earlier approval of it listed; otherwise it lands at once.
 - `add.ts`
   - `adderOf(host)`: builds `documents.add` plus `settled()`.
 - `readings.ts`

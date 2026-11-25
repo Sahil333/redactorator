@@ -69,6 +69,8 @@ export function gate({ worker, parts }: SessionView, command: SessionCommand, do
   if (parts.operation.closing) return "session-closed";
   if (document !== undefined && !parts.record.present.project.documents.some(({ id }) => id === document)) return "unknown-document";
   if (parts.operation.operation === "updating" && waitsForUpdate.has(command)) return "busy-updating";
+  // Approving lists what preparing the document removed, known once its prepared files are read.
+  if (command === "approve" && document !== undefined && !parts.documents.has(document)) return "busy-updating";
   const approval = approving(parts.operation, command);
   if (approval !== undefined) return approval;
   const busyWith = running(command, parts.operation.operation);

@@ -103,4 +103,6 @@ export interface ApprovalPlan {
   readonly changes: readonly Change[];
   /** More places of its own values that it hides in the approved document. */
   readonly here: Change;
+  /** What preparing the approved document removed, by kind, that no earlier approval of it listed. */
+  readonly removed: readonly RemovalKind[];
 }

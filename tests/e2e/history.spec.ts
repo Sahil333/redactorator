@@ -4,6 +4,7 @@ import {
   addDocuments,
   aJaneRoe,
   applyAndDownload,
+  approvalLands,
   approve,
   approveButton,
   bStatement,
@@ -151,7 +152,7 @@ test("undo waits while an approval is worked out", async ({ page }) => {
   await expect(approveButton(page)).toBeDisabled();
   await expect(undoButton(page)).toBeDisabled();
   await release();
-  await expect(page.getByRole("banner").getByText("Approved", { exact: true })).toBeVisible();
+  await approvalLands(page, undefined);
 });
 
 test("undo waits while documents are being added", async ({ page }) => {

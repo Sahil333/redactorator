@@ -1,7 +1,7 @@
 // Spreading: how approving a document hides its values, and parts of its images, in the
 // project's other documents. Pure functions over the project, the documents' stored readings and
 // where the engine found each value in their text; nothing spreads until a document is approved.
-import type { PageText, Reading } from "./document";
+import type { PageText, Reading, RemovalKind } from "./document";
 import type { Box, PageIndex } from "./geometry";
 import { rangeBoxes, rangeText } from "./pageText";
 import { anchorOf, placesOnCopies } from "./images";
@@ -199,6 +199,8 @@ export interface Approval {
   readonly changes: readonly Change[];
   /** What it does to the approved document itself: more places of its own values. */
   readonly here: Change;
+  /** The kinds preparing the approved document removed that its approval dialog has not listed before. */
+  readonly removed: readonly RemovalKind[];
 }
 
 /**
@@ -207,13 +209,15 @@ export interface Approval {
  * appears, and does not keep visible on purpose, stops being hidden anywhere. Every document
  * then has each hidden value marked wherever it is found; another document this changes goes
  * back to review with the changes flagged as new. `textPlaces` are where the engine found
- * `keysToFind`'s keys in every document's text; `readings` are every document's.
+ * `keysToFind`'s keys in every document's text; `readings` are every document's. `removed` is
+ * what preparing document `id` removed, which its approval lists from then on as seen.
  */
 export function approve(
   project: Project,
   id: DocumentId,
   readings: ReadonlyMap<DocumentId, Reading>,
   textPlaces: readonly TextPlace[],
+  removed: readonly RemovalKind[],
 ): Approval | undefined {
   const found = project.documents.find((document) => document.id === id);
   if (found === undefined) return undefined;
@@ -247,13 +251,15 @@ export function approve(
     if (isApproving) {
       here = spread.change;
       const marks = spread.document.marks.map((mark) => (mark.isNew ? { ...mark, isNew: false } : mark));
-      return { ...spread.document, marks, review: "approved", download };
+      return { ...spread.document, marks, review: "approved", download, removedSeen: removed };
     }
     if (!changed(spread.change)) return each;
     changes.push(spread.change);
     return { ...spread.document, review: "in-review", download };
   });
-  return { project: { ...project, hidden: [...hidden.values()], documents }, changes, here };
+  const seen = new Set(found.removedSeen);
+  const unseen = removed.filter((kind) => !seen.has(kind));
+  return { project: { ...project, hidden: [...hidden.values()], documents }, changes, here, removed: unseen };
 }
 
 /**

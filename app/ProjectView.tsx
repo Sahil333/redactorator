@@ -49,8 +49,9 @@ interface Panels {
   readonly pages: boolean;
 }
 
-function statusText(worker: EngineState["worker"], shown: DocumentHandle | undefined, currentPage: PageIndex | undefined): string {
+function statusText(worker: EngineState["worker"], operation: SessionState["operation"], shown: DocumentHandle | undefined, currentPage: PageIndex | undefined): string {
   if (worker.status !== "ready") return engineStatus(worker) ?? "";
+  if (operation === "updating") return "Updating documents…";
   if (shown === undefined) return "";
   return `Page ${(currentPage ?? 0) + 1} of ${shown.pages.length}`;
 }
@@ -284,7 +285,7 @@ export function ProjectView(props: ProjectViewProps) {
         projectName={project.name}
         onProjects={onClose}
         saveState={save}
-        status={statusText(worker, shown, pageOf(pageInView, active))}
+        status={statusText(worker, props.opened.operation, shown, pageOf(pageInView, active))}
         canAdd={can.add}
         onAdd={adder.add}
         history={history}
