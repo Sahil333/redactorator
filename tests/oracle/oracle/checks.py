@@ -10,15 +10,12 @@ import re
 import zlib
 from collections.abc import Iterator
 
-from pdfminer.ascii85 import ascii85decode, asciihexdecode
 from pdfminer.high_level import extract_pages, extract_text
-from pdfminer.lzw import lzwdecode
-from pdfminer.layout import LTChar, LTComponent, LTCurve, LTFigure, LTImage, LTLayoutContainer, LTPage
+from pdfminer.layout import LTChar, LTComponent, LTCurve, LTFigure, LTImage, LTLayoutContainer, LTLine, LTPage, LTRect
 from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdfparser import PDFParser
 from pdfminer.pdftypes import PDFStream, resolve1
 from pdfminer.psparser import PSLiteral
-from pdfminer.runlength import rldecode
 import pypdfium2
 from PIL import Image, ImageChops
 
@@ -79,6 +76,61 @@ def absent(output: bytes, values: list[str]) -> list[str]:
             reasons.append(f"{value!r} is in the output's text layer")
         if any(squash(value) in text for text in scanned):
             reasons.append(f"{value!r} is in the output's raw bytes (a stream, string or metadata)")
+    return reasons
+
+
+def kept(output: bytes, values: list[str]) -> list[str]:
+    """Each value is still somewhere in the output's bytes: a value kept by decision ("What
+    preparation promises") is recorded where it stays, so a change in what is kept is seen."""
+    scanned = [squash(text) for text in raw.texts(output)]
+    return [f"{value!r} is no longer in the output" for value in values if not any(squash(value) in text for text in scanned)]
+
+
+def region_boxes(regions: list[dict]) -> list[tuple[int, Box]]:
+    """`{"page": n, "box": [x0, y0, x1, y1]}` regions as (0-based page, box) pairs."""
+    return [(region["page"] - 1, tuple(region["box"])) for region in regions]
+
+
+def glyphs_absent(output: bytes, regions: list[dict]) -> list[str]:
+    """No glyph is drawn inside a region, judged by where its box's centre lies, so text whose
+    letters have no Unicode map is judged too."""
+    reasons = []
+    for index, page in enumerate(pages(output)):
+        for glyph in (each for each in chars(page) if each.get_text().strip()):
+            x, y = (glyph.x0 + glyph.x1) / 2, (glyph.y0 + glyph.y1) / 2
+            for at, box in region_boxes(regions):
+                if at == index and box[0] <= x <= box[2] and box[1] <= y <= box[3]:
+                    reasons.append(f"a glyph {glyph.get_text()!r} is still drawn at {tuple(round(v, 1) for v in glyph.bbox)} on page {index + 1}")
+    return reasons
+
+
+def part_bounds(part: LTCurve) -> Box:
+    """A drawing part's bounds: every point of its path, control points included, grown by half its
+    line width when it is stroked."""
+    points = [(x, y) for segment in part.original_path or [] for x, y in segment[1:]] or [(part.x0, part.y0), (part.x1, part.y1)]
+    grow = part.linewidth / 2 if part.stroke else 0
+    return (min(x for x, _ in points) - grow, min(y for _, y in points) - grow,
+            max(x for x, _ in points) + grow, max(y for _, y in points) + grow)
+
+
+def drawings(output: bytes, boxes: list[dict]) -> list[str]:
+    """No drawing part lies wholly under a box, and a part a box covers only in part is a single
+    rectangle or straight line. A part is one subpath, as each move starts one; a filled rectangle
+    the size of a box is the box drawn over what was removed."""
+    reasons = []
+    for index, page in enumerate(pages(output)):
+        for part in (item for item in walk(page) if isinstance(item, LTCurve)):
+            bounds = part_bounds(part)
+            for at, box in region_boxes(boxes):
+                if at != index or not overlaps(box, bounds):
+                    continue
+                where = f"on page {index + 1} at {tuple(round(v, 1) for v in bounds)}"
+                if isinstance(part, LTRect) and part.fill and all(abs(a - b) <= TOLERANCE for a, b in zip(part.bbox, box)):
+                    continue
+                if contains(box, bounds):
+                    reasons.append(f"a drawing part {where} is wholly under a box")
+                elif not isinstance(part, (LTRect, LTLine)):
+                    reasons.append(f"a drawing part {where} is partly under a box and is not a single rectangle or line")
     return reasons
 
 
@@ -289,8 +341,7 @@ IMAGE_FILTERS = ("DCTDecode", "JPXDecode")
 
 # The lossless filters that can sit before an image filter, undone with pdfminer's decoders
 # (review answer 5). Flate's predictor is not undone: a predicted JPEG is judged unreadable.
-UNDO = {"FlateDecode": zlib.decompress, "LZWDecode": lzwdecode, "ASCII85Decode": ascii85decode,
-        "ASCIIHexDecode": asciihexdecode, "RunLengthDecode": rldecode}
+UNDO = {"FlateDecode": zlib.decompress, **raw.DECODERS}
 
 
 def image_streams(pdf: bytes) -> Iterator[tuple[int, str, bytes | None]]:

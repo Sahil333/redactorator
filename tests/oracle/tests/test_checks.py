@@ -187,3 +187,55 @@ def test_image_metadata_reads_abbreviated_filter_names_and_fails_an_image_filter
     assert any(reason.startswith("image object 6 ") and "APP1" in reason for reason in reasons), "under /DCT"
     assert any(reason.startswith("image object 7 ") and "APP1" in reason for reason in reasons), "under [/FlateDecode /DCT]"
     assert any("has a filter after DCTDecode, or one before it" in reason for reason in checks.image_metadata(fx.image_filter_not_last()))
+
+
+def page_drawing(content: str) -> bytes:
+    return fx.write_pdf(fx.page_objects("/MediaBox [0 0 612 792]", fx.stream("", content.encode())), "/Root 1 0 R")
+
+
+BARCODE_BOX = [{"page": 1, "box": [90, 225, 230, 310]}]
+
+
+def test_drawings_finds_a_part_wholly_or_partly_under_a_box_and_passes_lines_rectangles_and_the_box():
+    assert any("wholly under a box" in reason for reason in checks.drawings(fx.drawings(), BARCODE_BOX))
+    # The tick in the grid's cell is a polyline: covered in part, it may hide what is outside the box.
+    tick = [{"page": 1, "box": [250, 650, 300, 700]}]
+    assert any("not a single rectangle or line" in reason for reason in checks.drawings(fx.drawings(), tick))
+    # Grid lines and the band, covered in part, and the box drawn where the barcode was.
+    band = [{"page": 1, "box": [60, 440, 120, 490]}]
+    assert checks.drawings(page_drawing("72 600 m 372 600 l S 0.9 g 72 450 300 30 re f"), band) == []
+    assert checks.drawings(page_drawing("0 g 90 225 140 85 re f"), BARCODE_BOX) == []
+
+
+def test_glyphs_absent_judges_text_with_no_unicode_map_by_where_it_is_drawn():
+    region = [{"page": 1, "box": list(fx.UNMAPPED_TEXT)}]
+    assert checks.glyphs_absent(fx.actual_text_only(), region) != []
+    assert checks.glyphs_absent(page_drawing(fx.line(72, 740, 12, "Unmapped text")), region) == []
+
+
+def test_kept_finds_a_value_kept_by_decision_and_fails_where_it_went():
+    assert checks.kept(fx.kept_names(), [fx.KEPT["base-font"], fx.KEPT["font-family"]]) == []
+    assert checks.kept(fx.one_word(cleaned=True), [fx.KEPT["base-font"]]) == [f"{fx.KEPT['base-font']!r} is no longer in the output"]
+
+
+def test_absent_reads_past_the_end_of_lzw_ascii85_asciihex_and_run_length_data():
+    reasons = checks.absent(fx.data_after_end_filters(), list(fx.DATA_AFTER_END_FILTERS.values()))
+    assert len(reasons) == len(fx.DATA_AFTER_END_FILTERS)
+
+
+def test_absent_decodes_ascii85_and_asciihex_streams():
+    assert len(checks.absent(fx.image_prefilters(), list(fx.IMAGE_PREFILTERS.values()))) == len(fx.IMAGE_PREFILTERS)
+
+
+def test_absent_reads_names_with_escapes_and_strings_in_utf16_without_a_mark_and_pdfdocencoding():
+    for value, written in (("Jane Roe", "/Jane#20Roe"), ("Jane Roe", "<" + "Jane Roe".encode("utf-16-be").hex() + ">"),
+                           ("Jane Roe", "<" + "Jane Roe".encode("utf-16-le").hex() + ">"),
+                           # In PDFDocEncoding, bytes 0x8D and 0x8E are curly double quotes.
+                           ("\u201cJane Roe\u201d", "(\\215Jane Roe\\216)")):
+        unclean = fx.write_pdf(fx.page_objects("/MediaBox [0 0 612 792]", fx.stream("", b""), f"/Note {written}"), "/Root 1 0 R")
+        assert checks.absent(unclean, [value]) != [], written
+
+
+def test_structure_fails_a_soft_mask_whose_colour_space_is_an_array_and_parameters_with_no_filter():
+    assert any("a soft mask keeps only a name" in reason for reason in checks.structure(fx.grey_array_soft_mask()))
+    assert any("no filter at their place" in reason for reason in checks.structure(fx.REFUSED["parameters-without-filter"]()))

@@ -273,6 +273,12 @@ class Walk:
         # `*`, is kept. KEEP's shared sets are read against each type's own keys in the model, so a
         # key a type does not have is outside.
         kept = KEEP.get(role, set()) | (STREAM if isinstance(resolved, PDFStream) else set())
+        # A soft mask's colour space is rewritten as the name DeviceGray, or the file refused.
+        if role == "XObjectImageSoftMask" and isinstance(self.resolve(attrs.get("ColorSpace"))[0], list):
+            self.reasons.append(f"{path}/ColorSpace is an array, where a soft mask keeps only a name")
+        parms, _ = self.resolve(attrs.get("DecodeParms"))
+        if any(self.resolve(each)[0] is not None for each in (parms if isinstance(parms, list) else [parms])[len(names):]):
+            self.reasons.append(f"{path}/DecodeParms holds parameters with no filter at their place")
         for key, each in attrs.items():
             entry = keys.get(key) if key in keys else keys.get("*")
             if entry is None or (key in keys and key not in kept):
