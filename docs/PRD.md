@@ -131,7 +131,7 @@ Requirements are grouped by area and tagged P0 (MVP), P1 (v1) or P2 (later). IDs
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | RED-1 | Redacted content is deleted from the file, not covered. Copy, search and text extraction return nothing | P0 |
-| RED-2 | Every hidden carrier is cleaned: metadata, comments, revision history, attachments, thumbnails, form values, hidden layers, alternative text | P0 |
+| RED-2 | Every carrier that does not change what a reader shows on screen or in print is removed: metadata, comments, revision history, attachments, thumbnails, hidden layers, alternative text, signatures and more. Visible form values and annotations are made part of the page first, so only marked values are removed from them | P0 |
 | RED-3 | Each output is re-opened and checked before release. A failed check blocks the export | P0 |
 | RED-4 | Each output comes with a certificate listing the checks that passed | P1 |
 | RED-5 | Redacted values are never written to the vault, logs, reports or the certificate | P0 |
@@ -209,7 +209,7 @@ Settings resolve in one order: built-in default, then global, then working set, 
 | Never-hide list | Terms that are never flagged: the user's own firm, public figures, a shared mailbox | Yes | Add | P0 |
 | Review strictness | Whether needs-review findings block export or count as accepted | Yes | Override | P0 |
 | Redaction appearance | A configurable coloured box or type label | Yes | Override | P0 |
-| Hidden content | Remove all comments and annotations, or only those with findings; keep or drop accessibility tags | Yes | Override | P0 |
+| Hidden content | Not a setting (decided 25 Nov 2026): the app removes every carrier that does not change what a reader shows, and lists what it removed in the review before approval | No | No | — |
 | Detection level | Full, Standard or Basic (DET-12). The app picks one from the device; the user can choose a higher one | Yes | Override | P0 |
 | Storage location | A folder on this computer, or the browser's own storage until one is picked | Yes | No | P0 |
 | Surrogate style | Placeholder or realistic, per type | Yes | Override | P1 |
@@ -236,7 +236,7 @@ Privacy and irreversibility are hard gates: a release that fails either does not
 | Performance | First pattern-based findings within seconds of import. Full ML pass at 2 seconds per page or better on a recent laptop; the in-browser figure is still to be measured. The UI stays responsive while documents process. |
 | Footprint | Models must be small enough to download and run in a browser. Which models fill each detection level is an open HLD decision (D10). The Basic level must work without any model. |
 | Platforms | Current desktop Chrome in v1. Nothing to install. Safari and Firefox come later, through a storage backend of their own, since they cannot save into a folder the user picks. |
-| Accessibility | UI meets WCAG 2.2 AA and is fully keyboard-operable. PDF accessibility tags can be kept on request. |
+| Accessibility | UI meets WCAG 2.2 AA and is fully keyboard-operable. Accessibility tags are removed from redacted PDFs, because they hold the original text (decided 25 Nov 2026). |
 | Licensing | Every bundled component permits the way we distribute. The PDF engine's AGPL licence is met by publishing the browser app's source; the server side stays closed. |
 
 ## Release phasing
