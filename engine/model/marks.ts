@@ -4,12 +4,18 @@ import { imageKey, type ImageAnchor } from "./images";
 import { keyOf } from "./match";
 import { markTypeLabel, type MarkType } from "./markTypes";
 
-/** The part of a text mark on one page: a range of that page's text, and one box per line. */
+/**
+ * The part of a text mark on one page: a range of that page's text, one box per line, and the
+ * letters it was made on. The text and boxes are the mark's identity; the offsets point at them in
+ * the page's text as this build reads it, and are found again when a build reads it otherwise
+ * (`textAnchor.ts`). Empty text is unknown, so the piece is lost.
+ */
 export interface TextPiece {
   readonly page: PageIndex;
   readonly start: number;
   readonly end: number;
   readonly boxes: readonly Box[];
+  readonly text: string;
 }
 
 /**
@@ -69,5 +75,5 @@ export function toEdits(mark: Mark): Edit[] {
   const label = markTypeLabel(mark.type);
   const { target } = mark;
   if (target.kind === "box") return [{ kind: "box", page: target.page, box: target.box, label }];
-  return target.pieces.map(({ page, start, end }) => ({ kind: "text", page, start, end, label }));
+  return target.pieces.map(({ page, start, end, text }) => ({ kind: "text", page, start, end, text, label }));
 }

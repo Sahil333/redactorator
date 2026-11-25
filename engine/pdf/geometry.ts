@@ -1,6 +1,7 @@
 import type * as mupdf from "mupdf";
 import { pointBox, type Box } from "../model/geometry";
-import type { Point } from "./glyphs";
+
+export type Point = readonly [number, number];
 
 function toBox(x0: number, y0: number, x1: number, y1: number): Box {
   const box = pointBox(x0, y0, x1, y1);

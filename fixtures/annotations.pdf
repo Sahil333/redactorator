@@ -1,0 +1,123 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [20 0 R] /D << /OFF [20 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 19 0 R] >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 42 >>
+stream
+BT /F1 12 Tf 72 740 Td (Notes page) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /Annot /Subtype /FreeText /DA (/Helv 12 Tf 0 g) /Rect [72 600 300 630] /F 4 /Contents (4400 9102) /T (Author 4400 9103) /AP << /N 14 0 R >> >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /FreeText /DA (/Helv 12 Tf 0 g) /Rect [72 550 300 580] /F 2 /AP << /N 15 0 R >> >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /FreeText /DA (/Helv 12 Tf 0 g) /Rect [72 500 300 530] /F 32 /AP << /N 16 0 R >> >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /FreeText /DA (/Helv 12 Tf 0 g) /Rect [72 450 300 480] /F 4 /OC 20 0 R /AP << /N 17 0 R >> >>
+endobj
+10 0 obj
+<< /Type /Annot /Subtype /Text /Rect [320 600 340 620] /F 4 /Contents (4400 9107) /Popup 11 0 R /AP << /N 18 0 R >> >>
+endobj
+11 0 obj
+<< /Type /Annot /Subtype /Popup /Rect [350 520 550 620] /Parent 10 0 R >>
+endobj
+12 0 obj
+<< /Type /Annot /Subtype /Redact /Rect [72 400 300 430] /OverlayText (4400 9108) >>
+endobj
+13 0 obj
+<< /Type /Annot /Subtype /Link /Rect [72 734 150 752] /Border [0 0 0] /A << /S /URI /URI (https://example.invalid/4400 9109) >> >>
+endobj
+14 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 228 30] /Resources << /Font << /F1 4 0 R >> >> /Length 43 >>
+stream
+BT /F1 12 Tf 4 10 Td (Note 4400 9101) Tj ET
+endstream
+endobj
+15 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 228 30] /Resources << /Font << /F1 4 0 R >> >> /Length 45 >>
+stream
+BT /F1 12 Tf 4 10 Td (Hidden 4400 9104) Tj ET
+endstream
+endobj
+16 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 228 30] /Resources << /Font << /F1 4 0 R >> >> /Length 45 >>
+stream
+BT /F1 12 Tf 4 10 Td (NoView 4400 9105) Tj ET
+endstream
+endobj
+17 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 228 30] /Resources << /Font << /F1 4 0 R >> >> /Length 44 >>
+stream
+BT /F1 12 Tf 4 10 Td (Layer 4400 9106) Tj ET
+endstream
+endobj
+18 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Resources << /Font << /F1 4 0 R >> >> /Length 23 >>
+stream
+1 1 0 rg 0 0 20 20 re f
+endstream
+endobj
+19 0 obj
+<< /Type /Annot /Subtype /FileAttachment /Rect [320 560 340 580] /F 4 /AP << /N 22 0 R >> /FS << /Type /Filespec /F (a.txt) /EF << /F 21 0 R >> >> >>
+endobj
+20 0 obj
+<< /Type /OCG /Name (Off) >>
+endobj
+21 0 obj
+<< /Type /EmbeddedFile /Length 18 >>
+stream
+Attached 4400 9110
+endstream
+endobj
+22 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Resources << /Font << /F1 4 0 R >> >> /Length 23 >>
+stream
+0 0 1 rg 0 0 20 20 re f
+endstream
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000000015 00000 n 
+0000000122 00000 n 
+0000000179 00000 n 
+0000000374 00000 n 
+0000000471 00000 n 
+0000000564 00000 n 
+0000000731 00000 n 
+0000000854 00000 n 
+0000000978 00000 n 
+0000001112 00000 n 
+0000001247 00000 n 
+0000001337 00000 n 
+0000001437 00000 n 
+0000001584 00000 n 
+0000001766 00000 n 
+0000001950 00000 n 
+0000002134 00000 n 
+0000002317 00000 n 
+0000002478 00000 n 
+0000002644 00000 n 
+0000002689 00000 n 
+0000002778 00000 n 
+trailer
+<< /Size 23 /Root 1 0 R >>
+startxref
+2939
+%%EOF

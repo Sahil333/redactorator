@@ -34,12 +34,29 @@ export function useDocumentInEngine(
     onFailure.clear();
     void session.viewer.open(id).then((result) => {
       if (result.ok || asked.current !== id) return;
-      if (result.error.code === "original-missing") setMissing(errorText(result.error));
+      // Its working copy is being made again: it is asked for again once that is done.
+      if (result.error.code === "busy-updating") asked.current = undefined;
+      else if (result.error.code === "original-missing") setMissing(errorText(result.error));
       else onFailure.failed(result.error);
     });
   });
 
   useEffect(() => ask(), [document?.id, canOpen]);
+
+  // The engine let go of the document it had open here, as when its working copy was made again
+  // for a new build: it is opened again, and says why if it can't be.
+  const had = useRef<DocumentHandle | undefined>(undefined);
+  const reopen = useEffectEvent(() => {
+    if (shown !== undefined) {
+      had.current = shown;
+      return;
+    }
+    if (had.current === undefined || had.current.document !== document?.id) return;
+    had.current = undefined;
+    asked.current = undefined;
+    ask();
+  });
+  useEffect(() => reopen(), [shown]);
 
   return { shown, missing };
 }

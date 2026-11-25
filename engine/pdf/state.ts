@@ -6,16 +6,16 @@ import { load } from "./read";
 
 interface Opened {
   readonly file: FileNumber;
-  /** The file as the user picked it. Each apply starts again from these bytes. */
+  /** The document's working copy, which preparation made. Each apply starts again from these bytes. */
   readonly bytes: Uint8Array;
-  readonly original: mupdf.PDFDocument;
+  readonly working: mupdf.PDFDocument;
   output: mupdf.Document | undefined;
 }
 
 let opened: Opened | undefined;
 
 function closeAll(): void {
-  opened?.original.destroy();
+  opened?.working.destroy();
   opened?.output?.destroy();
   opened = undefined;
 }
@@ -28,7 +28,7 @@ export function open(file: FileNumber, bytes: ArrayBuffer): void {
     fail(file, loaded.code, loaded.message);
     return;
   }
-  opened = { file, bytes: copy, original: loaded.document, output: undefined };
+  opened = { file, bytes: copy, working: loaded.document, output: undefined };
   post({ type: "opened", file, document: loaded.model });
 }
 
@@ -36,7 +36,8 @@ export function current(file: FileNumber): Opened | undefined {
   return opened?.file === file ? opened : undefined;
 }
 
+/** The document a render reads. `Source` "original" names the working copy, which stands in for the user's file. */
 export function sourceDocument(file: FileNumber, source: Source): mupdf.Document | undefined {
   const document = current(file);
-  return source === "original" ? document?.original : document?.output;
+  return source === "original" ? document?.working : document?.output;
 }

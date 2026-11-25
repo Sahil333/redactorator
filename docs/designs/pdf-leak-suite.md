@@ -142,7 +142,8 @@ There are three smaller problems behind this:
 *   **Refuse with a reason, one document at a time.** The refusal table in
     part 6 lists every refusal with its sentence and what the user can do. The
     main ones are:
-    - an XFA form (static or dynamic), refused when the file is added;
+    - a form drawn only by XFA, refused when the file is added (a hybrid
+      form, XFA beside normal fields, is flattened like any other);
     - a box that only partly covers a part of a drawing that is not a single
       rectangle or straight line, with a message asking the user to cover it
       fully;
@@ -208,6 +209,39 @@ There are three smaller problems behind this:
 *   **Rewriting the file ID, or re-subsetting fonts.** A font may still hold
     the shapes of letters it no longer draws.
 *   **Batch export.** Downloads stay one document at a time.
+
+## What preparation promises
+
+The boundary of what preparation cleans (owner, 25 Nov 2026).
+
+*   **Removed:**
+    - every key in the object graph outside the allowlist (Appendix A.1);
+    - content that is hidden or outside the page: off layers, outside the
+      crop box, unshown image pixels;
+    - annotations and forms, flattened where they are visible, and deleted
+      otherwise;
+    - metadata inside JPEG and JPEG 2000 data (Appendix A.2);
+    - marked-content properties in content streams (ActualText, alternative
+      and expansion text).
+*   **Kept as they are, by decision:** the bodies of fonts, colour profiles
+    (ICC profiles, their description and copyright strings included), CMaps
+    and the data of other image codecs. Software makes them, and drawing
+    needs them; that a font subset shows which characters were used is
+    already accepted (Non-Goals). This covers:
+    - text inside an ICC profile (`desc`, `cprt`), comments in Type 4
+      functions and CMaps, and ToUnicode entries for codes no page uses;
+    - JBIG2 extension segments, the bodies of the JPEG segments that draw an
+      image (DNL, DHP, EXP), the J2K header markers other than COM, and the
+      bodies of JP2's `ftyp` and `colr` boxes;
+    - names a font or CMap carries, such as `FontName`, `BaseFont`,
+      `FontFamily`, `CharSet`, `CMapName`, `Registry` and `Ordering`, where
+      they are kept keys of the object graph: slice 5's free-text entries
+      judge those as kept keys.
+*   **Refused:** what preparation can't decode or place safely, as Appendix
+    A.1 and A.2 and the refusal table in part 6 list.
+
+A finding about data inside a kept body is out of scope unless it shows
+data the user wrote reaching that body.
 
 ## Probe Findings
 
@@ -335,10 +369,11 @@ branches that only the new options turn on, and the layer rule fix below.
   Seven entries, with no mark, plant a value in `fixtures/content-strings.pdf`
   where no reader draws it: a BDC's ActualText, Alt and E, a DP's
   properties, an extra key in an inline image's dictionary, a comment, and
-  an unknown operator's operand inside BX/EX. Until the app prepares files,
-  `tests/e2e/preparation-saves.spec.ts` puts the fixture through step 5's
-  and step 8's saves, and the outside checker judges step 8's file with
-  `absent` and `rendered`: every value is gone and the page draws the same.
+  an unknown operator's operand inside BX/EX. Slice 1's stand-in,
+  `tests/e2e/preparation-saves.spec.ts`, put the fixture through step 5's
+  and step 8's saves; from slice 2 the leak suite adds it to the app and the
+  outside checker judges the working copy it stores with `absent` and
+  `rendered`: every value is gone and the page draws the same.
   Step 5's own file still holds the replaced content stream, unreferenced,
   until step 8 drops it; step 8's file is what is stored (owner, 25 Nov
   2026). The oracle's `rendered` check (pypdfium2) came forward from
@@ -432,6 +467,97 @@ branches that only the new options turn on, and the layer rule fix below.
     goes stale when that memory grows. Opening it again needs a copy first
     (`.slice()`).
 
+### Slice 2 (preparation, reading, storage and anchoring)
+
+Found while building slice 2, on 25 Nov 2026, on synthetic PDFs, apart
+from the refusal counts in the NFRs.
+
+*   **MuPDF's garbage collection drops the data of a stream that holds a
+    reference it renumbers.**
+    In MuPDF 1.28.6, a save with `garbage` can write a stream as a plain
+    dictionary, without its data. It happens to a stream that holds a
+    reference the save renumbers, when the stream is unchanged from the file
+    and its data has been read since the file was opened. `renumberobjs` calls
+    `pdf_update_object`, which gives the object a fresh xref entry with no
+    stream offset. Step 7 resolves every object and reads stream data, and
+    step 6 draws every page, so the 1 x 1 image of
+    `image-spaces.pdf`, whose `/SMask` moved from object 10 to 9, came out
+    empty, and step 9 refused the file. Preparation now saves (step 7a, with
+    `compress`) and opens the result again before step 8, so nothing has been read when
+    step 8 renumbers. The writer (`write/redact.ts`) reads the images it
+    draws and saves with `garbage=4` too, so it may meet the same case; see
+    Risks.
+*   **The trailer's `Encrypt` stays until step 8.** A file with an empty open
+    password keeps its encryption through steps 4 and 5, and MuPDF goes on
+    encrypting what it writes until step 8's `encrypt=none`. With the key
+    deleted in step 7, step 9 refused `edit-locked.pdf`, so the allowlist
+    keeps it without walking it (Appendix A.1).
+*   **MuPDF lists no link among a page's annotations.** `getAnnotations()`
+    leaves out `Link` annotations and `bake` keeps them, so step 2 records
+    `links` from the page's own `/Annots`, and step 7 deletes them with the page's `/Annots`.
+    The check after step 4 looks at what MuPDF lists, so links do not refuse
+    a file.
+*   **`blank-unshown-pixels` also blanks pixels the image's own soft mask
+    hides.** In `masked-image.pdf` the pixels outside the mask's circle came
+    out white in the working copy; the page draws the same. Tests that judge
+    those pixels judge them against the working copy now, and the page
+    against the original with `rendered`.
+*   **PDFium differs from MuPDF in two ways the outside checker meets.** It
+    draws an annotation on a layer that is off, which the specification and
+    MuPDF hide, so that annotation's area is a declared exception to
+    `rendered`. And it draws form fields only once its form environment is
+    started: `rendered` called no `init_forms()` before, so it never saw a
+    field; it does now. Flattened fields then differ only in how PDFium
+    smooths their text, so their areas are exceptions too.
+*   **`PDFObject.Null` throws on `get` and `resolve`.** A lookup that may
+    miss goes through a key path, which stops at the first missing object
+    (`engine/pdf/objects.ts`). An explicit `null`, as an element of a
+    `/DecodeParms` array for a filter with no parameters, throws the same
+    way, so the allowlist asks `isNull()` before it resolves a value
+    (`null-elements.pdf`).
+*   **Step 8's save keeps bytes after a stream's end of data.** A Flate
+    image with `Tail 4400 9901` after its zlib data kept it through
+    preparation, and the outside checker's raw scan, which dropped what
+    follows a zlib stream's end, did not see it (`data-after-end.pdf`;
+    answer 10). MuPDF does not throw on a damaged Flate stream: it decodes
+    what it can, and a file with one prepared.
+*   **`sanitize` loses a text state a form inherits.** In MuPDF 1.28.6's
+    filter (`source/pdf/pdf-op-filter.c`), text-state changes such as `Tc`
+    wait as pending until text is drawn, and are sent only inside a text
+    object (`filter_flush`, under `p->in_BT`). A page that sets `3.9 Tc` for
+    its text, then resets it in an empty `BT 0 Tc ET` before drawing a form
+    XObject, loses the reset: the empty text object is never written, and
+    `pdf_filter_Do_form` does not send it either. The form, filtered on its
+    own from the default text state, then drops its own `0 Tc` as
+    redundant, so its text is drawn with the inherited spacing. In the IRS
+    1040 instructions this spreads the "TIP" and "CAUTION" icon labels past
+    their icons' bounds, where they are clipped; step 9 sees the letters
+    lost or moved and refuses the file. A one-page synthetic file shows it
+    (a form's "Form text" spread by 3.9 points a letter). The writer runs
+    the same filter, so an export can be refused the same way. Patch 0004
+    sends the pending text state before a form is drawn (slice 2 answer 11;
+    Detailed item 1b).
+*   **Three cases checked at the end of slice 2.** Resources a page inherits
+    from a page-tree node did not leak: step 5 gives each page its own
+    filtered resources, and the originals did not survive. A shading
+    pattern's `/ExtGState`, which MuPDF never applies, kept text and an
+    ActualText in its soft mask group, so step 7 now deletes it
+    (`shading-graphics-state.pdf`). A JPEG XObject naming its filter with an
+    inline image's abbreviated `/F` kept its EXIF, as step 7 deleted `/F` as
+    a file specification and left the JPEG bytes as samples, so a stream
+    with `/F` as a name or an array, or with `/DP`, now refuses the file
+    (`abbreviated-stream-keys.pdf`).
+*   **Step 5's filter reaches every content stream a page uses.** It removed
+    the marked-content properties in a tiling pattern, a Type 3 glyph and a
+    soft mask's group, and those in page content written with a `#xx` escape
+    or ended by a NUL. Only the kind went unrecorded, until the scan before
+    step 5 covered the same streams (part 1, "What was removed";
+    `marked-*.pdf`).
+*   **MuPDF reads abbreviated filter names on any stream.** A JPEG XObject
+    under `/DCT`, or `[/FlateDecode /DCT]`, drew, and kept its EXIF through
+    preparation until step 7 read the names in full (Appendix A.2). An
+    inline JPEG's EXIF did not survive step 5, which rewrites inline images.
+
 ## Decisions Made During Drafting and Review
 
 *   **Where preparation happens (25 Nov 2026):** once per document, cached.
@@ -466,8 +592,65 @@ branches that only the new options turn on, and the layer rule fix below.
     8. Duplicating a project copies the whole `.redactorator/` folder.
     9. The allowlist is a full allowlist by role (Appendix A.1), not a
        structure allowlist with value rules.
-
-None are open.
+*   **Owner answers during slice 2 (25 Nov 2026):**
+    1. The allowlist's role table is generated from the PDF Association's
+       Arlington PDF Model (Apache 2.0), from the roles reachable from the
+       trailer through the keys we keep, rather than written by hand. It stays
+       a full allowlist by role: unknown keys are deleted, and an object with
+       no role refuses the file. Our own decisions, the keys we keep and the
+       kind each deleted key records, stay hand-written (Appendix A.1). The
+       model's TSVs are vendored at one pinned commit, as build-time data;
+       nothing fetches them at run time.
+    2. A catalog `/Names` dictionary records a kind per tree it holds: `links`
+       for `Dests`, `attachments` for `EmbeddedFiles`, `scripts-actions` for
+       `JavaScript`, and `app-data` for any other tree.
+    3. `marked-content` is also recorded when a page's or form XObject's
+       decoded content holds the name `/ActualText`, `/Alt` or `/E`, found by a
+       byte scan that matches whole names only. Inline property lists are what
+       the resource rule misses; over-reporting is acceptable, missing one is
+       not.
+    4. Slice 2 brings the outside checker's `image-metadata` and `structure`
+       checks forward, adds one leak entry per preparation rule path, and
+       judges entries with no mark on the working copy the app stores. The
+       entries for each free-text key and each refusal stay in slice 5.
+    5. The keys the design's rules left undecided in the generated table:
+       - deleted as `app-data`: the graphics state's `HTO`, `HTP` and Apple's
+         `AAPL:` keys, every halftone's `HalftoneName`, a form's or pattern's
+         `XUID` and `GTS_` keys, the model's `Blackls1` alias of `BlackIs1`,
+         and DeviceN's `MixingHints`;
+       - kept: a ToUnicode CMap stream's `Type`, `CMapName`, `CIDSystemInfo`,
+         `WMode` and `UseCMap`, the specification's own CMap keys;
+       - PostScript XObjects are deleted and recorded as `app-data`, not
+         refused (leak entry `postscript-xobject`);
+       - `Crypt` filter parameters (`FilterCrypt`) refuse the file as
+         `prepare-failed`.
+    6. The outside checker's `structure` check reads the same vendored
+       Arlington data, with its own walker over the TSVs and its own
+       keep-or-delete decisions written separately in Python, sharing no
+       code with the app.
+    7. Only a form drawn by XFA alone is refused. A hybrid form, whose XFA
+       sits beside widgets MuPDF draws, prepares: its fields are flattened,
+       and the whole form, XFA included, is deleted and recorded as
+       `form-data` (`hybrid-xfa.pdf`, whose XFA datasets hold a value).
+    8. A soft mask's one-channel colour space that reads as grey
+       (`CalGray`, an ICC profile with `/N 1`, `[/DeviceGray]`) is rewritten
+       as `DeviceGray` (`grey-soft-masks.pdf`, judged by `rendered`); any
+       other array colour space is still refused (Appendix A.1).
+    9. The lossless filters ahead of an image filter are undone, the image
+       cut, and kept under its image filter alone
+       (`[/ASCII85Decode /DCTDecode]`, `[/AHx /JPXDecode]`;
+       `image-prefilters.pdf`).
+    10. Bytes after a stream's end of data: a probe showed step 8's save
+        keeps them, so step 7 writes every kept stream under lossless
+        filters alone again from its decoded bytes, and the outside checker's
+        raw scan reads past a zlib stream's end (`data-after-end.pdf`).
+    11. The sanitize filter's lost text state (Probe Findings) is fixed by a
+        patch 0004 to MuPDF, with a leak entry on a synthetic fixture
+        (Detailed item 1b).
+    12. "What preparation promises" sets the boundary: kept bodies (fonts,
+        colour profiles, CMaps, other image codecs) are kept as they are by
+        decision, and a finding inside one is out of scope unless user data
+        reaches it. Review findings on kept bodies are closed against it.
 
 ## Critical User Journeys (CUJs)
 
@@ -512,8 +695,9 @@ None are open.
 
 ### CUJ 4: Hidden content the user never saw
 
-*   **Given**: A PDF with a layer that is switched off, holding a note with a
-    client's phone number, and a bookmark titled with the client's name.
+*   **Given**: A PDF with a layer that is switched off, holding a line of page
+    text with a client's phone number, and a bookmark titled with the
+    client's name.
 *   **When**: The user opens it, marks nothing, previews, approves and
     downloads.
 *   **Then**:
@@ -538,7 +722,7 @@ None are open.
 
 ### CUJ 6: A form that cannot be cleaned
 
-*   **Given**: A PDF built as an XFA form.
+*   **Given**: A PDF built as an XFA form only, with no normal form fields.
 *   **When**: The user adds it to a project.
 *   **Then**: It is refused right away with a message saying this kind of form
     cannot be cleaned here, before the user spends time marking it.
@@ -611,9 +795,15 @@ The order of the steps matters:
   form's fonts and fields, which stripping removes.
 
 1. **Open and refuse.**
-   - The existing `load` refuses encrypted files and files with no pages.
-   - New: a catalog `/AcroForm` with an `/XFA` entry is refused as
-     `unsupported-form`.
+   - The existing `load` refuses files with no pages, and encrypted files
+     that need a password to open. A file with an empty open password, such
+     as an edit-locked one, opens and is prepared; step 8 drops its
+     encryption.
+   - New: a catalog `/AcroForm` with an `/XFA` entry and no widget on any
+     page, a form only XFA draws, is refused as `unsupported-form`. A hybrid
+     form, whose XFA sits beside widgets MuPDF draws, is prepared: step 3
+     flattens its fields, and the form, XFA included, is deleted and
+     recorded as `form-data` (slice 2 answer 7; `hybrid-xfa.pdf`).
    - If the file has more than one revision (`countVersions() > 1`), record
      the kind `old-revisions`.
 2. **Delete annotations that must not be flattened:**
@@ -621,6 +811,10 @@ The order of the steps matters:
    - annotations on a layer that is off;
    - hidden widgets;
    - `Redact` and `Popup` annotations.
+
+   Link annotations are not deleted here, as MuPDF does not list them among
+   a page's annotations (slice 2 Probe Findings): this step records `links`
+   from the page's own `/Annots`, and step 7 deletes them with it.
 
    **What "on a layer that is off" means.** A layer is an OCG (Optional
    Content Group); a rule about layers is an OCMD (Optional Content Membership
@@ -632,15 +826,21 @@ The order of the steps matters:
    - **An OCMD** is judged by its `/P` rule (`AnyOn` by default, or `AllOn`,
      `AnyOff`, `AllOff`) over its layers, under those defaults. Its `/OCGs`
      may be a single dictionary or an array.
-   - **An OCMD with a free-form `/VE` expression** refuses the document as
-     `prepare-failed`, rather than being guessed at.
+   - **A free-form `/VE` expression** in an OCMD refuses the document as
+     `prepare-failed`, rather than being guessed at, wherever preparation
+     judges a layer: an annotation's `/OC` here, and before step 5 a page's
+     or form's `/Properties` and an XObject's `/OC`. The layer rules live in
+     `prepare/layers.ts`, which steps 2 and 5 share.
 
    Without this step, flattening would make hidden annotations visible (probe
    finding).
 3. **Flatten** with `PDFDocument.bake(true, true)`. It copies every remaining
    annotation's and widget's look into the page, and removes the form tree.
 4. **Save and reopen** (`saveToBuffer("")`, then open), because pages already
-   open still list their old annotations after flattening.
+   open still list their old annotations after flattening. Then check that no
+   page lists an annotation or a widget (`getAnnotations()`, `getWidgets()`),
+   since `bake` hides its own failures; one left refuses the document as
+   `prepare-failed`. Links pass, as MuPDF does not list them.
 5. **Clean page content** with one save through MuPDF's patched content
    filter: `saveToBuffer("clean,sanitize,drop-hidden-oc,drop-mc-properties,blank-unshown-pixels")`,
    then reopen. In that one pass it:
@@ -665,25 +865,31 @@ The order of the steps matters:
    drawing that crosses the edge is kept, because part of it is visible. Text
    and drawing parts wholly outside are removed. (Pixels outside the page were
    blanked in step 5.)
-7. **Strip by allowlist** (`engine/pdf/allowlist.ts`).
-   - Walk every object reachable from the trailer.
-   - Classify each dictionary and stream by its **role**: the key and the
-     parent that lead to it, such as "a value of `/Font` in a resources
-     dictionary is a font". `/Type` and `/Subtype` confirm the role where
-     present (Appendix A.1).
-   - Delete every key not on that role's allowlist, and record the kind each
-     deleted key belongs to (Appendix A.1, last column).
-   - An object reached through two roles must satisfy both, or the document
-     is refused as `prepare-failed`. So is a reachable object whose role cannot
-     be worked out.
+7. **Strip by allowlist** (`engine/pdf/allowlist.ts`, over the role table
+   `engine/pdf/allowlistRoles.generated.ts`, which is generated from the PDF
+   Association's Arlington PDF Model; Appendix A.1).
+   - Walk from the trailer, through the keys each object's role keeps.
+   - Give each dictionary, stream and array a **role**, one of the model's
+     object types, chosen from the candidates the key that leads to it names
+     (Appendix A.1, "Choosing a role").
+   - Delete every key the role does not keep, and record the kind it
+     belongs to. Refuse the document as `prepare-failed` where a key can't
+     be deleted safely, or an object has no role. Appendix A.1 is the one
+     statement of these rules.
    - JPEG images get their metadata segments cut from their raw bytes, and
-     JPEG 2000 images get their metadata boxes cut (Appendix A).
+     JPEG 2000 images get their metadata boxes cut (Appendix A.2).
    - Layer settings (`/OCProperties`) are removed, since step 5 already removed
      both the hidden content and the layer markers. Removing them records no
      kind; `hidden-layers` comes only from the device pass before step 5.
+   - **Step 7a, save and reopen** (`saveToBuffer("compress")`, then open), so that no
+     stream has been read when step 8 renumbers objects: MuPDF 1.28.6 drops
+     the data of a stream, once read and unchanged, that holds a reference
+     the save renumbers (slice 2 Probe Findings). Its `compress` compresses
+     the streams step 7 wrote again from their decoded bytes (Appendix A.2).
 8. **Save** with `saveToBuffer("garbage=4,compress,encrypt=none")`: one
    revision, and anything nothing points to is dropped.
-9. **Check the preparation** with MuPDF alone (`prepare/check.ts`):
+9. **Check the preparation** with MuPDF alone (`prepare/check.ts`): the
+   working copy has as many pages as the original, and
    - every glyph the original draws on screen is still drawn at the same place
      in the working copy, using `missingGlyphs` and `movedGlyphs` (part 6).
      Both files are read with `READING_OPTIONS`, and glyphs outside the crop
@@ -700,11 +906,20 @@ document, kinds only, with no counts. The literals are in Appendix A.
   pass over the flattened document:
   - hidden layer content: a layer that is off is used, meaning the device's
     `beginLayer` callback reports it (it fires even for content MuPDF skips),
-    or a resource or annotation names it in `/OC`;
+    or a resource (a `/Properties` entry, or an XObject's `/OC`) names it.
+    An annotation on a layer that is off is deleted in step 2 and records
+    `annotations`;
   - marked-content properties: the resources hold properties other than
-    layers;
-  - unshown image pixels: an image is drawn while a clip is in force, or
-    reaches past the crop box.
+    layers, or a content stream the filter rewrites holds the name
+    `/ActualText`, `/Alt` or `/E` (slice 2 answer 3). The scan covers the
+    page's own content and every form, tiling pattern, soft mask's group and
+    Type 3 glyph its resources reach, and reads names as the PDF lexer does:
+    a name ends at white space, NUL included, or a delimiter, so `/E` is not
+    `/EMC` or `/Encoding`, and a `#xx` escape stands for its byte;
+  - private application data: a resource names a PostScript XObject, which
+    the filter drops and no PDF 2.0 reader draws (owner, 25 Nov 2026);
+  - unshown image pixels: an image or an image mask is drawn while a clip or
+    a soft mask is in force, or reaches past the crop box.
 
 ### 2. Reading the working copy
 
@@ -817,7 +1032,7 @@ cache.
 - **After re-anchoring:**
   - the document's undo history is cleared;
   - a document whose working copy, removed kinds or marks changed goes back
-    to review, setting `review` to `"in-review"` (owner answer 3);
+    to review, setting `review` to `"in-review"` (review answer 3);
   - re-anchoring is not an edit. It does not bump the edit count and does not
     change the download state (owner, 25 Nov 2026).
 - **The guard.** The writer refuses with `mark-lost` (part 6) when the
@@ -863,7 +1078,7 @@ The writer starts from the working copy. Redaction itself does not change:
 - then the boxes are drawn.
 
 **A document with no marks** skips the writer. The gate runs on the working
-copy, and its bytes are downloaded unchanged (owner answer 6). The worker
+copy, and its bytes are downloaded unchanged (review answer 6). The worker
 posts a copy (`document.bytes.slice()`), so the working bytes every later
 Preview starts from are not transferred away. It sets `document.output` to a
 fresh open of that copy, so the output can be rendered.
@@ -905,8 +1120,8 @@ replaces `CheckFailed`. The app turns each code into its sentence.
 
 | Code | Raised | Trigger (today's site → new) | Data | Sentence | What the user can do |
 | --- | --- | --- | --- | --- | --- |
-| `unsupported-form` | when added | catalog `/XFA` | none | "This PDF is an XFA form, which can't be cleaned here." | Save it as an ordinary PDF in the app that made it |
-| `prepare-failed` | when added, or while updating | preparation's own check fails; an unclassified dictionary; a `/VE` layer rule; an unusual image filter chain; any exception during preparation (`inspect.ts:20` today) | page, if known | "This PDF can't be prepared for cleaning here." | None; the other documents carry on |
+| `unsupported-form` | when added | an `/XFA` entry in the catalog's `/AcroForm`, and no widget on any page | none | "This PDF is an XFA form, which can't be cleaned here." | Save it as an ordinary PDF in the app that made it |
+| `prepare-failed` | when added, or while updating | preparation's own check fails; an annotation left after flattening (step 4); an object with no role, or another refusal of Appendix A.1; a `/VE` layer rule (step 2, or before step 5); a refusal of Appendix A.2 (a filter chain, data that can't be walked, image data outside an image); any exception during preparation (`inspect.ts:20` today) | page, if known | "This PDF can't be prepared for cleaning here." | None; the other documents carry on |
 | `encrypted`, `open-failed` | when added | unchanged | none | unchanged | unchanged |
 | `mark-lost` | Preview | `redact.ts:22` | page | "A mark on page N no longer matches the page. Mark it again." | Mark the text again |
 | `extra-text-removed` | Preview | `check.ts:141` (missing letters) | page, boxes of the missing letters | "Cleaning would also remove unmarked text next to a mark on page N. The extra letters are highlighted." | Change or remove the mark |
@@ -992,18 +1207,27 @@ tests.
 - **`raw.py`** keeps its own way of finding streams and strings, which is what
   makes it independent of pdfminer's parser. It decodes streams with
   pdfminer's decoders: Flate with predictors, LZW, ASCII85, ASCIIHex,
-  RunLength, and chains of these (owner answer 5). It also decodes `#xx`
+  RunLength, and chains of these (review answer 5). It also decodes `#xx`
   escapes in names, PDFDocEncoding, and UTF-16 with or without a byte-order
   mark. Its docstring is updated to say it shares decoding with pdfminer.
+  That move to pdfminer's decoders is slice 5's; in slice 2 `raw.py` inflates
+  with zlib, and scans each Flate stream's bytes after its end of data too
+  (answer 10), which stays when the decoders move.
 - **New checks:**
-  - **`structure`:** the checker's own allowlist, written separately from the
-    app's, from the specification.
+  - **`structure`:** the checker's own allowlist. It reads the same vendored
+    Arlington TSVs as the app's generator, with a walker of its own, and keeps
+    its own keep-or-delete decisions, written in Python from this design's
+    rules; it shares no code with the app (slice 2 answer 6). It applies
+    every rule of Appendix A.1 as a check, and
+    fails on an `Encrypt` left in the trailer. It returns a list of
+    reasons, and passes when the list is empty.
   - **`drawings`:** no drawing part wholly under a box, and partly covered
     parts only as a single rectangle or line.
   - **`glyphs-absent`:** no glyph under a region, judged by position, for text
     with no Unicode map.
   - **`image-metadata`:**
-    - no JPEG segment other than APP14 among the APPn segments;
+    - no JPEG segment other than Adobe's APP14 among the APPn segments, and
+      no COM segment in any J2K codestream;
     - no comment segment;
     - no bytes after the end-of-image marker;
     - no JPEG 2000 metadata boxes.
@@ -1024,7 +1248,8 @@ tests.
 - **The leak-vector list** is `tests/oracle/leak-vectors.json`. It is complete
   when it has:
   - one entry per rule path;
-  - one entry per allowlisted key that can hold free text;
+  - one entry per kept key of the object graph that can hold free text
+    (not the kept bodies of "What preparation promises");
   - one entry per refusal code.
 
   Entries that exercise the same strip path may share one fixture and one
@@ -1140,6 +1365,9 @@ tests.
     and checks.
 *   **Reason for Rejection**: Rejected by author: refusing all XFA costs only
     those files, which are uncommon, and avoids a whole class of cases.
+    Superseded in slice 2 (answer 7): 36 of 45 irs.gov files carry XFA, all
+    hybrid, so hybrid forms are now flattened and only XFA-only forms are
+    refused.
 
 #### The certificate in Phase 3
 
@@ -1268,6 +1496,19 @@ tests.
     fails by breaking or refusing a file, which tests catch. The smaller rule
     fails by keeping data.
 
+### From slice 2
+
+#### A role table written by hand
+
+*   **Pros**: No third-party data; the table reads as the specification.
+*   **Cons**: It can never be shown complete. Slice 2 alone found objects it
+    gave no role, such as `JBIG2Globals` streams and DeviceN's `Colorants`,
+    and each gap refuses every file that holds it.
+*   **Reason for Rejection**: Rejected by the owner (slice 2 answer 1): the
+    role table is generated from the Arlington PDF Model, which covers every
+    object type of PDF 2.0. Our decisions, what is kept and which kind a
+    deletion records, stay ours.
+
 ## Risks and Mitigations
 
 | Risk | Mitigation |
@@ -1278,16 +1519,26 @@ tests.
 | Patch 0003 edits code the writer runs (image redaction's pixel code, and the content filter), so AGENTS.md asks for a leak fixture the outside checker judges | Oracle-judged leak-vector entries cover each edited branch and the corrected layer rules (Probe Findings, patch spike), and the writer's output is byte for byte unchanged on them |
 | `bake` fails without saying so, and a widget or annotation stays live in the working copy | Slice 2 checks after step 4 that none is left, and refuses the document if one is |
 | Blanked images make the working copy larger, since they are stored with Flate | Accepted as for image redaction; measured in the NFRs |
-| Preparing a file with many partly hidden scans runs out of WebAssembly memory | Measured in the NFRs (865 MB for 40 scans, against a 2 GB limit); the save then fails and preparation refuses the document, so nothing leaks. Today's image redaction grows the same way and peaks higher, so the owner accepts it (25 Nov 2026) |
+| Preparing a file with many partly hidden scans runs out of WebAssembly memory | Measured in the NFRs: the WebAssembly heap reached 344 MB for 5 half-hidden scans through steps 1 to 9, against MuPDF.js's 2 GB limit; 40 scans are measured only for steps 1 to 6 and 8 (865 MB resident). If the heap runs out, the save fails and preparation refuses the document, so nothing leaks. Today's image redaction grows the same way and peaks higher, so the owner accepts it (25 Nov 2026) |
 | The drawing rule refuses many ordinary files | Grids, shading and barcodes pass, because MuPDF judges each part. The grid, shading, barcode and signature-stroke fixtures measure it (Detailed item 29) |
 | Scanned pages with misplaced OCR boxes can leave parts of letters visible (#6), against PRD DOC-4 ("refused or flagged, never passed through silently") | Left to the OCR phase by the owner (25 Nov 2026). Recorded here as a known gap |
 | White, covered or clipped text keeps unmarked data (#34) | Out of Phase 3, named in the Overview, tracked in #34 |
 | Text whose only Unicode mapping was its ActualText reads as other letters, so spreading misses it | A leak-vector fixture records the behaviour. Flagging such pages is deferred |
-| The raw scan and pdfminer share stream decoders, so one decoder bug could hide a value from both | Owner's choice (answer 5). The raw scan keeps its own stream and string discovery |
+| The raw scan and pdfminer will share stream decoders (slice 5), so one decoder bug could hide a value from both | Owner's choice (review answer 5). The raw scan keeps its own stream and string discovery |
+| The app's allowlist and the checker's `structure` check read the same Arlington data, so a key the model wrongly lists for a type could pass both | Owner's choice (slice 2 answer 6; part 9). The two walkers and their decisions are written apart, and `absent` and `rendered` judge every entry independently of the model. They still share the model's reading and the rule for choosing a role (Appendix A.1), so a role chosen wrongly by both would pass. Read against each type's own keys in the model, the checker's keep sets equal the app's decisions for every type, apart from the trailer's `Encrypt`, which the checker fails by design (25 Nov 2026). A change to `allowlist-decisions.json` is made by hand in `structure.py`'s `KEEP` too; where the app then keeps a key the checker does not, the leak suite fails on any fixture that holds it |
 | Storage grows: one working copy per document, and one folder per reader tag | Storage size is not a concern for the owner. Older tag folders could be pruned later (Future Improvements) |
+| Most IRS forms carry XFA: 36 of 45 irs.gov files hold an `/XFA` entry, all beside normal fields | Hybrid forms are flattened and their XFA deleted (slice 2 answer 7); all 36 now prepare (NFRs, refusals). A form drawn by XFA alone is still refused |
+| A soft mask's colour space other than `DeviceGray` refused files MuPDF draws (1 of the owner's 41 PDFs) | A one-channel space that reads as grey is rewritten as `DeviceGray` (slice 2 answer 8); that file now prepares. Any other array colour space on a soft mask still refuses (Appendix A.1) |
+| A JPEG or JPEG 2000 image behind filters other than one Flate layer refused files (found on synthetic fixtures; no real file in the counts) | The lossless filters ahead of the image filter are undone (slice 2 answer 9). A chain with any filter outside that set before the image filter, or any filter after it, still refuses |
+| Bytes after a stream's end of data survive step 8's save (probed, `data-after-end.pdf`) | Step 7 writes every kept stream whose filters are all lossless again from its decoded bytes, and step 7a's save compresses them (slice 2 answer 10). MuPDF holds each decoded copy until that save, so the WebAssembly heap peak grows with the total decoded size of those streams: 344 MB for 5 half-hidden scans, as before answer 10, as the blanked scans are Flate. 40 such scans are not measured; if they do not fit, the rewrite can run in batches, each followed by a `compress` save and reopen. Streams kept as they are, so that bytes after their end of data remain a gap: any with a filter outside the lossless set (`CCITTFaxDecode`, `JBIG2Decode`, `Crypt`, an unknown name or a non-name), the lossless layers ahead of them included. The outside checker reads past a zlib stream's end only |
+| MuPDF's stock `sanitize` drops or moves a few letters on some pages (NFRs, refusals): it loses a text-state reset made in an empty text object before a form is drawn (Probe Findings, slice 2) | Fixed by patch 0004 (slice 2 answer 11): the filter sends pending text state before a form is drawn. Step 9 still refuses a file whose text the filter changes in any other way, and the writer's gate an export |
 | The browser's storage quota is reached while preparing | The write fails, that document is refused, and `writeOriginals` removes what it wrote. Other documents carry on |
 | A rollback shows the project as it was before the upgrade | By design (part 3). Newer changes are kept for the next upgrade |
-| A role the allowlist misses makes a file draw wrong or be refused | The gate's glyph check and the outside checker's `rendered` check catch it in tests. It can never leak, because an unknown key is deleted, not kept |
+| The Arlington model misses a role, or a key, that real files use | A key the model does not list is deleted, never kept, so it can't leak. A drawing that needed it draws wrong, which the outside checker's `rendered` check catches on the fixtures; the gate's glyph check sees only text. An object that matches no role refuses its file. The model is pinned to one commit, and the refusal counts (NFRs) measure how often it refuses |
+| An update of the vendored model changes what is kept | Only by updating `vendor/arlington/` and running the generator, whose output is reviewed as a diff, then `pnpm test` with every leak vector |
+| MuPDF 1.28.6's `garbage` save writes a stream, once read and unchanged, that holds a reference the save renumbers, without its data (Probe Findings, slice 2) | Preparation saves and opens again before step 8 (step 7a), and step 9 refuses a file that still comes out wrong. Not yet fixed in the writer, which reads the images it draws: an image not under a box, holding a reference the save renumbers, could vanish from an output. The gate's glyph check does not see it; the structural check run on the output would, as it finds a stream left as a dictionary. A lost stream can't leak a value, but a lost soft mask, mask or form changes what the page shows. For the owner: a slice 3 fix, a patch 0004, or both, with the structural check on the writer's output in slice 3 |
+| Preparing a long text document is slow and uses much memory | Measured in the NFRs ("Measured in slice 2"): most of it is the JavaScript heap of step 9, not the WebAssembly heap. If the worker dies of it, rather than MuPDF throwing, the preparation in flight settles as `worker-stopped` and the file is not added. Not optimised in slice 2; for the owner: does the 500-page cost matter? |
+| A duplicate keeps the root `project.json` it copied, with the original's id, so a build from before reader tags lists two projects with one id | A rollback-only case that follows from never writing the root files. For the owner: what should happen to the duplicate id? |
 
 --------------------------------------------------------------------------------
 
@@ -1311,7 +1562,7 @@ tests.
       silicon Mac, with the patched MuPDF.js. Phase 3's own fixtures do not
       exist yet, so the spike generated stress files. The times cover the
       MuPDF steps 1 to 6 and 8. Step 7 (the allowlist) and step 9 (the
-      check) are not written yet. Peak memory is the process's maximum
+      check) were not written yet. Peak memory is the process's maximum
       resident size, which includes about 120 MB for Node and MuPDF alone.
 
       | Synthetic file | Time | Peak memory |
@@ -1347,8 +1598,48 @@ tests.
 
       The owner accepts the growth, since the unpatched MuPDF shows it too
       (25 Nov 2026).
+    - **Measured in slice 2** (25 Nov 2026), the whole of `prepareDocument`,
+      steps 1 to 9, in Node 24 on an Apple silicon Mac, on the spike's stress
+      files. Peak memory is the test process's maximum resident size, which
+      includes about 150 MB for the test runner and MuPDF alone.
+
+      | Synthetic file | Time | Peak memory | WebAssembly heap |
+      | --- | --- | --- | --- |
+      | 500 pages of text, each with a typed note and a filled field (0.7 MB) | 10.6 s | 1.5 to 1.8 GB | 38 MB |
+      | 20 full-page 300 dpi scans, all shown (4.8 MB) | 0.5 s | 233 to 248 MB | 66 MB |
+      | 5 such scans, half past the page edge (1.2 MB) | 2.4 s (3.7 s after answer 10) | 412 MB | 344 MB |
+
+      The WebAssembly heap is MuPDF.js's memory after preparation, which
+      never shrinks, so it is that heap's peak; MuPDF.js stops it at 2 GB.
+      Peak memory varied between runs by the range shown. On the 500-page
+      file, step 6 (finding content outside the page, then the four areas)
+      takes 2.0 s and step 9 (reading every page of both files and comparing
+      their glyphs) 4.6 s. The JavaScript heap peaks at 782 MB in step 9, and
+      363 MB of it is still held after a forced collection, so the text file's
+      cost is in the JavaScript heap, and it grows with the page count.
     - The worker holds one document per open file, as today: the working copy
       replaces the original.
+*   **Refusals over real PDFs (25 Nov 2026):** `prepareDocument` on real
+    files, read where they were and never copied into the repo, reported as
+    counts by reason only.
+
+    | Files | Prepared | `unsupported-form` (XFA) | `encrypted` | `prepare-failed`, step 7 (an object fits no role) | `prepare-failed`, step 9 (glyphs) |
+    | --- | --- | --- | --- | --- | --- |
+    | 41 of the owner's own PDFs, before answers 7 to 10 | 39 | 0 | 1 | 1 | 0 |
+    | the same, after them | 40 | 0 | 1 | 0 | 0 |
+    | 45 IRS forms, instructions and publications from irs.gov, before answers 7 to 10 | 8 | 36 | 0 | 0 | 1 |
+    | the same, after them | 44 | 0 | 0 | 0 | 1 |
+    | the same, with patch 0004 (answer 11) | 45 | 0 | 0 | 0 | 0 |
+
+    - The step 7 refusal was an image's soft mask whose colour space was a
+      one-channel ICC profile; answer 8 rewrites it as `DeviceGray`.
+    - All 36 XFA files are hybrid forms that also hold AcroForm fields; under
+      answer 7 they prepare and pass step 9.
+    - The step 9 refusal is MuPDF's own `sanitize`: on one page of 126 it
+      drops 7 letters and moves 1, out of about 4,000, with or without patch
+      0003's options. The file is refused, so nothing leaks. The cause is in
+      Probe Findings ("`sanitize` loses a text state a form inherits");
+      with patch 0004 the file prepares.
 *   **Rollback:** an older build opens the project as it last saw it (part 3).
     Nothing it relies on is rewritten.
 
@@ -1395,10 +1686,12 @@ summary matches those tags.
 | Slice | Content | Items |
 | --- | --- | --- |
 | 1 | **The patch spike:** patch 0003, the rebuild, the hand-run repro scripts, and the probes for the signed widget and the straddling path. The existing browser tests must pass on the rebuilt MuPDF. The first leak-vector entries, for the write-path branches the patch edits, the corrected layer rules and the text the content filter drops, and the oracle's `rendered` check | 1–2, 27–29 and 31 (those entries and `rendered` only) |
-| 2 | **Preparation, reading, storage and anchoring:** the protocol change together with its test fakes, the golden files re-recorded, and the first anchoring test | 3–10, 12–24, 27–29 (preparation vectors only), 32 (first case), 33 (fakes and protocol) |
-| 3 | **The writer and the gate:** refusal codes and their app sentences, Preview, zero-mark export, `textMoved` removed | 11, 21 (`apply.ts`), 26 (refusal parts), 32 (second case), 33 (the rest) |
+| 2 | **Preparation, reading, storage and anchoring:** the protocol change together with its test fakes, the golden files re-recorded, the first anchoring test, and the allowlist's role table generated from the Arlington PDF Model | 1b, 2 (for patch 0004), 3–10, 12 (slice 2 parts), 13–20, 26 (the add-time sentences), 21 (`facade.ts`, `open.ts`, `readings.ts`, `add.ts`), 22–24, 27 (`structure`, `image-metadata`, and `rendered` with `init_forms()`), 28–29 (preparation vectors), 31 (entries with no mark), 32 (first case), 33 (fakes and protocol), 35, 36–37 |
+| 3 | **The writer and the gate:** refusal codes and their app sentences, Preview, zero-mark export, `textMoved` removed | 11, 12 (`textMoved` removed), 21 (`apply.ts`), 26 (refusal parts), 32 (second case), 33 (the rest) |
 | 4 | **The approval dialog:** removed kinds shown on approval | 21 (`plan.ts`), 25, 26 (dialog and status parts) |
-| 5 | **The rest of the leak suite:** the manifest, the meta-test and the remaining fixtures; every leak vector passes | 27–31 |
+| 5 | **The rest of the leak suite:** the manifest, the meta-test and the remaining fixtures, whose free-text entries cover kept object-graph keys only, not kept bodies ("What preparation promises"); every leak vector passes | 27–31 |
+
+Item 34, the directory READMEs, lands in every slice.
 
 Slice 2 keeps `textMoved` next to the new `missingGlyphs` and `movedGlyphs`,
 so `write/check.ts` still builds. Slice 3 removes it. Slice 2's `fail()`
@@ -1421,6 +1714,24 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 *   **Proposed Changes**: the three options of part 5: `drop-hidden-oc`,
     `drop-mc-properties` and `blank-unshown-pixels`, and the fix to layer
     rules (Probe Findings, patch spike).
+
+#### 1b. `vendor/mupdf/patches/0004-Send-pending-text-state-before-a-form-XObject.patch` (Create) — slice 2
+
+*   **Type / Scope**: C patch to MuPDF 1.28.6, on top of 0001 to 0003. It
+    touches `source/pdf/pdf-op-filter.c` only.
+*   **Proposed Changes**: `pdf_filter_Do_form` sends any pending `Tc`, `Tw`,
+    `Tz`, `Tr` and `Ts` after its `filter_flush`, so a form inherits the
+    text state in force where it is drawn. A pending `Tf` or `TL` is not
+    sent, a remaining gap that step 9 and the writer's gate still catch as
+    moved glyphs (slice 2 answer 11; Probe
+    Findings, "`sanitize` loses a text state a form inherits"). With it:
+    `vendor/mupdf/upstream/0004-bug-report.md` and `0004-repro.mjs` (which
+    checks both the `sanitize` save and a redaction applied inside the
+    form, failing on the build without 0004), the README row, a rebuilt
+    `package/dist` and new `SHA256SUMS`, and two leak entries on
+    `inherited-text-state.pdf`: `form-inherits-text-state` (preparation)
+    and `form-inherits-text-state-when-written` (a mark inside the form,
+    written by the writer).
 
 #### 2. Vendored build files (Modify / Create) — slice 1
 
@@ -1453,14 +1764,14 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 *   **Proposed Changes**:
     `prepareDocument(bytes): { preparedBytes, reading, removed: readonly RemovalKind[] } | { code: ReaderErrorCode }`.
     `removed` is sorted and holds no repeats. It runs the nine steps of
-    part 1. Step-to-file map:
+    part 1, with step 7a. Step-to-file map:
 
     | Step | File |
     | --- | --- |
-    | 1 and 8 | `prepare/index.ts` |
-    | 2–4 | `prepare/annotations.ts` |
-    | 5–6 | `prepare/page.ts` |
-    | 7 | `engine/pdf/allowlist.ts`, strip mode |
+    | 1, 7a and 8 | `prepare/index.ts`, saving and opening through `prepare/reopen.ts` |
+    | 2–4 | `prepare/annotations.ts`, with the layer rules in `prepare/layers.ts` |
+    | 5–6 | `prepare/page.ts`, with the layer rules in `prepare/layers.ts` |
+    | 7 | `engine/pdf/allowlist.ts`, strip mode, with the image cutting in `engine/pdf/imageData.ts` |
     | 9 | `prepare/check.ts` |
 
     Saves use exactly the option strings given in part 1. Any exception
@@ -1473,7 +1784,9 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     - Steps 2–4: delete annotations by the flag and layer rules of part 1
       step 2, including the OCG/OCMD rule with `BaseState`, and refusing
       `/VE` as `prepare-failed`.
-    - Flatten with `bake(true, true)`, then save with `""` and reopen.
+    - Flatten with `bake(true, true)`, then save with `""` and reopen, and
+      refuse as `prepare-failed` when a page still lists an annotation or a
+      widget (step 4).
     - Record the kinds `annotations`, `pending-redactions`, `form-data`,
       `signatures`, `links` (link annotations) and `attachments`
       (file-attachment annotations) as they apply.
@@ -1482,23 +1795,41 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 
 *   **Type / Scope**: TypeScript, worker, zone `pdf`.
 *   **Proposed Changes**:
-    - The role tables of Appendix A.1, and a walker over every object
-      reachable from the trailer that classifies each by its role.
-    - **Strip mode** deletes keys not allowed for the role and returns the
-      kinds of what it deleted.
-    - **Check mode** returns the first key outside the allowlist.
-    - An object reached through two roles must satisfy both. An object whose
-      role cannot be worked out, or whose `/Type` or `/Subtype` contradicts
-      its role, returns `prepare-failed`.
+    - A walker from the trailer that gives each object its role from the
+      generated role table (item 37), by the rules of Appendix A.1.
+    - **Strip mode** (`stripToAllowlist`) deletes keys not allowed for the
+      role and returns the kinds of what it deleted, or `"refused"` where
+      A.1 refuses the file, which step 7 answers as `prepare-failed`.
+    - **Check mode** (`keyOutsideAllowlist`) returns the first key outside
+      the allowlist as a path of keys from the trailer, with
+      `" (image data)"` after an image whose data still holds metadata and
+      `" (a filter over image data)"` after an image still behind another
+      filter, or `"unplaced"` wherever A.1 or A.2 refuses the file.
+      It reports a trailer `Encrypt` too, which strip mode keeps until step
+      8.
+    - The catalog's `/Names` records a kind per tree it holds (slice 2
+      answer 2), from `NAME_TREES` in `allowlist.ts`, as A.1's `Catalog` row
+      says. The leak suite checks the kind each carrier records, so
+      `carriers.pdf`'s named destination and embedded file test it; its
+      script shares `scripts-actions` with the file's actions, so the
+      `JavaScript` tree's kind is not tested apart.
+    - Keys the file chooses are looked up as the table's own keys only, so a
+      key named after a JavaScript built-in, such as `/constructor`, is
+      deleted like any other (`structure-keys.pdf`).
     - JPEG and JPX cutting per Appendix A.2, with `readRawStream` and
-      `writeRawStream`.
+      `writeRawStream`; the segment and box walks are in
+      `engine/pdf/imageData.ts` (`cutJpeg`, `cutJpx`).
 
 #### 6. `engine/pdf/prepare/page.ts` (Create) — slice 2
 
 *   **Type / Scope**: TypeScript, worker.
 *   **Proposed Changes**:
-    - **Step 5:** run the device pass described in part 1, which records the
-      kinds `hidden-layers`, `marked-content` and `unshown-image-pixels`.
+    - **Step 5:** first run the scan described in part 1 ("What was
+      removed"): a device pass over each page, and a walk of the content
+      streams its resources reach. It records `hidden-layers`,
+      `marked-content`, `unshown-image-pixels` and, for a PostScript
+      XObject, `app-data`, and refuses a `/VE` layer rule. The five
+      `marked-*.pdf` leak entries check the `marked-content` kind it records.
       Then save with
       `clean,sanitize,drop-hidden-oc,drop-mc-properties,blank-unshown-pixels`
       and reopen.
@@ -1566,6 +1897,17 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
         `openPdf` of that copy, with its model from `documentModel`;
       - posts `{ code, data }` with no `message`. `data.page` is a 0-based
         `PageIndex`.
+    - A text mark's box is trimmed above and below clear of the letters no
+      mark removes, never into its own ink band: on lines set closer than
+      their font's height, the full height covered a kept word on the next
+      line, and the gate refused the export (done in slice 2 at the owner's
+      request; leak entry `mark-wrapping-onto-a-tight-line` on
+      `tight-lines.pdf`).
+    - `redact.ts` deletes the empty `/Annots` array its redaction areas leave
+      behind, which the outside checker's `structure` check rejects (found in
+      slice 2; the leak entries with a mark skip `structure` until then).
+    - The writer reads the images it draws and saves with `garbage=4`, so it
+      meets the garbage-renumber bug of the slice 2 Probe Findings (Risks).
 
 #### 12. `engine/pdf/glyphs.ts`, `engine/pdf/glyphs.test.ts`, `engine/pdf/structure.ts` (Modify, Modify, Create) — slices 2 and 3
 
@@ -1793,7 +2135,7 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
       with the sentences of Appendix A.3, when the document's removed kinds
       are not empty.
 
-#### 26. App UI files (Modify) — slices 3 and 4
+#### 26. App UI files (Modify) — slices 2, 3 and 4
 
 *   **Type / Scope**: UI.
 *   **Files:**
@@ -1802,6 +2144,9 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     - `app/TopBar.tsx`, `app/ProjectView.tsx`, `app/Workspace.tsx`;
     - `app/engineStatus.ts`.
 *   **Proposed Changes**:
+    - **Refusals when a file is added (slice 2):** `errors.ts` gains the
+      sentences for `unsupported-form` and `prepare-failed`, which
+      `open-pdf.spec.ts` asserts.
     - **Refusals (slice 3):**
       - `errors.ts` has one sentence per code, as in the part 6 table, and
         shows pages as `page + 1`;
@@ -1826,21 +2171,31 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 *   **Files:**
     - `tests/oracle/oracle/raw.py`, `tests/oracle/oracle/checks.py`,
       `tests/oracle/oracle/__main__.py`;
+    - `tests/oracle/oracle/structure.py` (Create, slice 2);
     - `tests/oracle/pyproject.toml`, `tests/oracle/uv.lock`;
     - `tests/oracle/tests/test_checks.py`, `tests/e2e/oracle.ts`.
 *   **Proposed Changes**:
-    - **`raw.py`** decodes with pdfminer's filters: Flate with predictors,
-      LZW, ASCII85, ASCIIHex, RunLength and chains of these. It also decodes
-      name escapes, PDFDocEncoding, and UTF-16 without a byte-order mark. Its
-      docstring changes.
-    - **`checks.py`** gains `structure`, `drawings`, `glyphs-absent`,
-      `image-metadata` and `rendered`. `rendered`, with `pypdfium2`, came
+    - **`raw.py`** (slice 2) scans each Flate stream's bytes after its end of
+      data. In slice 5 it decodes with pdfminer's filters: Flate with
+      predictors, LZW, ASCII85, ASCIIHex, RunLength and chains of these,
+      keeping that scan, and also keeps each stream's undecoded bytes as a
+      segment, as it does today for a stream zlib can't inflate: pdfminer's
+      decoders stop at their end markers, so without it the planned entries
+      for bytes after an LZW, ASCII85, ASCIIHex or RunLength stream's end
+      could not fail on their uncleaned fixtures. It also decodes name escapes, PDFDocEncoding, and
+      UTF-16 with or without a byte-order mark. Its docstring changes.
+    - **`checks.py`** gains `structure` (in `oracle/structure.py`, over
+      `vendor/arlington`), `drawings`, `glyphs-absent`, `image-metadata` and
+      `rendered`. `rendered`, with `pypdfium2`, came
       in slice 1 (owner, 25 Nov 2026).
-      - `image-metadata` drops COM segments in every J2K codestream, raw or
-        inside `jp2c`.
-      - Each check is tagged `leak` or `keep` (part 9).
-    - **`__main__.py`** gets a `CHECKS` dict mapping each name to its function
-      and its sort.
+      - `image-metadata` fails when it finds a COM segment in any J2K
+        codestream, raw or inside `jp2c`.
+      - `structure` and `image-metadata` come in slice 2 (slice 2 answer 4),
+        and `rendered` starts PDFium's form environment there, so it draws
+        form fields.
+      - Each check is tagged `leak` or `keep` (part 9), in slice 5.
+    - **`__main__.py`** dispatches each check by name; in slice 5 it gets a
+      `CHECKS` dict mapping each name to its function and its sort.
     - **`pyproject.toml`** adds `pypdfium2==5.15.2` to
       `[project].dependencies`, and `uv.lock` is regenerated.
     - **`test_checks.py`** gets one clean case and one unclean case per new
@@ -1849,7 +2204,11 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
       regions use `{ page: number /* 1-based */; box: UserBox }`, where
       `UserBox` is the oracle's existing bottom-left PDF user space.
 
-#### 28. `tests/oracle/leak-vectors.json` (Create) — slices 1, 2 and 5
+#### 28. `tests/oracle/leak-vectors.json` (Create) — slices 1, 2, 3 and 5
+
+In slice 3, once `redact.ts` deletes the empty `/Annots` (item 11), every
+entry with a mark gets `{ "check": "structure" }` back, so the outside
+checker judges the writer's output structurally.
 
 *   **Type / Scope**: The leak-vector list.
 *   **Proposed Changes**: an array of entries:
@@ -1894,6 +2253,16 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 
 *   **Type / Scope**: Synthetic fixtures.
 *   **Proposed Changes**:
+    - `tests/oracle/README.md`'s fixture table is the specification of each
+      fixture: what it holds, where, and its planted values. Slice 2 adds
+      `annotations`, `form`, `carriers`, `hidden-content`, `image-data`,
+      `xfa-form`, `visibility-expression`, `structure-keys`, `wrong-array`,
+      `stray-parent`, `null-elements`, `postscript-xobject`,
+      `image-filter-names`, `image-filter-not-last`, `two-roles`,
+      `hybrid-xfa`, `grey-soft-masks`, `image-prefilters`, `data-after-end`,
+      `shading-graphics-state`, `abbreviated-stream-keys`,
+      `jpx-data`, `jpeg-extension`, `jpeg-long-adobe`, `icc-under-dct`,
+      `inline-jpeg` and the five `marked-*`.
     - One builder per fixture file, written as `fixtures/<name>.pdf` and
       `fixtures/<name>-cleaned.pdf` for the checker's own tests. Several
       entries may share a fixture.
@@ -1924,10 +2293,26 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     That each entry passes in the browser is enforced by
     `leak-suite.spec.ts`, inside `pnpm test`.
 
-#### 31. `tests/e2e/leak-suite.spec.ts` (Create) — slices 1 and 5
+    Notes from slice 2's review, for slice 5:
+    - Nine slice 2 entries list `structure` where their uncleaned fixtures
+      hold only kept keys, so `structure` passes on them: the five
+      `marked-content-*`, the three `image-data-*-filter`/`-predictor` and
+      `data-after-end-of-stream`. State the rule once: either an entry needs
+      at least one leak check that fails on its uncleaned fixture, or
+      `structure` there is a guard, not a leak check; and give every check
+      (`metadata`, `covered` and `pixels` included) its sort.
+    - The cases of Verification Plan's "no fixture yet" list that only
+      check mode reaches (a filter left ahead of image data, an `Encrypt`
+      left in the trailer) can't be leak entries, as strip mode removes or
+      refuses them first: test them with a unit test that builds a MuPDF
+      document and calls check mode (`engine/pdf/allowlist.test.ts`; vitest
+      loads MuPDF).
+
+#### 31. `tests/e2e/leak-suite.spec.ts` (Create) — slices 1, 2 and 5
 
 *   **Type / Scope**: Browser tests.
-*   **Proposed Changes**: one test per entry in `leak-vectors.json`. Each test:
+*   **Proposed Changes**: one test per entry that makes a mark, and one per
+    fixture for entries that make none (below). Each test with a mark:
     1. adds the fixture;
     2. makes `mark` with the existing `markText` or `drawBox` helpers;
     3. previews, approves and downloads;
@@ -1937,7 +2322,15 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     stage in `expect`, and that nothing was downloaded.
 
     Slice 1's version runs its entries through the preview download, as the
-    browser tests of redaction do. Slice 5 adds approval and refusal entries.
+    browser tests of redaction do. In slice 2, entries with no mark are what
+    preparation alone must clean (slice 2 answer 4): one test per fixture
+    adds it, runs each entry's checks on the working copy the app stored,
+    and checks that preparing it recorded each entry's `kind`. The working
+    copy and the removed kinds are read from the project's stored files
+    (`tests/e2e/app.ts`: `workingCopy`, `removedKinds`). Entries that share
+    a fixture share its kinds, so an entry's own `absent` values are its
+    proof; the kind check shows only that the kind is recorded.
+    Slice 5 adds approval and refusal entries.
 
 #### 32. Anchoring and golden tests (Create / Modify) — slices 2 and 3
 
@@ -1972,6 +2365,14 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
       - its header comment says so.
 
 #### 33. Other tests and fakes (Modify) — slices 2 and 3
+
+In slice 2 these include `tests/e2e/open-pdf.spec.ts` (the refusals and the
+explicit nulls), `tests/e2e/redact.spec.ts` (the masked image judged against
+the working copy), and `package.json`'s `test:tools`; and
+`tests/e2e/preparation-saves.spec.ts` is removed. The app and engine files
+slice 2 also touches beyond the items above are `app/useDocumentInEngine.ts`
+(the reopen after an update), `engine/core/session/slices/output.ts` and
+`engine/pdf/objects.ts` (lookups that stop at a missing or `null` object).
 
 *   **Type / Scope**: Browser tests, unit tests and fakes.
 *   **Files:**
@@ -2037,14 +2438,82 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     - The tag comes from `READER_TAG` (`pdf-protocol`), so the Library needs
       no worker reply to list projects.
 
+#### 36. `vendor/arlington/` (Create) — slice 2
+
+*   **Type / Scope**: Vendored build-time data, third-party (Apache 2.0).
+*   **Proposed Changes**:
+    - `tsv/latest/*.tsv`, the PDF 2.0 object types of the Arlington PDF Model
+      (github.com/pdf-association/arlington-pdf-model), at commit
+      `cdc485e4238c55bbd6204f6fda31997245d54b71`. The repository has no
+      release tags, so a commit is pinned.
+    - `LICENSE` and `NOTICE.txt` as upstream ships them.
+    - `README.md`: the source, the commit, and how to update: replace the
+      TSVs with a new commit's, run the generator (item 37), make the same
+      decision changes in `tests/oracle/oracle/structure.py`'s `KEEP`,
+      change `READER_TAG` (part 2), and run `pnpm test`.
+    - Nothing reads these files at run time; the app ships only the generated
+      table.
+
+#### 37. `tools/arlington/generate.py`, `engine/pdf/allowlist-decisions.json`, `engine/pdf/allowlistRoles.generated.ts` (Create) — slice 2
+
+*   **Type / Scope**: A Python script on the standard library (Python 3.9
+    or later), run by hand like `make_fixtures.py`; its input, our
+    decisions; and its output.
+*   **Proposed Changes**:
+    - `allowlist-decisions.json` holds our decisions from Appendix A.1, one
+      entry per model object type, each with these optional fields:
+      - `keep`: the keys kept (a stream also keeps `Length`, `Filter` and
+        `DecodeParms`);
+      - `kinds`: the kind each deleted key records, where the design's rules
+        name one; `null` records none, and a key not listed records
+        `app-data`;
+      - `notWalked`: kept keys whose values are not walked (A.1);
+      - `refuse`: `true` for a type whose objects refuse their file;
+      - `delete`: `true` for a type whose objects are deleted with the key
+        that leads to them.
+
+      A map type, whose keys the file chooses (`*` its only key), and an
+      array type need no entry. For example:
+      `"FileTrailer": { "keep": ["Size", "Root", "ID", "Encrypt"], "kinds": { "Info": "metadata" }, "notWalked": ["Encrypt"] }`.
+    - The generator walks the model's `Link` column from `FileTrailer`,
+      following only keys we keep, and writes `allowlistRoles.generated.ts`:
+      a "Do not edit" header, then `ROLES: Readonly<Record<string, Role>>`, one role a
+      line. A `Role` has `keys` (a kept key maps to its `KeyEntry`, and in a
+      role with `*` each own key we delete maps to `null`; a `KeyEntry` maps a PDF
+      type to the candidates it leads to, or `null` for a key of a type with
+      `*` that is deleted), `fixed` (the values that tell candidates apart),
+      `kinds`, `notWalked`, `refuse` and `delete`.
+    - It writes no table and exits non-zero at once when the model has a
+      type it can't map or a container key that links nowhere. Otherwise,
+      if it finds any problem below, it lists each under its heading, writes
+      no table and exits non-zero:
+      - "Types the walk reaches with no decision";
+      - "Decisions that can't be applied": a role the model links to with no
+        TSV; a decision naming a role or key the model does not have; a role
+        the walk never reaches; a decision on a map or array role;
+        `notWalked` keys that are not all kept; a role that keeps keys and
+        is also refused or deleted; a role both refused and deleted.
+    - `python3 tools/arlington/generate.py` writes the table;
+      `python3 tools/arlington/generate.py --check` exits non-zero when the
+      table is not what it would write. The `test:tools` script in
+      `package.json`, part of `pnpm test`, runs `--check`, so the table never
+      drifts from its inputs.
+    - A change to the decisions is made by hand in the checker's `KEEP` in
+      `tests/oracle/oracle/structure.py` too (Risks). Any change to what the
+      table (`allowlistRoles.generated.ts`, kinds included), the decisions or
+      `NAME_TREES` keep or record changes what step 7 does,
+      so it comes with a new `READER_TAG` (part 2), and every document is
+      prepared again.
+
 ### Verification Plan
 
 *   **Compilation/Build**: `pnpm build`. For slice 1, `./vendor/mupdf/build.sh`,
     then the `SHA256SUMS` regeneration of item 2.
 *   **Unit Tests**:
     - `pnpm exec vitest run`, for re-anchoring, glyph comparison and formats;
-    - `uv run --project tests/oracle python -m pytest tests/oracle`, for the
-      checker and the manifest meta-test.
+    - `pnpm test:tools`, inside `pnpm test`: the generator's `--check`, then
+      `uv run --project tests/oracle python -m pytest tests/oracle`, for the
+      checker and the manifest meta-test, and `tools/dataset`'s tests.
 *   **Static Analysis & Linting**: the typecheck, `fallow architecture
     --boundaries` and `fallow audit`, all inside `pnpm test`.
 *   **Test Coverage Requirement**: every entry in `leak-vectors.json` has a
@@ -2052,6 +2521,61 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     uncleaned fixture. The meta-test enforces it.
 *   **E2E/Integration**: `pnpm test` runs the Playwright suite with coverage,
     including `leak-suite.spec.ts`, `anchoring.spec.ts` and `golden.spec.ts`.
+*   **The allowlist's rules and their tests** (Appendix A.1 and A.2; the
+    fixtures are in `tests/oracle/README.md`):
+
+    | Rule | Fixture | Test | Outcome |
+    | --- | --- | --- | --- |
+    | A key a role does not keep is deleted, with its kind | `carriers.pdf` | leak suite | absent, `structure`, kind recorded |
+    | Keys are the table's own only | `structure-keys.pdf` | leak suite | `/constructor`, `/toString` deleted |
+    | A role with `*` deletes the own keys it does not keep | `structure-keys.pdf` | leak suite | `HalftoneName` deleted |
+    | A rectangle must be four numbers | `wrong-array.pdf` | leak suite | the key deleted |
+    | A PostScript XObject is removed and recorded | `postscript-xobject.pdf` | leak suite | absent, `app-data` (step 5 drops it; the scan before step 5 records the kind) |
+    | JPEG 2000 data past the first codestream's end is cut | `jpx-data.pdf` | leak suite | absent, `image-metadata` |
+    | JPEG data in a stream that is no image refuses | `icc-under-dct.pdf` | `open-pdf.spec.ts` | refused |
+    | An inline JPEG keeps no metadata | `inline-jpeg.pdf` | leak suite | absent (step 5 rewrites it) |
+    | Explicit nulls are allowed where the model has them, and record no kind | `null-elements.pdf` | `open-pdf.spec.ts` | added, `structure`, no kind |
+    | A `/Parent` must be a page-tree node | `stray-parent.pdf` | `open-pdf.spec.ts` | refused |
+    | Two roles must agree on an object | `two-roles.pdf` | `open-pdf.spec.ts` | refused |
+    | Image data under a filter after its image filter | `image-filter-not-last.pdf` | `open-pdf.spec.ts` | refused |
+    | A shading pattern's graphics state is deleted | `shading-graphics-state.pdf` | leak suite | absent, `structure`, `rendered`, `app-data` |
+    | A stream naming its filter by `/F` or `/DP` refuses | `abbreviated-stream-keys.pdf` | `open-pdf.spec.ts` | refused |
+    | A hybrid form's XFA is deleted with the form | `hybrid-xfa.pdf` | leak suite | absent, `structure`, `rendered`, `form-data` |
+    | A form drawn by XFA alone refuses | `xfa-form.pdf` | `open-pdf.spec.ts` | refused |
+    | A one-channel soft mask becomes `DeviceGray` | `grey-soft-masks.pdf` | leak suite | `structure`, `rendered` |
+    | Lossless filters ahead of an image filter are undone | `image-prefilters.pdf` | leak suite | absent, `image-metadata`, `rendered` |
+    | Bytes after a Flate stream's end of data go | `data-after-end.pdf` | leak suite | absent (the raw scan reads past the zlib end), `structure`, `rendered` |
+    | A single `DecodeParms` over a filter array is the Flate layer's | `image-filter-names.pdf` | leak suite | absent, `image-metadata`, `structure` |
+    | A JPEG's JPGn extension segments are cut | `jpeg-extension.pdf` | leak suite | absent, `image-metadata` |
+    | An Adobe APP14 longer than its fields refuses | `jpeg-long-adobe.pdf` | `open-pdf.spec.ts` | refused |
+    | Encryption is gone from the working copy | `edit-locked.pdf` | leak suite | `metadata` (the fixture's `Info`), `structure`, `rendered` |
+    | Abbreviated filter names are read in full, parameters included | `image-filter-names.pdf` | leak suite | absent, `image-metadata`, `structure` keeps their `DecodeParms` |
+    | JPEG and JPEG 2000 metadata is cut | `image-data.pdf` | leak suite | absent, `image-metadata` |
+    | `Encrypt` stays until step 8 | `edit-locked.pdf` | `tests/e2e/redact.spec.ts` | prepared |
+    | The generator's stops | — | by hand, on a changed copy of the decisions (slice 2) | non-zero exit, listed |
+
+    These rules have no fixture yet; slice 5 adds an entry for each:
+    - refusals: an object no candidate fits; a tie between candidates; an
+      element of the wrong type in an array role (a malformed rectangle or
+      matrix is deleted instead, `wrong-array.pdf`); a role we delete met as
+      an array element; parameters with no filter at their place;
+      `FilterCrypt` parameters; an image filter chain with a lossy or
+      unknown filter before the image filter; image data that can't be
+      walked; a soft mask under any other array colour space, such as a
+      one-channel `Separation`;
+    - deletions: a value of a PDF type the model does not allow for its key;
+      non-empty parameters for a filter that takes none; step 7's own
+      deletion of a PostScript XObject that step 5 left, with the tie rule
+      for roles we delete;
+    - check mode: a filter left ahead of image data, and an `Encrypt` still
+      in the trailer;
+    - non-empty parameters as an array element; an array element the model
+      has no place for; the other walk order of `two-roles.pdf` (the object
+      met first in the role that keeps the key); a soft mask under
+      `[/DeviceGray]`; bytes after the end of an LZW, ASCII85, ASCIIHex or
+      RunLength stream; the `/Names` kinds of a
+      `JavaScript` tree and of any other tree; a JPEG with no end-of-image
+      marker, a J2K codestream with no EOC, and a JP2 file with no `jp2c`.
 *   **Done when**:
     - every leak vector passes;
     - the anchoring tests pass on pre-Phase-3 storage;
@@ -2064,91 +2588,293 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 
 ### A.1 Roles and their allowed keys
 
-**How a role is decided.** The walker starts at the trailer and follows
-references. Each object's role comes from the key and the parent that lead to
-it. Where an object carries `/Type` or `/Subtype`, those must agree with the
-role, or the document is refused as `prepare-failed`. So is an object reached
-through two roles that it cannot satisfy both of, and an object whose role
-cannot be worked out.
+**Where roles come from.** The role table is generated (Detailed item 37)
+from the Arlington PDF Model (item 36), one TSV per object type of PDF 2.0.
+A **role** is one of the model's object types, such as `Catalog`,
+`PageObject`, `FontType1` or `XObjectImage`; "PDF type" means a value's own
+type: array, dictionary, stream, name, string, number, boolean or null. This
+appendix holds only our decisions: for each role the walk reaches, the keys
+we keep, and the kind each deleted key records. The model decides the rest:
+which roles a key can lead to, which keys a role can have, and which values
+tell candidates apart. This appendix is the one statement of the rules
+below; step 7 and Detailed item 5 point here.
 
-**Name maps.** A name map is a dictionary whose keys are chosen by the file,
-such as `/F1` in `/Font`. Any key is allowed, and each value takes the role
-the map gives it. These are name maps:
-- `/Font` (values: font);
-- `/XObject` (image or form XObject, by `/Subtype`);
-- `/ExtGState` (graphics state);
-- `/ColorSpace` (colour space);
-- `/Pattern` (pattern);
-- `/Shading` (shading);
-- `CharProcs` (glyph procedure);
-- the halftone colorant entries of a type 5 halftone (halftone).
+**Reading the model.** The generator and the checker read the TSVs by the
+same rules, each in its own code:
+- A value wrapped in `fn:`, which says since when or under what condition it
+  applies, is read as its last argument, so
+  `fn:SinceVersion(1.2,FilterFlateDecode)` is `FilterFlateDecode`; version
+  and condition limits are not applied.
+- The model's types map to PDF types: `integer`, `number` and `bitmask` to
+  number; `string`, `string-text`, `string-byte`, `string-ascii` and `date`
+  to string; `dictionary`, `name-tree` and `number-tree` to dictionary;
+  `array`, `rectangle` and `matrix` to array; and `stream`, `name`,
+  `boolean` and `null` to themselves. Where several model types map to one
+  PDF type, their `Link` lists are merged.
+- A stream role has a `Length` key; a map role has only `*`; an array role
+  has only `*` or numbered keys.
+- A fixed value list is the first `;`-separated part of `PossibleValues`
+  whose every value is a plain literal (letters, digits, `_`, `.` and `-`);
+  numbers are compared as decimal strings.
 
-**Streams.** Every stream also keeps `Length`, `Filter` and `DecodeParms`.
+**Choosing a role.** The walk starts at the trailer, in the role
+`FileTrailer`, and follows each key the role keeps.
+- The model's `Link` column for the key names its candidates: one list per
+  PDF type the `Type` column allows, in the same order. For a key of type
+  `array;name`, `[ArrayOfFilterNames];[]` gives an array the candidate
+  `ArrayOfFilterNames`, and a name none. The value's own PDF type picks the
+  list.
+- A value of a PDF type the model does not allow for the key is
+  deleted (an array element of the wrong type refuses, below), as
+  if the role did not keep the key.
+- An empty list (`[]`) means a plain value: a name, string, number, boolean
+  or null. A rectangle or a matrix, which the model links nowhere, must be
+  numbers (a rectangle four, a matrix six), or the key is deleted; the generated table gives
+  them the reserved candidate names `rectangle` and `matrix`, which are
+  shapes, never roles. No key in the model mixes a shape with roles.
+- Each candidate's **fixed values** are the model's `PossibleValues` for the
+  keys `Type`, `Subtype`, `Subtype2`, `S`, `FunctionType`, `ShadingType`,
+  `PatternType`, `HalftoneType` and an array's first element
+  (`DISCRIMINATORS` in the generator; `"0"` is the first element), as
+  "Reading the model" defines them; no other constraint is used. A
+  candidate whose fixed value the object contradicts drops out. A key the
+  object lacks, or holds as anything but a name or a number, is skipped, so
+  a candidate can fit with no match. When every candidate drops out, the
+  object has no role. The candidate with the most matches wins,
+  and a tie for the most refuses the file, unless every tied role is one we
+  delete: then the object is deleted with its key. A PostScript XObject
+  with no `/Subtype2` fits both `XObjectFormPS` and
+  `XObjectFormPSpassthrough`.
+- A stream's `DecodeParms` take the role its filter at the same place names
+  (`FilterFlateDecode` for `FlateDecode`), as no value tells them apart. The
+  filter's name is read in full first (Appendix A.2), so `/Fl` takes
+  `FilterFlateDecode`.
+  Parameters for a filter that takes none must be an empty dictionary or
+  `null`; anything else is deleted, or, as an element of an array, refuses
+  the file. A single `DecodeParms` dictionary over a `Filter` array takes
+  the first filter's role. Parameters with no filter at that place, as a
+  `DecodeParms` without a `Filter` or an array longer than the filters,
+  have no role to tell them apart, so they refuse the file, except a `null`
+  element, which is kept.
+- A key whose value is an explicit `null` is deleted where the model allows
+  no null there, and records no kind: it held nothing.
+- The keys a file chooses are looked up as the table's own keys only, so a
+  key such as `/constructor` is never read as a JavaScript built-in.
+
+**What is kept, deleted or refused.**
+- A key stays only when the model lists it for the role and our decisions
+  keep it. Every stream also keeps `Length`, `Filter` and `DecodeParms`. The
+  walk follows only kept keys, so only the roles reachable through them need
+  a decision; the generator stops, and lists them, when one has none.
+- A **map role**, whose keys the file chooses (`*` is its only key, as in
+  `FontMap` for `/Font`), keeps every entry, each in the role its `*` links
+  to. A role with `*` and keys of its own (`ColorSpaceMap`, `HalftoneType5`)
+  keeps every `*` entry, each in the role its `*` links to, and of its own
+  keys only those we keep; its other own keys are deleted, never read as
+  `*` entries.
+- An **array role** keeps every element, since deleting one would move the
+  rest. An element the model has no place for, or places with another PDF
+  type, refuses the file.
+- A kept key that is **not walked** is kept as it is, and its value is not
+  followed. A page's or page-tree node's `Parent` is not walked, as the walk
+  reaches the tree from its root; once the walk is done, each `Parent` must
+  point at an object reached as `PageTreeNode` or `PageTreeNodeRoot`, or the
+  file is refused. The trailer's `Encrypt` is the other one (below).
+- An object reached in a second role was already stripped by the role that
+  reached it first. If the second role would delete a key still there, or
+  keeps a key the first deleted, the file is refused, so the outcome does
+  not depend on which role the walk meets first (`two-roles.pdf`). A direct
+  object inside it is walked again in the second role.
+- A soft mask (`XObjectImageSoftMask`) whose colour space is exactly
+  `[/CalGray …]`, `[/ICCBased s]` with `/N 1`, or `[/DeviceGray]` is given
+  `/DeviceGray` before its keys are walked (slice 2 answer 8). Any other
+  array colour space refuses the file, one-channel `Separation`, `Indexed`
+  and `DeviceN` included, as their samples do not read as grey. A name is
+  kept as it is, as the model gives a soft mask's `ColorSpace` name no
+  candidates.
+- An object of a role we delete (`XObjectFormPS`, `XObjectFormPSpassthrough`)
+  is deleted with the key that leads to it, which records that key's kind,
+  `app-data` for an XObject; as an array element it refuses the file. An
+  object of a role we refuse (`FilterCrypt`), or of no role in the table,
+  refuses the file.
+
+Every "refuses the file" in this appendix means preparation refuses the
+document as `prepare-failed`; check mode returns `"unplaced"` for it.
+
+**The trailer's `Encrypt`** is kept, and not walked, until step 8's
+`encrypt=none` drops it: MuPDF goes on encrypting what it writes until then,
+so with the key deleted in step 7, step 7a wrote encrypted streams with no
+`Encrypt` to read them by, and step 9 refused `edit-locked.pdf`. Being
+kept, it records no kind. Check mode, which step 9 runs, reports an `Encrypt`
+still there, so a file whose encryption survived step 8 is refused.
+
+**The trailer's `ID`** is kept: rewriting the file ID is a Non-Goal.
 
 **Removal kinds.** The last column names the kind recorded when a key is
-deleted from that role. Any deleted key not named there records `app-data`.
+deleted from that role; "no kind" records none, and any deleted key not
+named there records `app-data`. The catalog's `/Names` records one kind per
+tree it holds (slice 2 answer 2): `links` for `Dests`, `attachments` for
+`EmbeddedFiles`, `scripts-actions` for `JavaScript`, and `app-data` for any
+other. That rule lives in `NAME_TREES` in `allowlist.ts`, not in the
+decisions file.
 
-| Role (reached by) | Allowed keys | Deleted keys and their kind |
+**The table** lists our decisions, one row per role the walk reaches that
+needs one, as `engine/pdf/allowlist-decisions.json` holds them, apart from
+`Catalog`'s `Names` cell, which is `NAME_TREES`. Map roles (only `*`) and
+array roles need no row; a role with `*` and its own keys, such as
+`ColorSpaceMap`, has one.
+
+| Role | Kept keys | Deleted keys with a kind of their own |
 | --- | --- | --- |
-| Trailer (start) | `Size`, `Root`, `ID` | `Info` → `metadata` |
-| Catalog (`Root`) | `Type`, `Pages`, `Version` | `Metadata` → `metadata`; `Outlines` → `bookmarks`; `Names`, `Dests` → `links`, and `attachments` and `scripts-actions` when they hold those trees; `PageLabels`, `Threads` → `page-labels`; `OpenAction`, `AA`, `URI` → `scripts-actions`; `AcroForm` → `form-data`; `StructTreeRoot`, `MarkInfo` → `accessibility-tags`; `Perms`, `DSS` → `signatures`; `AF`, `Collection` → `attachments`; `OCProperties` → none |
-| Page tree node (`Pages`, `Kids`) | `Type`, `Kids`, `Count`, `Parent`, `Resources`, `MediaBox`, `CropBox`, `Rotate` | as for a page |
-| Page (`Kids`) | `Type`, `Parent`, `Resources`, `MediaBox`, `CropBox`, `Rotate`, `Contents`, `Group`, `UserUnit` | `Annots` → `annotations`; `Thumb` → `thumbnails`; `Metadata` → `metadata`; `StructParents` → `accessibility-tags`; `PieceInfo`, `LastModified`, the other page boxes, `Tabs`, `Trans`, `Dur`, `B`, `VP` → `app-data` |
-| Content stream (page or form `Contents`) | stream keys only | none |
-| Resources (`Resources`) | `ExtGState`, `ColorSpace`, `Pattern`, `Shading`, `XObject`, `Font`, `ProcSet` | `Properties` → none (layer and marked-content properties were already dropped) |
-| Image XObject (XObject map, `/Subtype /Image`; `SMask`; `Mask` when a stream) | `Type`, `Subtype`, `Width`, `Height`, `ColorSpace`, `BitsPerComponent`, `Intent`, `ImageMask`, `Mask`, `Decode`, `Interpolate`, `SMask`, `SMaskInData`, `Matte` | `Metadata` → `image-metadata`; `Alternates`, `OPI`, `Measure`, `PtData`, `Name`, `StructParent`, `ID`, `AF` → `app-data` |
-| Form XObject (XObject map, `/Subtype /Form`; soft mask `G`; pattern content) | `Type`, `Subtype`, `FormType`, `BBox`, `Matrix`, `Resources`, `Group` | `Metadata` → `metadata`; `PieceInfo`, `LastModified`, `Ref`, `OPI`, `Name`, `StructParent`, `StructParents`, `Measure`, `PtData`, `AF` → `app-data` |
-| Group (`Group`) | `Type`, `S`, `CS`, `I`, `K` | — |
-| Font (Font map; `DescendantFonts`; Type 3 inside) | `Type`, `Subtype`, `BaseFont`, `FirstChar`, `LastChar`, `Widths`, `FontDescriptor`, `Encoding`, `ToUnicode`, `DescendantFonts`, `CIDSystemInfo`, `DW`, `W`, `DW2`, `W2`, `CIDToGIDMap`, `FontBBox`, `FontMatrix`, `CharProcs`, `Resources` | `Name` → `app-data` |
-| Encoding dictionary (`Encoding`) | `Type`, `BaseEncoding`, `Differences` | — |
-| Embedded CMap stream (`Encoding` when a stream; `UseCMap`) | `Type`, `CMapName`, `CIDSystemInfo`, `UseCMap`, `WMode` | — |
-| CIDSystemInfo (`CIDSystemInfo`) | `Registry`, `Ordering`, `Supplement` | — |
-| Font descriptor (`FontDescriptor`; values of `FD`) | `Type`, `FontName`, `FontFamily`, `FontStretch`, `FontWeight`, `Flags`, `FontBBox`, `ItalicAngle`, `Ascent`, `Descent`, `Leading`, `CapHeight`, `XHeight`, `StemV`, `StemH`, `AvgWidth`, `MaxWidth`, `MissingWidth`, `FontFile`, `FontFile2`, `FontFile3`, `CharSet`, `CIDSet`, `Style`, `FD` | `Lang` → `app-data` |
-| `FD` (`FD`) | a name map whose values are font descriptors | — |
-| `Style` (`Style`) | `Panose` | — |
-| Font file stream (`FontFile`, `FontFile2`, `FontFile3`) | `Length1`, `Length2`, `Length3`, `Subtype` | `Metadata` → `metadata` |
-| Untyped data stream (`ToUnicode`, `CIDSet`, `CIDToGIDMap` when a stream, glyph procedures in `CharProcs`, an Indexed colour lookup when a stream) | stream keys only | none |
-| DecodeParms (`DecodeParms`) | `Predictor`, `Colors`, `BitsPerComponent`, `Columns`, `EarlyChange`, `K`, `EndOfLine`, `EncodedByteAlign`, `Rows`, `EndOfBlock`, `BlackIs1`, `DamagedRowsBeforeError`, `JBIG2Globals`, `ColorTransform` | — |
-| ExtGState (ExtGState map) | `Type`, `LW`, `LC`, `LJ`, `ML`, `D`, `RI`, `OP`, `op`, `OPM`, `Font`, `BG`, `BG2`, `UCR`, `UCR2`, `TR`, `TR2`, `HT`, `FL`, `SM`, `SA`, `BM`, `SMask`, `CA`, `ca`, `AIS`, `TK`, `UseBlackPtComp` | — |
-| Soft mask (`SMask` in a graphics state) | `Type`, `S`, `G`, `BC`, `TR` | — |
-| Pattern (Pattern map) | `Type`, `PatternType`, `PaintType`, `TilingType`, `BBox`, `XStep`, `YStep`, `Resources`, `Matrix`, `Shading`, `ExtGState` | — |
-| Shading (Shading map; pattern `Shading`) | `ShadingType`, `ColorSpace`, `Background`, `BBox`, `AntiAlias`, `Coords`, `Domain`, `Function`, `Extend`, `Matrix`, `BitsPerCoordinate`, `BitsPerComponent`, `BitsPerFlag`, `Decode`, `VerticesPerRow` | — |
-| Function (`Function`, `Functions`, `TR`, `TR2`, `BG`, `BG2`, `UCR`, `UCR2`, `SpotFunction`, `TransferFunction`, a Separation or DeviceN tint transform) | `FunctionType`, `Domain`, `Range`, `Size`, `BitsPerSample`, `Order`, `Encode`, `Decode`, `C0`, `C1`, `N`, `Functions`, `Bounds` | — |
-| Colour space (ColorSpace map; `ColorSpace`; `CS`; `Alternate`; Indexed base) | arrays of a family name plus its operands. Allowed families: DeviceGray, DeviceRGB, DeviceCMYK, CalGray, CalRGB, Lab, ICCBased, Indexed, Pattern, Separation, DeviceN | — |
-| CalGray, CalRGB, Lab parameters (the dictionary in those arrays) | `WhitePoint`, `BlackPoint`, `Gamma`, `Matrix`, `Range` | — |
-| ICC profile stream (ICCBased operand) | `N`, `Alternate`, `Range` | `Metadata` → `metadata` |
-| DeviceN attributes (DeviceN's fifth operand) | `Subtype`, `Colorants`, `Process`, `MixingHints` | — |
-| DeviceN process (`Process`) | `ColorSpace`, `Components` | — |
-| Halftone (`HT`; colorant entries) | `Type`, `HalftoneType`, `Frequency`, `Angle`, `SpotFunction`, `AccurateScreens`, `TransferFunction`, `Width`, `Height`, `Width2`, `Height2`, `Xsquare`, `Ysquare`, and in type 5 the colorant name-map entries | — |
+| `FileTrailer` | `Size`, `Root`, `ID`, `Encrypt` (not walked: `Encrypt`) | `Info` → `metadata` |
+| `Catalog` | `Type`, `Pages`, `Version` | `Metadata` → `metadata`, `Outlines` → `bookmarks`, `Dests` → `links`, `PageLabels` → `page-labels`, `Threads` → `page-labels`, `OpenAction` → `scripts-actions`, `AA` → `scripts-actions`, `URI` → `scripts-actions`, `AcroForm` → no kind, `StructTreeRoot` → `accessibility-tags`, `MarkInfo` → `accessibility-tags`, `Perms` → `signatures`, `DSS` → `signatures`, `AF` → `attachments`, `Collection` → `attachments`, `OCProperties` → no kind, `Names` → one kind per tree it holds (Removal kinds above) |
+| `PageTreeNodeRoot` | `Type`, `Kids`, `Count`, `Resources`, `MediaBox`, `CropBox`, `Rotate` | — |
+| `PageTreeNode` | `Type`, `Parent`, `Kids`, `Count`, `Resources`, `MediaBox`, `CropBox`, `Rotate` (not walked: `Parent`) | — |
+| `PageObject` | `Type`, `Parent`, `Resources`, `MediaBox`, `CropBox`, `Rotate`, `Contents`, `Group`, `UserUnit` (not walked: `Parent`) | `Annots` → no kind, `Thumb` → `thumbnails`, `Metadata` → `metadata`, `StructParents` → `accessibility-tags`, `AA` → `scripts-actions`, `LastModified` → `metadata`, `B` → `page-labels`, `AF` → `attachments` |
+| `Resource` | `ExtGState`, `ColorSpace`, `Pattern`, `Shading`, `XObject`, `Font`, `ProcSet` | `Properties` → no kind (the device pass before step 5 records `marked-content` or `hidden-layers`; part 1) |
+| `Stream` | only the stream keys | — |
+| `GroupAttributes` | `Type`, `S`, `CS`, `I`, `K` | — |
+| `XObjectImage` | `Type`, `Subtype`, `Width`, `Height`, `ColorSpace`, `BitsPerComponent`, `Intent`, `ImageMask`, `Mask`, `Decode`, `Interpolate`, `SMask`, `SMaskInData` | `Metadata` → `image-metadata`, `StructParent` → `accessibility-tags`, `AF` → `attachments` |
+| `XObjectImageMask` | `Type`, `Subtype`, `Width`, `Height`, `BitsPerComponent`, `Intent`, `ImageMask`, `Decode`, `Interpolate`, `SMask`, `SMaskInData` | `Metadata` → `image-metadata`, `StructParent` → `accessibility-tags`, `AF` → `attachments` |
+| `XObjectImageSoftMask` | `Type`, `Subtype`, `Width`, `Height`, `ColorSpace`, `BitsPerComponent`, `Intent`, `ImageMask`, `Decode`, `Interpolate`, `Matte` | `Metadata` → `image-metadata`, `AF` → `attachments` |
+| `XObjectFormType1` | `Type`, `Subtype`, `FormType`, `BBox`, `Matrix`, `Resources`, `Group` | `Metadata` → `metadata`, `LastModified` → `metadata`, `StructParent` → `accessibility-tags`, `StructParents` → `accessibility-tags`, `AF` → `attachments` |
+| `XObjectFormPS` | — (deleted with the key that leads to it, which records `app-data`) | — |
+| `XObjectFormPSpassthrough` | — (deleted with the key that leads to it, which records `app-data`) | — |
+| `CIDFontDescriptorMetrics` | `Type`, `FontName`, `Flags`, `FontBBox`, `ItalicAngle`, `Ascent`, `Descent`, `Leading`, `CapHeight`, `XHeight`, `StemV`, `StemH`, `AvgWidth`, `MaxWidth`, `MissingWidth`, `CharSet` | — |
+| `CIDSystemInfo` | `Registry`, `Ordering`, `Supplement` | — |
+| `CMapStream` | `Type`, `CMapName`, `CIDSystemInfo`, `WMode`, `UseCMap` | — |
+| `CalGrayDict` | `WhitePoint`, `BlackPoint`, `Gamma` | — |
+| `CalRGBDict` | `WhitePoint`, `BlackPoint`, `Gamma`, `Matrix` | — |
+| `ColorSpaceMap` | `DefaultGray`, `DefaultRGB`, `DefaultCMYK` | — |
+| `DeviceNDict` | `Subtype`, `Colorants`, `Process` | — |
+| `DeviceNProcess` | `ColorSpace`, `Components` | — |
+| `Encoding` | `Type`, `BaseEncoding`, `Differences` | — |
+| `FilterCCITTFaxDecode` | `K`, `EndOfLine`, `EncodedByteAlign`, `Columns`, `Rows`, `EndOfBlock`, `BlackIs1`, `DamagedRowsBeforeError` | — |
+| `FilterCrypt` | — (refuses the file) | — |
+| `FilterDCTDecode` | `ColorTransform` | — |
+| `FilterFlateDecode` | `Predictor`, `Colors`, `BitsPerComponent`, `Columns` | — |
+| `FilterJBIG2Decode` | `JBIG2Globals` | — |
+| `FilterLZWDecode` | `Predictor`, `Colors`, `BitsPerComponent`, `Columns`, `EarlyChange` | — |
+| `FontCIDType0` | `Type`, `Subtype`, `BaseFont`, `CIDSystemInfo`, `FontDescriptor`, `DW`, `W`, `DW2`, `W2`, `CIDToGIDMap`, `ToUnicode` | — |
+| `FontCIDType2` | `Type`, `Subtype`, `BaseFont`, `CIDSystemInfo`, `FontDescriptor`, `DW`, `W`, `DW2`, `W2`, `CIDToGIDMap`, `ToUnicode` | — |
+| `FontDescriptorCIDType0` | `Type`, `FontName`, `FontFamily`, `FontStretch`, `FontWeight`, `Flags`, `FontBBox`, `ItalicAngle`, `Ascent`, `Descent`, `Leading`, `CapHeight`, `XHeight`, `StemV`, `StemH`, `AvgWidth`, `MaxWidth`, `MissingWidth`, `FontFile`, `FontFile3`, `Style`, `FD`, `CIDSet` | — |
+| `FontDescriptorCIDType2` | `Type`, `FontName`, `FontFamily`, `FontStretch`, `FontWeight`, `Flags`, `FontBBox`, `ItalicAngle`, `Ascent`, `Descent`, `Leading`, `CapHeight`, `XHeight`, `StemV`, `StemH`, `AvgWidth`, `MaxWidth`, `MissingWidth`, `FontFile`, `FontFile2`, `FontFile3`, `Style`, `FD`, `CIDSet` | — |
+| `FontDescriptorTrueType` | `Type`, `FontName`, `FontFamily`, `FontStretch`, `FontWeight`, `Flags`, `FontBBox`, `ItalicAngle`, `Ascent`, `Descent`, `Leading`, `CapHeight`, `XHeight`, `StemV`, `StemH`, `AvgWidth`, `MaxWidth`, `MissingWidth`, `FontFile`, `FontFile2`, `FontFile3` | — |
+| `FontDescriptorType1` | `Type`, `FontName`, `FontFamily`, `FontStretch`, `FontWeight`, `Flags`, `FontBBox`, `ItalicAngle`, `Ascent`, `Descent`, `Leading`, `CapHeight`, `XHeight`, `StemV`, `StemH`, `AvgWidth`, `MaxWidth`, `MissingWidth`, `FontFile`, `FontFile3`, `CharSet` | — |
+| `FontDescriptorType3` | `Type`, `FontName`, `FontFamily`, `FontStretch`, `FontWeight`, `Flags`, `FontBBox`, `ItalicAngle`, `Ascent`, `Descent`, `Leading`, `CapHeight`, `XHeight`, `StemV`, `StemH`, `AvgWidth`, `MaxWidth`, `MissingWidth` | — |
+| `FontFile` | `Length1`, `Length2`, `Length3`, `Subtype` | `Metadata` → `metadata` |
+| `FontFile2` | `Length1`, `Length2`, `Length3`, `Subtype` | `Metadata` → `metadata` |
+| `FontFile3CIDType0` | `Length1`, `Length2`, `Length3`, `Subtype` | `Metadata` → `metadata` |
+| `FontFile3OpenType` | `Length1`, `Length2`, `Length3`, `Subtype` | `Metadata` → `metadata` |
+| `FontFile3Type1` | `Length1`, `Length2`, `Length3`, `Subtype` | `Metadata` → `metadata` |
+| `FontFileType1` | `Length1`, `Length2`, `Length3`, `Subtype` | `Metadata` → `metadata` |
+| `FontMultipleMaster` | `Type`, `Subtype`, `BaseFont`, `FirstChar`, `LastChar`, `Widths`, `FontDescriptor`, `Encoding`, `ToUnicode` | — |
+| `FontTrueType` | `Type`, `Subtype`, `BaseFont`, `FirstChar`, `LastChar`, `Widths`, `FontDescriptor`, `Encoding`, `ToUnicode` | — |
+| `FontType0` | `Type`, `Subtype`, `BaseFont`, `Encoding`, `DescendantFonts`, `ToUnicode` | — |
+| `FontType1` | `Type`, `Subtype`, `BaseFont`, `FirstChar`, `LastChar`, `Widths`, `FontDescriptor`, `Encoding`, `ToUnicode` | — |
+| `FontType3` | `Type`, `Subtype`, `FontBBox`, `FontMatrix`, `CharProcs`, `Encoding`, `FirstChar`, `LastChar`, `Widths`, `FontDescriptor`, `Resources`, `ToUnicode` | — |
+| `FunctionType0` | `FunctionType`, `Domain`, `Range`, `Size`, `BitsPerSample`, `Order`, `Encode`, `Decode` | — |
+| `FunctionType2` | `FunctionType`, `Domain`, `Range`, `C0`, `C1`, `N` | — |
+| `FunctionType3` | `FunctionType`, `Domain`, `Range`, `Functions`, `Bounds`, `Encode` | — |
+| `FunctionType4` | `FunctionType`, `Domain`, `Range` | — |
+| `GraphicsStateParameter` | `Type`, `LW`, `LC`, `LJ`, `ML`, `D`, `RI`, `OP`, `op`, `OPM`, `Font`, `BG`, `BG2`, `UCR`, `UCR2`, `TR`, `TR2`, `HT`, `FL`, `SM`, `SA`, `BM`, `SMask`, `CA`, `ca`, `AIS`, `TK`, `UseBlackPtComp` | — |
+| `HalftoneType1` | `Type`, `HalftoneType`, `Frequency`, `Angle`, `SpotFunction`, `AccurateScreens`, `TransferFunction` | — |
+| `HalftoneType10` | `Type`, `HalftoneType`, `Xsquare`, `Ysquare`, `TransferFunction` | — |
+| `HalftoneType16` | `Type`, `HalftoneType`, `Width`, `Height`, `Width2`, `Height2`, `TransferFunction` | — |
+| `HalftoneType5` | `Type`, `HalftoneType`, `Default` | — |
+| `HalftoneType6` | `Type`, `HalftoneType`, `Width`, `Height`, `TransferFunction` | — |
+| `ICCProfileStream` | `N`, `Alternate`, `Range` | `Metadata` → `metadata` |
+| `LabDict` | `WhitePoint`, `BlackPoint`, `Range` | — |
+| `PatternType1` | `Type`, `PatternType`, `PaintType`, `TilingType`, `BBox`, `XStep`, `YStep`, `Resources`, `Matrix` | — |
+| `PatternType2` | `Type`, `PatternType`, `Shading`, `Matrix` | — |
+| `ShadingType1` | `Domain`, `Matrix`, `Function`, `ShadingType`, `ColorSpace`, `Background`, `BBox`, `AntiAlias` | — |
+| `ShadingType2` | `Coords`, `Domain`, `Function`, `Extend`, `ShadingType`, `ColorSpace`, `Background`, `BBox`, `AntiAlias` | — |
+| `ShadingType3` | `Coords`, `Domain`, `Function`, `Extend`, `ShadingType`, `ColorSpace`, `Background`, `BBox`, `AntiAlias` | — |
+| `ShadingType4` | `BitsPerCoordinate`, `BitsPerComponent`, `BitsPerFlag`, `Decode`, `Function`, `ShadingType`, `ColorSpace`, `Background`, `BBox`, `AntiAlias` | — |
+| `ShadingType5` | `BitsPerCoordinate`, `BitsPerComponent`, `VerticesPerRow`, `Decode`, `Function`, `ShadingType`, `ColorSpace`, `Background`, `BBox`, `AntiAlias` | — |
+| `ShadingType6` | `BitsPerCoordinate`, `BitsPerComponent`, `BitsPerFlag`, `Decode`, `Function`, `ShadingType`, `ColorSpace`, `Background`, `BBox`, `AntiAlias` | — |
+| `ShadingType7` | `BitsPerCoordinate`, `BitsPerComponent`, `BitsPerFlag`, `Decode`, `Function`, `ShadingType`, `ColorSpace`, `Background`, `BBox`, `AntiAlias` | — |
+| `SoftMaskAlpha` | `Type`, `S`, `G`, `BC`, `TR` | — |
+| `SoftMaskLuminosity` | `Type`, `S`, `G`, `BC`, `TR` | — |
+| `StyleDict` | `Panose` | — |
+| `ToUnicodeCMapStream` | `Type`, `CMapName`, `CIDSystemInfo`, `WMode`, `UseCMap` | — |
 
-`Annots` and `AcroForm` are already gone after flattening (step 3), so
-deleting their remains records the kinds set in step 2.
+By step 7, `/Annots` holds only links, or the empty array step 6 leaves once
+MuPDF has applied and removed its four redaction areas.
+Step 2 already recorded their kinds, so deleting `/Annots`, or a leftover
+`/AcroForm`, records none.
 
 ### A.2 Image data
 
+This is the one statement of how image data is cut or refused; step 7 and
+Detailed item 5 point here. Every "refuses" here means `prepare-failed`, and
+check mode returns `"unplaced"` for it.
+
 - **JPEG (`DCTDecode`).**
   - Walk the markers from the start of the stream, through every scan of a
-    progressive JPEG.
-  - Among the APPn segments, keep only APP14 segments whose identifier is
-    `Adobe`. Drop every other APP0–APP15 segment, which covers JFIF and JFXX
-    thumbnails, EXIF, XMP and IPTC. Drop every COM segment.
-  - Cut everything after the first end-of-image marker that the marker walk
-    reaches. A byte search is not used.
+    progressive JPEG. A byte search is not used.
+  - Keep the segments that draw the image: frames (SOFn), tables (DHT, DAC,
+    DQT), scans (SOS), DNL, DRI, DHP and EXP, and Adobe's APP14 with its
+    12 bytes ("Adobe", a version, two flags and a transform; a length of
+    14).
+  - Drop every other APP0–APP15 segment, which covers JFIF and JFXX
+    thumbnails, EXIF, XMP and IPTC; every COM segment; and the JPGn
+    extension segments (`0xF0` to `0xFD`).
+  - Refuse an Adobe APP14 whose length is not 14, as it decides
+    how the colours decode, and any other marker.
+  - Cut everything after the first end-of-image marker the walk reaches.
+    A JPEG with no end-of-image marker can't be told from a damaged one, and
+    refuses.
 - **JPEG 2000 (`JPXDecode`).**
-  - Keep the `jP␣␣`, `ftyp`, `jp2h` (with `ihdr`, `colr`, `bpcc`, `pclr` and
-    `cmap`) and `jp2c` boxes. Drop every other box, such as `xml`, `uuid`,
-    `uinf`, `res` and `jp2i`.
+  - Keep the `jP␣␣`, `ftyp` and `jp2h` boxes (with `ihdr`, `colr`, `bpcc`,
+    `pclr`, `cmap` and `cdef` inside it), and the first `jp2c` box. Drop
+    every other box, such as `xml`, `uuid`, `uinf`, `res`, `jp2i` and a
+    second `jp2c`. A JP2 file with no `jp2c` box refuses.
   - In every J2K codestream, whether raw or inside `jp2c`, drop COM marker
-    segments.
-- **Chained filters.** For `[/FlateDecode /DCTDecode]`, decode the Flate
-  layer, cut, and compress again. Any other chain ending in `DCTDecode` or
-  `JPXDecode` refuses the document as `prepare-failed`.
+    segments, and cut everything after the end-of-codestream marker (EOC)
+    the walk reaches. A codestream with no EOC refuses.
+- **Chained filters.** Where lossless filters (`FlateDecode`, `LZWDecode`,
+  `ASCIIHexDecode`, `ASCII85Decode`, `RunLengthDecode`) sit ahead of
+  `DCTDecode` or `JPXDecode`, undo them, each with its own `DecodeParms`
+  element, or a single `DecodeParms` dictionary, which is the first filter's
+  (A.1); cut; and keep the image under its image filter alone, with that
+  filter's own parameters or none: the filters before it only encoded it
+  (slice 2 answer 9). A chain with any other filter ahead of the image
+  filter, or one in which another filter follows it, refuses.
+- **Filter names.** The abbreviated names PDF defines for inline images
+  (`DCT`, `Fl`, `AHx` and the like) are read as the full names wherever they
+  appear, as MuPDF reads them on any stream: a JPEG under `/DCT` is cut like
+  one under `/DCTDecode` (`image-filter-names.pdf`).
+- **Image data outside an image.** A stream whose role is not one of the
+  `XObjectImage` roles, with `DCTDecode` or `JPXDecode` among its filters,
+  as an ICC profile stored as a JPEG, refuses (`icc-under-dct.pdf`).
+- **Abbreviated stream keys.** A stream that names its filters with an
+  inline image's abbreviated `/F` (a name or an array) or `/DP` refuses, as
+  MuPDF reads them on any stream and step 7 would keep its data unseen.
+- **Data that can't be walked.** An image whose JPEG markers or JPEG 2000
+  boxes can't be walked refuses.
+- **Data after the end of data.** Every kept stream other than an image
+  under `DCTDecode` or `JPXDecode` whose filters are all lossless (the set
+  above) is written again from its decoded bytes, with no `Filter` or
+  `DecodeParms`, so bytes after a filter's end of data, which no reader
+  decodes, go; step 7a's save compresses it with Flate (slice 2 answer 10).
+  It records no kind. A stream with any other filter is kept as it is:
+  `CCITTFaxDecode`, `JBIG2Decode`, `Crypt`, an unknown name or a non-name,
+  with any lossless layers ahead of them. MuPDF holds each decoded copy
+  until step 7a's save (Risks).
+- **Check mode,** which step 9 runs, reports an image whose data still
+  holds what is dropped here (`" (image data)"`) and a filter still ahead of
+  image data (`" (a filter over image data)"`).
+- **Inline images** are rewritten by step 5's filter: an inline JPEG's EXIF
+  did not survive it (slice 2, `inline-jpeg.pdf`). A.2 itself cuts XObject
+  images only, and the outside checker's `image-metadata` reads stream
+  objects only, so that leak entry is judged by `absent`.
 
 ### A.3 Removal kinds
 
 | Literal | Covers | Approval dialog line |
 | --- | --- | --- |
-| `metadata` | `Info`, every `Metadata` stream, `LastModified` | Document information and metadata: removed |
+| `metadata` | `Info`, every `Metadata` stream except an image's, `LastModified` | Document information and metadata: removed |
 | `image-metadata` | JPEG and JPX metadata segments and boxes, bytes after the end-of-image marker, image `Metadata` | Image camera data: removed |
 | `annotations` | comments, notes, stamps, highlights and ink: flattened if visible, removed if hidden | Comments and annotations: visible ones made part of the page, the rest removed |
 | `form-data` | `AcroForm`, field names, tooltips, default and export values (values flattened) | Form data: made part of the page |
@@ -2158,10 +2884,10 @@ deleting their remains records the kinds set in step 2.
 | `scripts-actions` | JavaScript, `OpenAction`, `AA`, launch actions, `URI` | Scripts and actions: removed |
 | `links` | link annotations, `Dests`, named destinations | Links: removed |
 | `bookmarks` | `Outlines` | Bookmarks: removed |
-| `page-labels` | `PageLabels`, `Threads` | Page labels and article threads: removed |
-| `accessibility-tags` | `StructTreeRoot`, `MarkInfo`, `StructParents` | Accessibility tags: removed |
+| `page-labels` | `PageLabels`, `Threads`, a page's article beads (`B`) | Page labels and article threads: removed |
+| `accessibility-tags` | `StructTreeRoot`, `MarkInfo`, `StructParents`, `StructParent` | Accessibility tags: removed |
 | `marked-content` | ActualText, alternative text and expansion text in page content | Hidden alternative text: removed |
-| `hidden-layers` | content on layers that are off | Hidden layer content: removed |
+| `hidden-layers` | page content on layers that are off (an annotation on such a layer records `annotations`) | Hidden layer content: removed |
 | `outside-page` | text and drawings wholly outside the crop box | Content outside the page: removed |
 | `unshown-image-pixels` | pixels no placement shows | Hidden parts of images: blanked |
 | `thumbnails` | `Thumb` | Page thumbnails: removed |

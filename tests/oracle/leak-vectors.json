@@ -180,7 +180,7 @@
     "checks": [
       { "check": "absent", "values": ["4400 7777"] },
       { "check": "covered", "word": "4400 7777" },
-      { "check": "positions", "words": ["4400 7777"] }
+      { "check": "positions", "words": ["4400 7777", "Hidden 4400 8888 here"] }
     ]
   },
   {
@@ -293,6 +293,1239 @@
     "checks": [
       { "check": "absent", "values": ["4400 9007"] },
       { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "annotation-contents-and-author",
+    "spec": "12.5.2 Annotation dictionaries",
+    "howItLeaks": "A comment's text and its author's name ride in the annotation, which a cleaned page no longer needs once its look is part of the page",
+    "rule": "flatten",
+    "kind": "annotations",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9102",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9102", "4400 9103"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [72, 450, 300, 480] }] }
+    ]
+  },
+  {
+    "id": "annotation-hidden",
+    "spec": "12.5.3 Annotation flags",
+    "howItLeaks": "An annotation with the Hidden flag shows nothing, and flattening it would show it",
+    "rule": "strip",
+    "kind": "annotations",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9104",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9104"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [72, 450, 300, 480] }] }
+    ]
+  },
+  {
+    "id": "annotation-no-view",
+    "spec": "12.5.3 Annotation flags",
+    "howItLeaks": "An annotation shown neither on screen nor in print (NoView without Print) holds its look unseen",
+    "rule": "strip",
+    "kind": "annotations",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9105",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9105"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [72, 450, 300, 480] }] }
+    ]
+  },
+  {
+    "id": "annotation-on-a-layer-that-is-off",
+    "spec": "8.11.3.3 Optional content in annotations",
+    "howItLeaks": "An annotation on a layer that is off is not shown, and flattening it would show it",
+    "rule": "strip",
+    "kind": "annotations",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9106",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9106"] },
+      { "check": "structure" }
+    ]
+  },
+  {
+    "id": "annotation-popup-text",
+    "spec": "12.5.6.14 Popup annotations",
+    "howItLeaks": "A note's pop-up holds its text, which the flattened note icon does not show",
+    "rule": "flatten",
+    "kind": "annotations",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9107",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9107"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [72, 450, 300, 480] }] }
+    ]
+  },
+  {
+    "id": "pending-redaction",
+    "spec": "12.5.6.23 Redaction annotations",
+    "howItLeaks": "Another tool's redaction not yet applied keeps its overlay text and covers nothing",
+    "rule": "strip",
+    "kind": "pending-redactions",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9108",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9108"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [72, 450, 300, 480] }] }
+    ]
+  },
+  {
+    "id": "link-annotation",
+    "spec": "12.5.6.5 Link annotations",
+    "howItLeaks": "A link's address can name a client, and a link draws nothing",
+    "rule": "strip",
+    "kind": "links",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9109",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9109"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [72, 450, 300, 480] }] }
+    ]
+  },
+  {
+    "id": "file-attachment-annotation",
+    "spec": "12.5.6.15 File attachment annotations",
+    "howItLeaks": "An attached file's contents ride in the page's annotation",
+    "rule": "flatten",
+    "kind": "attachments",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9110",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9110"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [72, 450, 300, 480] }] }
+    ]
+  },
+  {
+    "id": "flattened-annotation-text",
+    "spec": "12.5.6.6 Free text annotations",
+    "howItLeaks": "A free-text comment's shown text becomes page text when flattened, so marking it must remove it",
+    "rule": "flatten",
+    "kind": "annotations",
+    "fixture": "fixtures/annotations.pdf",
+    "value": "4400 9101",
+    "mark": { "page": 1, "select": [104.7, 169.1, 161.4, 185.6] },
+    "markType": "Financial account",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9101"] }
+    ]
+  },
+  {
+    "id": "form-field-name-tooltip-and-default",
+    "spec": "12.7.4.2 Field dictionaries",
+    "howItLeaks": "A field's name, tooltip and default value stay in the form after its value is drawn on the page",
+    "rule": "flatten",
+    "kind": "form-data",
+    "fixture": "fixtures/form.pdf",
+    "value": "4400 9203",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9201", "4400 9202", "4400 9203"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [160, 734, 360, 754] }, { "page": 1, "box": [72, 600, 300, 640] }] }
+    ]
+  },
+  {
+    "id": "form-field-hidden",
+    "spec": "12.5.3 Annotation flags",
+    "howItLeaks": "A hidden field's value is not shown, and flattening it would show it",
+    "rule": "strip",
+    "kind": "form-data",
+    "fixture": "fixtures/form.pdf",
+    "value": "4400 9204",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9204"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [160, 734, 360, 754] }, { "page": 1, "box": [72, 600, 300, 640] }] }
+    ]
+  },
+  {
+    "id": "signature-data",
+    "spec": "12.8.1 Digital signatures",
+    "howItLeaks": "A signature's signer and certificate stay in the signature dictionary behind its stamp",
+    "rule": "flatten",
+    "kind": "signatures",
+    "fixture": "fixtures/form.pdf",
+    "value": "4400 9206",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9206", "Certificate 4400 9208"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [160, 734, 360, 754] }, { "page": 1, "box": [72, 600, 300, 640] }] }
+    ]
+  },
+  {
+    "id": "flattened-form-value",
+    "spec": "12.7.4.3 Field types",
+    "howItLeaks": "A typed form value becomes page text when flattened, so marking it must remove it from the page and the form",
+    "rule": "flatten",
+    "kind": "form-data",
+    "fixture": "fixtures/form.pdf",
+    "value": "Jane Roe",
+    "mark": { "page": 1, "select": [162, 39.1, 213.4, 55.6] },
+    "markType": "Person",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["Jane Roe"] }
+    ]
+  },
+  {
+    "id": "bookmark",
+    "spec": "12.3.3 Document outline",
+    "howItLeaks": "A bookmark's title can name the client",
+    "rule": "strip",
+    "kind": "bookmarks",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9301",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9301"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "embedded-file",
+    "spec": "7.11.4 Embedded file streams",
+    "howItLeaks": "A file embedded in the document holds whatever it holds",
+    "rule": "strip",
+    "kind": "attachments",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9302",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9302"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "javascript",
+    "spec": "12.6.4.17 JavaScript actions",
+    "howItLeaks": "A document-level script can hold a value",
+    "rule": "strip",
+    "kind": "scripts-actions",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9303",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9303"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "named-destination",
+    "spec": "12.3.2.4 Named destinations",
+    "howItLeaks": "A named destination's name can hold a value",
+    "rule": "strip",
+    "kind": "links",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400_9304",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400_9304"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "open-action",
+    "spec": "12.3.2.2 Document catalog",
+    "howItLeaks": "The action run on opening can hold a value",
+    "rule": "strip",
+    "kind": "scripts-actions",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9305",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9305"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "page-label",
+    "spec": "12.4.2 Page labels",
+    "howItLeaks": "A page label's prefix can hold a value",
+    "rule": "strip",
+    "kind": "page-labels",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9306",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9306"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "structure-alt",
+    "spec": "14.9.3 Alternate descriptions",
+    "howItLeaks": "Accessibility tags' alternative text describes what is on the page",
+    "rule": "strip",
+    "kind": "accessibility-tags",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9307",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9307"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "document-info",
+    "spec": "14.3.3 Document information dictionary",
+    "howItLeaks": "The document's author and title are in its information dictionary",
+    "rule": "strip",
+    "kind": "metadata",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9308",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9308"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "xmp",
+    "spec": "14.3.2 Metadata streams",
+    "howItLeaks": "The document's XMP metadata names its author and history",
+    "rule": "strip",
+    "kind": "metadata",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9309",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9309"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "piece-info",
+    "spec": "14.5 Page-piece dictionaries",
+    "howItLeaks": "An application's private data on a page can hold a value",
+    "rule": "strip",
+    "kind": "app-data",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9310",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9310"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "thumbnail",
+    "spec": "12.3.4 Thumbnail images",
+    "howItLeaks": "A page thumbnail is a second picture of the page",
+    "rule": "strip",
+    "kind": "thumbnails",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9311",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9311"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "old-revision",
+    "spec": "7.5.6 Incremental updates",
+    "howItLeaks": "An earlier saved version of the page still holds what was edited out",
+    "rule": "strip",
+    "kind": "old-revisions",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9312",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9312"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "viewer-preferences",
+    "spec": "12.2 Viewer preferences",
+    "howItLeaks": "Viewer settings can carry private keys",
+    "rule": "strip",
+    "kind": "app-data",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9313",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9313"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "document-action",
+    "spec": "12.6.3 Trigger events",
+    "howItLeaks": "A document's additional actions can hold a script",
+    "rule": "strip",
+    "kind": "scripts-actions",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9314",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9314"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "page-xmp",
+    "spec": "14.3.2 Metadata streams",
+    "howItLeaks": "A page's own XMP metadata can name its author",
+    "rule": "strip",
+    "kind": "metadata",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9315",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9315"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-xmp",
+    "spec": "14.3.2 Metadata streams",
+    "howItLeaks": "An image's XMP metadata can name who took it",
+    "rule": "strip",
+    "kind": "image-metadata",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9316",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9316"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "page-action",
+    "spec": "12.6.3 Trigger events",
+    "howItLeaks": "A page's additional actions can hold a script",
+    "rule": "strip",
+    "kind": "scripts-actions",
+    "fixture": "fixtures/carriers.pdf",
+    "value": "4400 9317",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9317"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "hidden-layer-text",
+    "spec": "8.11.3.2 Optional content in content streams",
+    "howItLeaks": "Text on a layer that is off is not shown, but stays in the page's content",
+    "rule": "strip",
+    "kind": "hidden-layers",
+    "fixture": "fixtures/hidden-content.pdf",
+    "value": "4400 9401",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9401"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "hidden-layer-form",
+    "spec": "8.11.3.3 Optional content in XObjects",
+    "howItLeaks": "A drawing on a layer that is off is not shown, but stays in the file",
+    "rule": "strip",
+    "kind": "hidden-layers",
+    "fixture": "fixtures/hidden-content.pdf",
+    "value": "4400 9402",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9402"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "text-outside-media-box",
+    "spec": "14.11.2 Page boundaries",
+    "howItLeaks": "Text placed off the page is never shown, but stays in the page's content",
+    "rule": "strip",
+    "kind": "outside-page",
+    "fixture": "fixtures/hidden-content.pdf",
+    "value": "4400 9403",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9403"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "text-outside-crop-box",
+    "spec": "14.11.2 Page boundaries",
+    "howItLeaks": "Text between the crop box and the media box is cropped from view, but stays in the content",
+    "rule": "strip",
+    "kind": "outside-page",
+    "fixture": "fixtures/hidden-content.pdf",
+    "value": "4400 9404",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9404"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-past-the-page-edge",
+    "spec": "8.9.5 Image dictionaries",
+    "howItLeaks": "An image's part past the page's edge is never shown, but its pixels stay",
+    "rule": "rewrite",
+    "kind": "unshown-image-pixels",
+    "fixture": "fixtures/hidden-content.pdf",
+    "value": null,
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "pixels", "region": [616, 600, 628, 696], "at": [500, 600, 628, 696] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-outside-a-clip",
+    "spec": "8.5.4 Clipping path operators",
+    "howItLeaks": "An image's part outside its clip, as a picture cropped in a layout tool, is not shown, but its pixels stay",
+    "rule": "rewrite",
+    "kind": "unshown-image-pixels",
+    "fixture": "fixtures/hidden-content.pdf",
+    "value": null,
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "pixels", "region": [168, 400, 228, 496], "at": [100, 400, 228, 496] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-exif",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "An EXIF segment in a JPEG can hold the camera, the place and a name",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9501",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9501"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-jfxx",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "A JFXX segment holds a thumbnail, a second picture",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9502",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9502"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-comment",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "A JPEG comment segment can hold a value",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9503",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9503"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-iptc",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "An IPTC segment holds captions and names",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9504",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9504"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-after-end",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "Bytes after a JPEG's end are never decoded, but stay in the file",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9505",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9505"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-flate-exif",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "A JPEG compressed again with Flate still holds its EXIF segment",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9506",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9506"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-jpx-xml",
+    "spec": "7.4.9 JPXDecode filter",
+    "howItLeaks": "A JPEG 2000 file's XML box holds metadata",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9507",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9507"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-jpx-uuid",
+    "spec": "7.4.9 JPXDecode filter",
+    "howItLeaks": "A JPEG 2000 file's UUID box holds private data",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9508",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9508"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-jpx-comment",
+    "spec": "7.4.9 JPXDecode filter",
+    "howItLeaks": "A comment inside a JPEG 2000 file's codestream can hold a value",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9509",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9509"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-j2k-comment",
+    "spec": "7.4.9 JPXDecode filter",
+    "howItLeaks": "A comment in a raw JPEG 2000 codestream can hold a value",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-data.pdf",
+    "value": "4400 9510",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9510"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "built-in-key",
+    "spec": "7.3.7 Dictionary objects",
+    "howItLeaks": "A catalog key named /constructor, a JavaScript built-in, is kept unless the allowlist reads only its own keys",
+    "rule": "strip",
+    "kind": "app-data",
+    "fixture": "fixtures/structure-keys.pdf",
+    "value": "Client4400_9601",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["Client4400_9601"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "built-in-key-page",
+    "spec": "7.3.7 Dictionary objects",
+    "howItLeaks": "A page key named /toString, a JavaScript built-in, is kept unless the allowlist reads only its own keys",
+    "rule": "strip",
+    "kind": "app-data",
+    "fixture": "fixtures/structure-keys.pdf",
+    "value": "Client4400_9602",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["Client4400_9602"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "halftone-name",
+    "spec": "10.6.5.6 Type 5 halftones",
+    "howItLeaks": "A type-5 halftone's own /HalftoneName is kept unless it is told apart from the colorant names the file chooses",
+    "rule": "strip",
+    "kind": "app-data",
+    "fixture": "fixtures/structure-keys.pdf",
+    "value": "4400 9603",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9603"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "rectangle-with-a-string",
+    "spec": "7.9.5 Rectangles",
+    "howItLeaks": "A string inside a page's media box is kept unless a rectangle must be four numbers",
+    "rule": "strip",
+    "kind": "app-data",
+    "fixture": "fixtures/wrong-array.pdf",
+    "value": "4400 9604",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9604"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "marked-content-in-pattern",
+    "spec": "8.7.3.2 Tiling patterns",
+    "howItLeaks": "A tiling pattern's cell content can hold a marked-content /ActualText, which no reader draws and step 5 must drop, recording its kind",
+    "rule": "rewrite",
+    "kind": "marked-content",
+    "fixture": "fixtures/marked-pattern.pdf",
+    "value": "4400 9701",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9701"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "marked-content-in-type3",
+    "spec": "9.6.4 Type 3 fonts",
+    "howItLeaks": "A Type 3 glyph's procedure can hold a marked-content /Alt, which no reader draws and step 5 must drop, recording its kind",
+    "rule": "rewrite",
+    "kind": "marked-content",
+    "fixture": "fixtures/marked-type3.pdf",
+    "value": "4400 9702",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9702"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "marked-content-in-soft-mask",
+    "spec": "11.6.5.2 Soft-mask dictionaries",
+    "howItLeaks": "A soft mask's group can hold a marked-content /E, which no reader draws and step 5 must drop, recording its kind",
+    "rule": "rewrite",
+    "kind": "marked-content",
+    "fixture": "fixtures/marked-soft-mask.pdf",
+    "value": "4400 9703",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9703"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "marked-content-escaped-name",
+    "spec": "7.3.5 Name objects",
+    "howItLeaks": "A property name written with a #xx escape still names /ActualText, which no reader draws and step 5 must drop, recording its kind",
+    "rule": "rewrite",
+    "kind": "marked-content",
+    "fixture": "fixtures/marked-escaped-name.pdf",
+    "value": "4400 9704",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9704"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "marked-content-nul-delimiter",
+    "spec": "7.2.3 Character set",
+    "howItLeaks": "A property name ended by a NUL, which PDF reads as white space, still names /ActualText, which no reader draws and step 5 must drop, recording its kind",
+    "rule": "rewrite",
+    "kind": "marked-content",
+    "fixture": "fixtures/marked-nul-delimiter.pdf",
+    "value": "4400 9705",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9705"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "postscript-xobject",
+    "spec": "8.8.2 PostScript XObjects",
+    "howItLeaks": "A PostScript XObject holds code no PDF 2.0 reader runs, which can carry a value; step 5 drops it, and the scan before it records app-data",
+    "rule": "strip",
+    "kind": "app-data",
+    "fixture": "fixtures/postscript-xobject.pdf",
+    "value": "4400 9801",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9801"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-abbreviated-filter",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "A JPEG under the abbreviated filter name /DCT, which MuPDF reads, keeps its EXIF unless the name is read as DCTDecode",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-filter-names.pdf",
+    "value": "4400 9511",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9511"] },
+      { "check": "image-metadata" },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-flate-abbreviated-filter",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "A JPEG under [/FlateDecode /DCT] keeps its EXIF unless the abbreviated name is read as DCTDecode",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-filter-names.pdf",
+    "value": "4400 9512",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9512"] },
+      { "check": "image-metadata" },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-jpx-after-end",
+    "spec": "7.4.9 JPXDecode filter",
+    "howItLeaks": "Bytes after a JPEG 2000 codestream's end are never decoded, but stay in the file",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/jpx-data.pdf",
+    "value": "4400 9514",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9514"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-jpx-second-codestream",
+    "spec": "7.4.9 JPXDecode filter",
+    "howItLeaks": "A JP2 file's second codestream box is never drawn, but can hold anything",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/jpx-data.pdf",
+    "value": "4400 9515",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9515"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-inline-jpeg",
+    "spec": "8.9.7 Inline images",
+    "howItLeaks": "An inline JPEG's EXIF rides in the content stream, which step 5's filter must rewrite without it",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/inline-jpeg.pdf",
+    "value": "4400 9517",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9517"] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-flate-predictor",
+    "spec": "7.4.4.4 LZW and Flate predictor functions",
+    "howItLeaks": "A JPEG under a Flate layer with a predictor keeps its EXIF unless the layer is undone with its own parameters, the one DecodeParms dictionary over the chain",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-filter-names.pdf",
+    "value": "4400 9518",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9518"] },
+      { "check": "image-metadata" },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-jpeg-extension",
+    "spec": "7.4.8 DCTDecode filter",
+    "howItLeaks": "A JPEG's JPGn extension segments can hold anything; some decoders skip them and others, PDFium's among them, refuse the image, so it is judged without rendered",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/jpeg-extension.pdf",
+    "value": "4400 9519",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9519"] },
+      { "check": "image-metadata" }
+    ]
+  },
+  {
+    "id": "edit-locked-encryption",
+    "spec": "7.6 Encryption",
+    "howItLeaks": "A file with an empty open password stays encrypted until step 8, and an encrypted working copy would hide its streams from the raw scan",
+    "rule": "strip",
+    "kind": null,
+    "fixture": "fixtures/edit-locked.pdf",
+    "value": null,
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "metadata" },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "data-after-end-of-stream",
+    "spec": "7.3.8.2 Stream extent",
+    "howItLeaks": "Bytes after a stream's compressed data are never decoded, but stay in the file unless the stream is written again",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/data-after-end.pdf",
+    "value": "4400 9901",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9901"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-ascii85-jpeg",
+    "spec": "7.4.3 ASCII85Decode filter",
+    "howItLeaks": "A JPEG behind ASCII85 keeps its EXIF unless the ASCII85 layer is undone and the JPEG cut",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-prefilters.pdf",
+    "value": "4400 9902",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9902"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "image-data-asciihex-jpx",
+    "spec": "7.4.2 ASCIIHexDecode filter",
+    "howItLeaks": "A JP2 file behind ASCIIHex keeps its XML box unless the ASCIIHex layer is undone and the file cut",
+    "rule": "rewrite",
+    "kind": "image-metadata",
+    "fixture": "fixtures/image-prefilters.pdf",
+    "value": "4400 9903",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9903"] },
+      { "check": "image-metadata" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "soft-mask-grey-colour-space",
+    "spec": "11.6.5.3 Soft-mask images",
+    "howItLeaks": "A soft mask whose one-channel colour space is not DeviceGray is rewritten as DeviceGray rather than refused, and must draw the same",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/grey-soft-masks.pdf",
+    "value": null,
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "hybrid-xfa-datasets",
+    "spec": "12.7.9 XFA forms",
+    "howItLeaks": "A hybrid form's XFA datasets hold field data the page never shows; flattening the form must delete them with it",
+    "rule": "flatten",
+    "kind": "form-data",
+    "fixture": "fixtures/hybrid-xfa.pdf",
+    "value": "4400 9904",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9904"] },
+      { "check": "structure" },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [160, 734, 360, 754] }] }
+    ]
+  },
+  {
+    "id": "shading-pattern-graphics-state",
+    "spec": "8.7.4.2 Shading patterns",
+    "howItLeaks": "A shading pattern's graphics state is never applied when it is drawn, so text or ActualText in its soft mask group is never seen, but stays unless the key is deleted",
+    "rule": "strip",
+    "kind": "app-data",
+    "fixture": "fixtures/shading-graphics-state.pdf",
+    "value": "4400 9914",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9913", "4400 9914"] },
+      { "check": "structure" },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "form-inherits-text-state",
+    "spec": "9.3.1 Text state parameters and operators",
+    "howItLeaks": "A form inherits the text state where it is drawn; MuPDF's filter, unpatched, lost a reset made in an empty text object, so the form's text was drawn spaced out and the file refused (patch 0004)",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/inherited-text-state.pdf",
+    "value": null,
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "positions", "words": [] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "form-inherits-text-state-when-written",
+    "spec": "9.3.1 Text state parameters and operators",
+    "howItLeaks": "Redacting a word inside a form runs the content filter over the form: unpatched, it lost the text state the form inherits, so the rest of the form's text moved in the output (patch 0004)",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/inherited-text-state.pdf",
+    "value": "Secret",
+    "mark": { "page": 1, "select": [72, 129.1, 106.7, 145.6] },
+    "markType": "Person",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["Secret"] },
+      { "check": "covered", "word": "Secret" },
+      { "check": "positions", "words": ["Secret"] }
+    ]
+  },
+  {
+    "id": "mark-wrapping-onto-a-tight-line",
+    "spec": "9.3.5 Leading",
+    "howItLeaks": "A name wrapping onto a line set so close that its font height reaches the line above, as in a signature stamp: drawn the full font height, the box over its second line covered part of a kept word above, and the gate refused the export",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/tight-lines.pdf",
+    "value": "Jane Roe",
+    "mark": { "page": 1, "select": [94.4, 87, 95.8, 102] },
+    "markType": "Person",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["Jane", "Roe"] },
+      { "check": "positions", "words": ["Jane", "Roe"] },
+      { "check": "rendered", "exceptions": [{ "page": 1, "box": [94.6, 697.5, 108.2, 707] }, { "page": 1, "box": [72.4, 685.5, 94.9, 700.4] }] }
     ]
   }
 ]

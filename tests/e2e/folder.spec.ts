@@ -116,7 +116,7 @@ test("while the projects move into a folder, no project opens until the move end
   await expect(marks(page)).toHaveText([/Jane Roe/]);
   await expect(page.getByRole("alert")).toHaveCount(0);
   expect(await storedNames(page)).toEqual(["Picked"]);
-  expect(await storedNamesIn(page, "Picked/one-word/.redactorator")).toContain("project.json");
+  expect(await storedNamesIn(page, "Picked/one-word/.redactorator/pdf-3")).toContain("project.json");
 });
 
 test("a project renamed before it moves gets a folder of its new name", async ({ page }) => {

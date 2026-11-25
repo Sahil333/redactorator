@@ -139,3 +139,51 @@ def test_pixels_judges_the_image_drawn_at_a_place_turned_or_not():
 def test_unchanged_needs_every_pixel_as_it_was():
     assert checks.unchanged(fx.logo_b(), fx.logo_b(cleaned=True), LOGO_OTHER) == []
     assert checks.unchanged(fx.logo_b(), fx.logo_b(cleaned=True), LOGO_HALF)[0].endswith("changed")
+
+
+def jpeg_page(jpeg: bytes) -> bytes:
+    w, h = fx.SPACES_SIZE
+    return fx.write_pdf(
+        fx.page_objects("/MediaBox [0 0 612 792]", fx.stream("", b"q 128 0 0 96 100 600 cm /Im Do Q"), "/XObject << /Im 6 0 R >>")
+        + [fx.stream(f"/Type /XObject /Subtype /Image /Width {w} /Height {h} /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /DCTDecode", jpeg)],
+        "/Root 1 0 R",
+    )
+
+
+def test_image_metadata_passes_a_jpeg_with_only_adobe_app14():
+    jpeg = fx.encoded("JPEG", quality=90, subsampling=0)
+    # Pillow writes a JFIF APP0 segment first; without it, and with Adobe's APP14, nothing is metadata.
+    app0 = 4 + int.from_bytes(jpeg[4:6], "big")
+    bare = jpeg[:2] + fx.segment(0xEE, b"Adobe\x00\x64\x00\x00\x00\x00\x01") + jpeg[app0:]
+    assert checks.image_metadata(jpeg_page(bare)) == []
+
+
+def test_image_metadata_finds_segments_boxes_comments_and_bytes_after_the_end():
+    reasons = checks.image_metadata(fx.image_data())
+    for found in ["an APP1 segment", "an APP13 segment", "a comment segment", "9 bytes after its end", "a 'xml ' box", "a 'uuid' box", "a codestream comment"]:
+        assert any(found in reason for reason in reasons), found
+    assert any(reason.startswith("image object 7 ") and "APP1" in reason for reason in reasons), "the JPEG under a Flate layer"
+    assert any(reason.startswith("image object 9 ") and "codestream comment" in reason for reason in reasons), "the raw codestream"
+
+
+def test_structure_passes_a_file_with_only_what_draws_its_page():
+    assert checks.structure(fx.letter(fx.LETTER_A)) == []
+
+
+def test_structure_finds_every_carrier_outside_the_allowlist():
+    reasons = checks.structure(fx.carriers())
+    for path in ["trailer/Info", "trailer/Prev", "trailer/Root/Outlines", "trailer/Root/Names", "trailer/Root/OpenAction",
+                 "trailer/Root/Pages/Kids[0]/Thumb", "trailer/Root/Pages/Kids[0]/PieceInfo", "trailer/Root/Pages/Kids[0]/Resources/XObject/Im1/Metadata"]:
+        assert f"{path} is outside the allowlist" in reasons, path
+
+
+def test_structure_finds_annotations_and_a_form():
+    assert "trailer/Root/AcroForm is outside the allowlist" in checks.structure(fx.form())
+    assert "trailer/Root/Pages/Kids[0]/Annots is outside the allowlist" in checks.structure(fx.annotations())
+
+
+def test_image_metadata_reads_abbreviated_filter_names_and_fails_an_image_filter_not_last():
+    reasons = checks.image_metadata(fx.image_filter_names())
+    assert any(reason.startswith("image object 6 ") and "APP1" in reason for reason in reasons), "under /DCT"
+    assert any(reason.startswith("image object 7 ") and "APP1" in reason for reason in reasons), "under [/FlateDecode /DCT]"
+    assert any("has a filter after DCTDecode, or one before it" in reason for reason in checks.image_metadata(fx.image_filter_not_last()))

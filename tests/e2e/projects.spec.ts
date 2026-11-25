@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { failWrites, holdApprovalSearch, holdInspection, holdRead, holdReadFromStart, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
+import { failWrites, holdApprovalSearch, holdPreparation, holdRead, holdReadFromStart, holdWrites, restoreWrites, stopWorkerAfter, writeAttempts } from "./fakes";
 import {
   aJaneRoe,
   addDocuments,
@@ -276,8 +276,8 @@ test("while chosen files are made into a project, no project can be opened and n
   await openPdf(page, oneWordPdf);
   await saved(page);
   await goHome(page);
-  // Held from here on: the next file's inspection, which keeps the new project being made.
-  const release = await holdInspection(page);
+  // Held from here on: the next file's preparation, which keeps the new project being made.
+  const release = await holdPreparation(page);
   await page.reload();
   const chooseFolder = page.getByRole("button", { name: "Choose a folder for projects" });
   await expect(page.getByLabel("New project")).toBeEnabled();
@@ -365,13 +365,15 @@ test("a project whose file is damaged or from a newer version is listed with the
   expect(kept).toBe(written);
 });
 
-test("a document whose original is gone from the project says so", async ({ page }) => {
+test("a document whose original and working copy are gone from the project says so", async ({ page }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf, twoPagePdf);
   await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  // The working copy is what is shown; with it gone it would be made again from the original.
   await page.evaluate(async () => {
-    const root = await navigator.storage.getDirectory();
-    await (await root.getDirectoryHandle("one-word")).removeEntry("two-pages.pdf");
+    const project = await (await navigator.storage.getDirectory()).getDirectoryHandle("one-word");
+    await project.removeEntry("two-pages.pdf");
+    await (await (await project.getDirectoryHandle(".redactorator")).getDirectoryHandle("pdf-3")).removeEntry("working", { recursive: true });
   });
 
   await explorer(page).getByRole("button", { name: /^two-pages\.pdf/ }).click();
@@ -493,7 +495,7 @@ test("of two lists of the projects read at once, the one started last stays, tho
   const release = await holdRead(page, "project.json", 2);
   await rename("one-word", "First");
   // Saved, and so let go, before the second rename asks for the project's lock.
-  await expect.poll(() => storedText(page, "one-word/.redactorator/project.json")).toContain('"name":"First"');
+  await expect.poll(() => storedText(page, "one-word/.redactorator/pdf-3/project.json")).toContain('"name":"First"');
   await rename("one-word", "Second");
   await expect(projectRow(page, "Second")).toBeVisible();
   await release();

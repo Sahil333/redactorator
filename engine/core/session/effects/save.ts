@@ -1,4 +1,5 @@
 import type { Project } from "../../../model/project";
+import { READER_TAG } from "../../../pdf-protocol/messages";
 import type { Store } from "../../../storage/store";
 import { saveProject } from "../../stored/projects";
 import type { SessionChange } from "../changes";
@@ -33,7 +34,7 @@ export function saver({ store, folder, latest, dispatch }: Saving) {
       const project = latest();
       if (project === undefined) return true;
       try {
-        await saveProject(store, { folder, project });
+        await saveProject(store, { folder, project }, READER_TAG);
         if (!unsaved) dispatch({ type: "saved" });
         return true;
       } catch {

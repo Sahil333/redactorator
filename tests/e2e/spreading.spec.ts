@@ -32,7 +32,7 @@ import {
   toScreen,
   type PointBox,
 } from "./app";
-import { holdApprovalSearch, holdInspection, refuseReadings, stopWorkerOnSearch } from "./fakes";
+import { holdApprovalSearch, holdPreparation, stopWorkerOnSearch } from "./fakes";
 import { judge } from "./oracle";
 
 const lineFeedGlyph = new URL("../../fixtures/line-feed-glyph.pdf", import.meta.url).pathname;
@@ -54,7 +54,11 @@ const janeRoeAndLineFeed: PointBox = [101.3, 79.1, 156.0, 95.6];
 
 const newMarks = (page: Page) => page.getByRole("region", { name: "New marks" });
 
-/** Rewrites the stored project as slice 1 kept it: version 1, no review fields, no stored text or images; and deletes `gone` from its folder. */
+/**
+ * Rewrites the stored project as phase 2's slice 1 kept it: in `.redactorator/` itself, version 1,
+ * no review fields or piece letters, and no stored text, images or working copies; and deletes
+ * `gone` from its folder.
+ */
 async function storeAsVersion1(page: Page, folder: string, gone: readonly string[] = []): Promise<void> {
   await saved(page);
   await page.evaluate(
@@ -62,19 +66,43 @@ async function storeAsVersion1(page: Page, folder: string, gone: readonly string
       const root = await navigator.storage.getDirectory();
       const project = await root.getDirectoryHandle(folder);
       const records = await project.getDirectoryHandle(".redactorator");
-      const file = await records.getFileHandle("project.json");
+      const tagged = await records.getDirectoryHandle("pdf-3");
       const added = new Set(["hidden", "review", "download", "shown", "isNew"]);
-      const text = (await (await file.getFile()).text()).replace('"version":3', '"version":1');
-      const writable = await file.createWritable();
-      await writable.write(JSON.stringify(JSON.parse(text), (key, value: unknown) => (added.has(key) ? undefined : value)));
+      const text = (await (await (await tagged.getFileHandle("project.json")).getFile()).text()).replace('"version":3', '"version":1');
+      // A piece is the only record with boxes; its letters came with Phase 3.
+      const older = (value: unknown): unknown => {
+        if (Array.isArray(value)) return value.map(older);
+        if (typeof value !== "object" || value === null) return value;
+        const kept = Object.entries(value).filter(([key]) => !added.has(key) && !(key === "text" && "boxes" in value));
+        return Object.fromEntries(kept.map(([key, each]) => [key, older(each)]));
+      };
+      const writable = await (await records.getFileHandle("project.json", { create: true })).createWritable();
+      await writable.write(JSON.stringify(older(JSON.parse(text))));
       await writable.close();
-      await records.removeEntry("text", { recursive: true });
-      await records.removeEntry("images", { recursive: true });
+      await records.removeEntry("pdf-3", { recursive: true });
       for (const name of gone) await project.removeEntry(name);
     },
     { folder, gone },
   );
   await page.reload();
+}
+
+/** Deletes the stored text this build keeps of document `file` in `folder`'s project, as a disk might lose it. */
+async function loseReading(page: Page, folder: string, file: string): Promise<void> {
+  await saved(page);
+  await page.evaluate(
+    async ({ folder, file }) => {
+      const records = await (await (await navigator.storage.getDirectory()).getDirectoryHandle(folder)).getDirectoryHandle(".redactorator");
+      const tagged = await records.getDirectoryHandle("pdf-3");
+      const project: unknown = JSON.parse(await (await (await tagged.getFileHandle("project.json")).getFile()).text());
+      const documents: unknown = typeof project === "object" && project !== null ? Reflect.get(project, "documents") : undefined;
+      const document: unknown = Array.isArray(documents) ? documents.find((each: unknown) => typeof each === "object" && each !== null && Reflect.get(each, "file") === file) : undefined;
+      const id: unknown = typeof document === "object" && document !== null ? Reflect.get(document, "id") : undefined;
+      if (typeof id !== "string") throw new Error(`${file} is not in the project`);
+      await (await tagged.getDirectoryHandle("text")).removeEntry(`${id}.json`);
+    },
+    { folder, file },
+  );
 }
 
 /** Starts a project from both letters, with letter-a.pdf open. */
@@ -408,12 +436,12 @@ test("a project saved before review states opens with its marks, in review, and 
   await expect(inExplorer(page, "one-word.pdf")).toContainText("In review");
   await approve(page, undefined);
   await expect(inExplorer(page, "one-word.pdf")).toContainText("Approved");
-  // Approving read the original again for the text the old project never kept, and kept it.
+  // Opening it prepared the document again for this build, keeping the text the old project never kept.
   const texts = await page.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
     const records = await (await root.getDirectoryHandle("one-word")).getDirectoryHandle(".redactorator");
     let count = 0;
-    for await (const _ of (await records.getDirectoryHandle("text")).keys()) count++;
+    for await (const _ of (await (await records.getDirectoryHandle("pdf-3")).getDirectoryHandle("text")).keys()) count++;
     return count;
   });
   expect(texts).toBe(1);
@@ -436,17 +464,14 @@ test("an approval that can't read the documents approves nothing and says so, un
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
-  // From the reload on: the project keeps no text, so approving must read the original again.
-  const readable = await refuseReadings(page);
-  await storeAsVersion1(page, "one-word");
-  await expect(marks(page)).toHaveText([/Jane Roe/]);
+  // Approving needs the text, which it never reads from the original: it is prepared again.
+  await loseReading(page, "one-word", "one-word.pdf");
 
   await approveButton(page).click();
   const failed = page.getByRole("alert").filter({ hasText: "The documents' text could not be read, so nothing was approved. Reload the page and approve again." });
   await expect(failed).toBeVisible();
   await expect(inExplorer(page, "one-word.pdf")).toContainText("In review");
 
-  await readable();
   await approve(page, undefined);
   await expect(failed).toHaveCount(0);
   await expect(inExplorer(page, "one-word.pdf")).toContainText("Approved");
@@ -456,15 +481,13 @@ test("an approval that can't read the documents says so only in its project", as
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
-  const readable = await refuseReadings(page);
-  await storeAsVersion1(page, "one-word");
+  await loseReading(page, "one-word", "one-word.pdf");
   await approveButton(page).click();
   await expect(page.getByRole("alert")).toHaveText("The documents' text could not be read, so nothing was approved. Reload the page and approve again.");
 
   await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Projects" }).click();
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await readable();
 });
 
 test("while an approval is worked out, the page and the marks panel take no marks, and the approval then lands", async ({ page }) => {
@@ -522,8 +545,8 @@ test("a document can't be approved or switched while files are being added, and 
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
   await saved(page);
-  // Held from here on: the next file's inspection, which keeps the add under way.
-  const release = await holdInspection(page);
+  // Held from here on: the next file's preparation, which keeps the add under way.
+  const release = await holdPreparation(page);
   await page.reload();
   await expect(marks(page)).toHaveText([/Jane Roe/]);
 

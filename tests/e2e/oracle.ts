@@ -14,7 +14,10 @@ type OracleCheck =
   | { readonly check: "covered"; readonly word: string }
   | { readonly check: "positions"; readonly words: readonly string[] }
   | { readonly check: "pixels"; readonly region: UserBox; readonly mask?: boolean; readonly at?: UserBox }
-  | { readonly check: "unchanged"; readonly at: UserBox };
+  | { readonly check: "unchanged"; readonly at: UserBox }
+  | { readonly check: "image-metadata" }
+  | { readonly check: "structure" }
+  | { readonly check: "rendered"; readonly exceptions?: readonly { readonly page: number; readonly box: UserBox }[] };
 
 const oracleProject = new URL("../oracle", import.meta.url).pathname;
 const datasetProject = new URL("../../tools/dataset", import.meta.url).pathname;

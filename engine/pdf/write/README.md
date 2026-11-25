@@ -3,7 +3,8 @@
 ## Overview
 
 The PDF write path. It turns the user's edits into MuPDF redactions on a fresh
-copy of the original file's bytes, deletes the text, image pixels and wholly
+copy of the document's working copy, which preparation made from the user's
+file ([../prepare/README.md](../prepare/README.md)), deletes the text, image pixels and wholly
 covered vector paths under each mark, draws the boxes (and optional labels),
 strips metadata, saves the file as a single revision without encryption, then
 re-opens the result and checks it. If a check fails it throws `CheckFailed`.
@@ -31,6 +32,9 @@ Used inside the folder:
 - `redact.ts`: `redactionsByPage(original, edits): Map<PageIndex, Redaction[]>`,
   `redact(bytes, byPage, appearance): Uint8Array<ArrayBuffer>`.
 - `check.ts`: `check(original, output, byPage, appearance): void` (RED-3).
+  `original` is the working copy written from. It reads glyphs with
+  `../glyphs.ts:glyphsOf` and the options it read with before Phase 3
+  (`"preserve-whitespace"`); slice 3 moves it to `READING_OPTIONS`.
 
 `Edit` and `Appearance` come from `engine/model/document.ts`. `Box` and
 `PageIndex` come from `engine/model/geometry.ts`.
@@ -52,6 +56,12 @@ Used inside the folder:
   letters' ink band from `readText(...).ink`, so that removal does not reach
   into closely set neighbouring lines (`common.ts:Redaction.textArea`,
   `redact.ts:textAreas`).
+- **A text mark's box stops at the next line's letters.** Its box starts as the
+  letters' full font height, which on lines set closer than that reaches the
+  letters of the line above or below. Before writing, each such box is trimmed
+  clear of the letters no mark removes (read with `CHECK_OPTIONS`), never into
+  its own `textArea`, so it hides nothing the file keeps
+  (`redact.ts:trimmed`; `tight-lines.pdf`).
 - **Marks must match the text.** If a text edit runs past the page's
   characters, covers no line boxes, or its line boxes and ink bands differ in
   count, `textAreas` throws `CheckFailed`. If an edit names a page past `countPages()`,

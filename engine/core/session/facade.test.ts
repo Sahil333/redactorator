@@ -13,7 +13,7 @@ import { firstParts, session as reduce } from "./slices";
 
 const nothing = (): Promise<ClientError> => Promise.resolve({ code: "worker-not-running" });
 // marks.add needs neither: it works from the page texts the Session already holds.
-const client: PdfClient = { onStatus: () => () => undefined, inspect: nothing, match: nothing, open: nothing, render: nothing, text: nothing, apply: nothing };
+const client: PdfClient = { onStatus: () => () => undefined, prepare: nothing, match: nothing, open: nothing, render: nothing, text: nothing, apply: nothing };
 const store: Store = { read: () => Promise.resolve(undefined), write: () => Promise.resolve(), folders: () => Promise.resolve([]), files: () => Promise.resolve([]), remove: () => Promise.resolve() };
 
 /** The one page of the documents here, and a box on it. */
@@ -47,7 +47,7 @@ function sessionOver(project: Project) {
     intake: () => Promise.resolve({ added: [], refused: [] }),
     addCustomType: () => undefined,
   };
-  open = openSession(host, { store, folder: "Letters", project }, { release: () => undefined }, () => undefined);
+  open = openSession(host, { store, folder: "Letters", project, migrated: false }, { release: () => undefined }, () => undefined);
   const { session } = open;
   const parts = () => open?.parts ?? firstParts(project);
   return { session, land: (change: SessionChange) => host.dispatch(session, change), parts };
@@ -89,7 +89,7 @@ describe("marks.add", () => {
 });
 
 describe("approval", () => {
-  const jane: Mark = { id: 1, type: "person", linkId: "", isNew: false, target: { kind: "text", text: "Jane", pieces: [{ page: page.index, start: 0, end: 4, boxes: [box] }] } };
+  const jane: Mark = { id: 1, type: "person", linkId: "", isNew: false, target: { kind: "text", text: "Jane", pieces: [{ page: page.index, start: 0, end: 4, boxes: [box], text: "Jane" }] } };
   const dear: Mark = { ...jane, id: 2, target: { kind: "box", page: page.index, box } };
   const none = (document: ProjectDocument["id"]) => ({ document, hidden: 0, shown: 0, retyped: 0 });
 

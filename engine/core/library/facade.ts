@@ -2,8 +2,9 @@ import type { Result } from "../../api/errors";
 import type { Library } from "../../api/facade";
 import type { LibraryState } from "../../api/state";
 import type { Settings } from "../../model/project";
+import { READER_TAG } from "../../pdf-protocol/messages";
 import type { Store } from "../../storage/store";
-import { duplicateProject, readProject, saveProject, type StoredProject } from "../stored/projects";
+import { duplicateProject, inTag, readProject, saveProject, type ReadProject } from "../stored/projects";
 import { createFrom } from "./effects/create";
 import { importInto } from "./effects/import";
 import { whileLocked } from "./effects/manage";
@@ -39,7 +40,7 @@ export function createLibrary(host: LibraryHost, first: FirstStore) {
   }
 
   /** Changes a listed project, as `manage` commands do. */
-  async function manage(projectId: string, change: (store: Store, current: StoredProject) => Promise<unknown>): Promise<Result<void>> {
+  async function manage(projectId: string, change: (store: Store, current: ReadProject) => Promise<unknown>): Promise<Result<void>> {
     const refusal = refused("manage", projectId);
     if (refusal !== undefined) return refusal;
     const found = listed(projectId);
@@ -68,9 +69,12 @@ export function createLibrary(host: LibraryHost, first: FirstStore) {
         if (found === undefined) return { ok: false, error: { code: "unknown-project" } };
         return openProject(host, found.entry, found.store);
       },
-      rename: (projectId, name) => manage(projectId, (store, current) => saveProject(store, { ...current, project: { ...current.project, name } })),
-      duplicate: (projectId) => manage(projectId, duplicateProject),
-      archive: (projectId, archived) => manage(projectId, (store, current) => saveProject(store, { ...current, project: { ...current.project, archived } })),
+      // A project last saved by an older build is copied into this build's tag folder first, so its
+      // marks keep their letters.
+      rename: (projectId, name) => manage(projectId, async (store, current) => saveProject(store, { ...current, project: { ...(await inTag(store, current, READER_TAG)), name } }, READER_TAG)),
+      duplicate: (projectId) => manage(projectId, (store, current) => duplicateProject(store, current, READER_TAG)),
+      archive: (projectId, archived) =>
+        manage(projectId, async (store, current) => saveProject(store, { ...current, project: { ...(await inTag(store, current, READER_TAG)), archived } }, READER_TAG)),
       remove: (projectId) => manage(projectId, (store, current) => store.remove(current.folder)),
     },
     folders: {
@@ -79,7 +83,7 @@ export function createLibrary(host: LibraryHost, first: FirstStore) {
         if (refusal !== undefined) return refusal;
         try {
           // One project's own folder would hide that project and take the others inside it.
-          return { ok: true, value: (await readProject(store, "")) === undefined ? "usable" : "one-project" };
+          return { ok: true, value: (await readProject(store, "", READER_TAG)) === undefined ? "usable" : "one-project" };
         } catch {
           return { ok: false, error: readFailed };
         }

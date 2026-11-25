@@ -1,4 +1,4 @@
-import type { FileNumber, PdfError, PdfReply } from "../pdf-protocol/messages";
+import type { FileNumber, PdfError, PdfErrorData, PdfReply } from "../pdf-protocol/messages";
 
 type Send = (message: PdfReply, transfer?: ArrayBuffer[]) => void;
 
@@ -12,6 +12,7 @@ export function post(message: PdfReply, transfer?: ArrayBuffer[]): void {
   send(message, transfer);
 }
 
-export function fail(file: FileNumber, code: PdfError["code"], message: string): void {
-  post({ type: "error", file, error: { code, message } });
+/** Tells the engine a request about `file` failed. A code with no `message` has the app's own sentence. */
+export function fail(file: FileNumber, code: PdfError["code"], message?: string, data?: PdfErrorData): void {
+  post({ type: "error", file, error: { code, ...(message === undefined ? {} : { message }), ...(data === undefined ? {} : { data }) } });
 }

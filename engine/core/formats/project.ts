@@ -1,12 +1,12 @@
 // The stored formats: a project's `project.json`, the text of each of its documents, and the
 // app's `settings.json`. All are read from storage the user's browser keeps across app
 // versions, so each carries a version and is checked whole when read.
-import type { PageChar, PageText, PlacedImage } from "../../model/document";
+import { isReaderTag, type PageChar, type PageText, type PlacedImage, type ReaderTag, type RemovalKind } from "../../model/document";
 import { isPageIndex, parseBox, pointBox } from "../../model/geometry";
 import { isOffset, isPositiveNumber, isRecord, isText, parseAll } from "../../model/guards";
 import type { ImageAnchor } from "../../model/images";
 import type { Mark, MarkTarget, TextPiece } from "../../model/marks";
-import { isFingerprint, parseAppearance, parsePlacedImage } from "../../model/parse";
+import { isFingerprint, parseAppearance, parsePlacedImage, parseRemovalKind } from "../../model/parse";
 import {
   downloadStates,
   isDocumentId,
@@ -23,9 +23,11 @@ const IMAGES_FORMAT = "redactorator-images";
 const SETTINGS_FORMAT = "redactorator-settings";
 // Raise a version only with a migration from every earlier one in the parser below.
 // Version 1 (phase 2 slice 1) had no review states and no hidden values; version 2 (slice 2) no
-// image anchors, so its boxes are anchored when their document is next approved.
+// image anchors, so its boxes are anchored when their document is next approved. From Phase 3 a
+// text piece may carry its letters; one without them, as every version 3 file before, reads as "".
 const PROJECT_VERSION = 3;
-const TEXT_VERSION = 1;
+// Version 1 had no reader tag and no removed kinds; it is read only to migrate marks from it.
+const TEXT_VERSION = 2;
 const IMAGES_VERSION = 1;
 const SETTINGS_VERSION = 1;
 
@@ -38,7 +40,9 @@ const parseStrings = (value: unknown) => parseAll(value, (each) => (isText(each)
 function parsePiece(value: unknown): TextPiece | undefined {
   if (!isRecord(value) || !isPageIndex(value.page) || !isOffset(value.start) || !isOffset(value.end)) return undefined;
   const boxes = parseAll(value.boxes, parseBox);
-  return boxes && value.start < value.end ? { page: value.page, start: value.start, end: value.end, boxes } : undefined;
+  // Only `migratePieces` fills the letters of a piece stored without them.
+  const text = value.text === undefined ? "" : value.text;
+  return boxes && value.start < value.end && isText(text) ? { page: value.page, start: value.start, end: value.end, boxes, text } : undefined;
 }
 
 const isUnit = (value: unknown): value is number => typeof value === "number" && value >= 0 && value <= 1;
@@ -145,10 +149,20 @@ interface StoredPage {
 
 const hundredths = (n: number) => Math.round(n * 100) / 100;
 
-export const textsJson = (texts: readonly PageText[]): string =>
+/** A document's reading as one build read it: which build, what preparation removed, and each page's text. */
+export interface StoredTexts {
+  readonly pages: PageText[];
+  /** Absent from version 1, written before reader tags. */
+  readonly readerTag?: ReaderTag;
+  readonly removed?: readonly RemovalKind[];
+}
+
+export const textsJson = (texts: readonly PageText[], readerTag: ReaderTag, removed: readonly RemovalKind[]): string =>
   JSON.stringify({
     format: TEXT_FORMAT,
     version: TEXT_VERSION,
+    readerTag,
+    removed,
     pages: texts.map(({ chars }): StoredPage => ({
       chars: chars.map((char) => char.c),
       boxes: chars.flatMap(({ box }) => (box === undefined ? [] : [box.x0, box.y0, box.x1, box.y1].map(hundredths))),
@@ -175,11 +189,15 @@ function parseStoredPage(value: unknown): PageText | undefined {
   return at === boxes.length ? { chars: parsed } : undefined;
 }
 
-export function parseTexts(text: string, pages: number): PageText[] | StoredFileProblem {
+export function parseTexts(text: string, pages: number): StoredTexts | StoredFileProblem {
   const stored = versioned(text, TEXT_FORMAT, TEXT_VERSION);
   if (typeof stored === "string") return stored;
-  const texts = parseAll(stored.data.pages, parseStoredPage);
-  return texts && texts.length === pages ? texts : "damaged";
+  const { data, version } = stored;
+  const texts = parseAll(data.pages, parseStoredPage);
+  if (!texts || texts.length !== pages) return "damaged";
+  if (version === 1) return { pages: texts };
+  const removed = parseAll(data.removed, parseRemovalKind);
+  return isReaderTag(data.readerTag) && removed ? { pages: texts, readerTag: data.readerTag, removed } : "damaged";
 }
 
 export const imagesJson = (images: readonly PlacedImage[]): string => JSON.stringify({ format: IMAGES_FORMAT, version: IMAGES_VERSION, images });

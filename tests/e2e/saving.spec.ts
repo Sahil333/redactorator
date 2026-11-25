@@ -4,7 +4,7 @@ import { addDocuments, dear, drawBox, janeRoe, markText, oneWordPdf, openApp, op
 import { countWrites, failWrites, holdWrites, stopWorkerAfter } from "./fakes";
 
 /** The project made from one-word.pdf, as stored. */
-const storedProject = (page: Page) => storedJson(page, "one-word/.redactorator/project.json");
+const storedProject = (page: Page) => storedJson(page, "one-word/.redactorator/pdf-3/project.json");
 const markCount = ["documents", "0", "marks", "length"];
 
 async function openOneWord(page: Page): Promise<void> {

@@ -12,12 +12,15 @@ ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f", b"("
 
 
 def segments(pdf: bytes) -> list[bytes]:
-    """The file outside streams, then each stream's bytes, inflated when they inflate."""
+    """The file outside streams, then each stream's bytes, inflated when they inflate, with any bytes
+    after the compressed data's end, which no reader decodes but which stay in the file."""
     found = [STREAM.sub(b"stream endstream", pdf)]
     for match in STREAM.finditer(pdf):
         data = match.group(1)
+        inflater = zlib.decompressobj()
         try:
-            found.append(zlib.decompress(data))
+            found.append(inflater.decompress(data))
+            found.append(inflater.unused_data)
         except zlib.error:
             found.append(data)
     return found

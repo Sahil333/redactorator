@@ -4,9 +4,16 @@ import type { Box, PageIndex } from "../model/geometry";
 import { bounds, readingOrder } from "../model/pageText";
 import type { FileNumber } from "../pdf-protocol/messages";
 import { around, bodyOf, quadCorners } from "./geometry";
-import type { PageGlyph } from "./glyphs";
 import { fail, post } from "./messages";
+import { READING_OPTIONS } from "./readingOptions";
 import { current } from "./state";
+
+/** A letter in reading order: its box, and its ink band (see `PageGlyph.body`). */
+interface Letter {
+  readonly c: string;
+  readonly box: Box;
+  readonly body: Box;
+}
 
 interface Run<T> {
   readonly box: Box;
@@ -25,10 +32,10 @@ const LINE_END: Extract<PageChar, { box: undefined }> = { c: "\n", box: undefine
  * rule), and the same characters with each letter's ink band as its box.
  */
 export function readText(page: mupdf.Page): { readonly text: PageText; readonly ink: PageText } {
-  const text = page.toStructuredText("preserve-whitespace");
-  const blocks: Run<Run<PageGlyph>>[] = [];
-  let lines: Run<PageGlyph>[] = [];
-  let glyphs: PageGlyph[] = [];
+  const text = page.toStructuredText(READING_OPTIONS);
+  const blocks: Run<Run<Letter>>[] = [];
+  let lines: Run<Letter>[] = [];
+  let glyphs: Letter[] = [];
   try {
     text.walk({
       beginTextBlock() {
@@ -76,7 +83,7 @@ export function withPage<T>(document: mupdf.Document, index: number, use: (page:
 }
 
 export function text(file: FileNumber, index: PageIndex): void {
-  const document = current(file)?.original;
+  const document = current(file)?.working;
   try {
     if (document === undefined || index >= document.countPages()) throw new Error("No such page");
     post({ type: "text", file, page: index, text: withPage(document, index, pageText) });

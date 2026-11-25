@@ -1,0 +1,71 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R 7 0 R 8 0 R] /DR << /Font << /F1 4 0 R >> >> /DA (/F1 12 Tf 0 g) /SigFlags 3 >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R 7 0 R 8 0 R] >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 44 >>
+stream
+BT /F1 12 Tf 72 740 Td (Client name:) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /Annot /Subtype /Widget /P 3 0 R /DA (/F1 12 Tf 0 g) /FT /Tx /T (client_name 4400 9203) /TU (Tooltip 4400 9201) /DV (4400 9202) /V (Jane Roe) /Rect [160 734 360 754] /F 4 /AP << /N 9 0 R >> >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Widget /P 3 0 R /DA (/F1 12 Tf 0 g) /FT /Tx /T (hidden_field) /V (4400 9204) /Rect [160 690 360 710] /F 2 /AP << /N 10 0 R >> >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Widget /P 3 0 R /DA (/F1 12 Tf 0 g) /FT /Sig /T (signature) /V 11 0 R /Rect [72 600 300 640] /F 4 /AP << /N 12 0 R >> >>
+endobj
+9 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /F1 4 0 R >> >> /Length 48 >>
+stream
+/Tx BMC BT /F1 12 Tf 2 6 Td (Jane Roe) Tj ET EMC
+endstream
+endobj
+10 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /F1 4 0 R >> >> /Length 49 >>
+stream
+/Tx BMC BT /F1 12 Tf 2 6 Td (4400 9204) Tj ET EMC
+endstream
+endobj
+11 0 obj
+<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached /Name (Signer 4400 9206) /M (D:20261125000000Z) /ByteRange [0 0 0 0] /Contents <436572746966696361746520343430302039323038> >>
+endobj
+12 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 228 40] /Resources << /Font << /F1 4 0 R >> >> /Length 45 >>
+stream
+BT /F1 12 Tf 4 14 Td (Signed 4400 9207) Tj ET
+endstream
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000015 00000 n 
+0000000172 00000 n 
+0000000229 00000 n 
+0000000383 00000 n 
+0000000480 00000 n 
+0000000575 00000 n 
+0000000792 00000 n 
+0000000962 00000 n 
+0000001124 00000 n 
+0000001310 00000 n 
+0000001498 00000 n 
+0000001710 00000 n 
+trailer
+<< /Size 13 /Root 1 0 R >>
+startxref
+1894
+%%EOF

@@ -1,5 +1,6 @@
 import type { ApprovalPlan, DocumentHandle } from "../../api/state";
-import type { Appearance, PageText } from "../../model/document";
+import type { Appearance, PageText, RemovalKind } from "../../model/document";
+import type { ReaderErrorCode } from "../../model/errors";
 import type { PageIndex } from "../../model/geometry";
 import type { Mark } from "../../model/marks";
 import type { MarkType } from "../../model/markTypes";
@@ -61,4 +62,16 @@ export type SessionChange =
   /** Closing began: no more commands are taken. */
   | { readonly type: "closeStarted" }
   /** Closing stopped, as the save failed: the Session stays open. */
-  | { readonly type: "closeFailed" };
+  | { readonly type: "closeFailed" }
+  /** Documents are being prepared again for this build, one at a time. */
+  | { readonly type: "updateStarted" }
+  | { readonly type: "updateFinished" }
+  /** A document's prepared files are read, or made again: what preparing it removed, and the ids of its marks that could not be placed. */
+  | { readonly type: "documentPrepared"; readonly document: DocumentId; readonly removed: readonly RemovalKind[]; readonly lost: readonly number[] }
+  /** A document could not be prepared again; its marks are kept, and it is neither opened nor exported. */
+  | { readonly type: "preparationFailed"; readonly document: DocumentId; readonly code: ReaderErrorCode }
+  /**
+   * A document's marks placed again on its text as this build reads it. Not an edit: it is not
+   * undone, nor counted. `workingChanged`: its working copy or removed kinds differ from those stored.
+   */
+  | { readonly type: "reanchored"; readonly document: DocumentId; readonly marks: readonly Mark[]; readonly workingChanged: boolean };

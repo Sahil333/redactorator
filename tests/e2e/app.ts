@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
 
 export const twoPagePdf = new URL("../../fixtures/two-pages.pdf", import.meta.url).pathname;
@@ -110,11 +110,9 @@ export async function inkedPixels(canvas: Locator): Promise<number> {
     const context = element.getContext("2d");
     if (context === null) throw new Error("the canvas has no 2d context");
     const { data } = context.getImageData(0, 0, element.width, element.height);
+    const dark = (channel: number | undefined) => (channel ?? 255) < 128;
     let inked = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const opaque = (data[i + 3] ?? 0) > 128;
-      if (opaque && (data[i] ?? 255) < 128 && (data[i + 1] ?? 255) < 128 && (data[i + 2] ?? 255) < 128) inked++;
-    }
+    for (let i = 0; i < data.length; i += 4) if ((data[i + 3] ?? 0) > 128 && dark(data[i]) && dark(data[i + 1]) && dark(data[i + 2])) inked++;
     return inked;
   });
 }
@@ -358,6 +356,87 @@ export async function storedJson(page: Page, path: string): Promise<unknown> {
   const text = await storedText(page, path);
   if (text === undefined) throw new Error(`${path} is not in the browser's private storage`);
   return JSON.parse(text);
+}
+
+/** The id of document `file` in the project kept in `folder`. */
+async function documentId(page: Page, folder: string, file: string): Promise<string> {
+  const project = await storedJson(page, `${folder}/.redactorator/pdf-3/project.json`);
+  const documents: unknown = typeof project === "object" && project !== null ? Reflect.get(project, "documents") : undefined;
+  const document: unknown = Array.isArray(documents) ? documents.find((each: unknown) => typeof each === "object" && each !== null && Reflect.get(each, "file") === file) : undefined;
+  const id: unknown = typeof document === "object" && document !== null ? Reflect.get(document, "id") : undefined;
+  if (typeof id !== "string") throw new Error(`${file} is not in ${folder}'s project`);
+  return id;
+}
+
+/** The stored name of the working copy preparation made of document `file` in the project kept in `folder`. */
+export async function workingCopyName(page: Page, folder: string, file: string): Promise<string> {
+  return `${await documentId(page, folder, file)}.not-redacted.pdf`;
+}
+
+/** The removal kinds preparing document `file` recorded, as its stored reading lists them. */
+export async function removedKinds(page: Page, folder: string, file: string): Promise<unknown[]> {
+  const reading = await storedJson(page, `${folder}/.redactorator/pdf-3/text/${await documentId(page, folder, file)}.json`);
+  const removed: unknown = typeof reading === "object" && reading !== null ? Reflect.get(reading, "removed") : undefined;
+  return Array.isArray(removed) ? removed : [];
+}
+
+/**
+ * The working copy of document `file` in the project kept in `folder`, saved to a temporary file
+ * whose path is returned: what the app shows, marks and writes from.
+ */
+export async function workingCopy(page: Page, folder: string, file: string): Promise<string> {
+  const stored = `${folder}/.redactorator/pdf-3/working/${await workingCopyName(page, folder, file)}`;
+  const bytes = await page.evaluate(async (path) => {
+    const names = path.split("/");
+    const name = names.pop() ?? "";
+    let at = await navigator.storage.getDirectory();
+    for (const each of names) at = await at.getDirectoryHandle(each);
+    return [...new Uint8Array(await (await (await at.getFileHandle(name)).getFile()).arrayBuffer())];
+  }, stored);
+  const path = join(await mkdtemp(join(tmpdir(), "working-")), `${file}.not-redacted.pdf`);
+  await writeFile(path, Uint8Array.from(bytes));
+  return path;
+}
+
+/** Every file in the browser's private storage, by path. */
+export async function storedFiles(page: Page): Promise<Map<string, Uint8Array>> {
+  const files = await page.evaluate(async () => {
+    const found: [string, number[]][] = [];
+    async function walk(folder: FileSystemDirectoryHandle, path: string) {
+      for await (const [name, handle] of folder.entries()) {
+        if (handle instanceof FileSystemDirectoryHandle) await walk(handle, `${path}${name}/`);
+        if (handle instanceof FileSystemFileHandle) found.push([`${path}${name}`, [...new Uint8Array(await (await handle.getFile()).arrayBuffer())]]);
+      }
+    }
+    await walk(await navigator.storage.getDirectory(), "");
+    return found;
+  });
+  return new Map(files.map(([path, bytes]) => [path, Uint8Array.from(bytes)]));
+}
+
+/** The files under `folder` on disk, by path relative to it. */
+export async function filesIn(folder: string): Promise<Map<string, Buffer>> {
+  const entries = await readdir(folder, { recursive: true, withFileTypes: true });
+  const paths = entries.filter((entry) => entry.isFile()).map((entry) => relative(folder, join(entry.parentPath, entry.name)));
+  return new Map(await Promise.all(paths.sort().map(async (path): Promise<[string, Buffer]> => [path, await readFile(join(folder, path))])));
+}
+
+/** Puts the files under `folder` on disk into the browser's private storage, as a build stored them, then reloads the app to read them. */
+export async function loadStorage(page: Page, folder: string): Promise<void> {
+  const files = await filesIn(folder);
+  await page.evaluate(async (files) => {
+    const root = await navigator.storage.getDirectory();
+    for (const [path, bytes] of files) {
+      const names = path.split("/");
+      const name = names.pop() ?? "";
+      let at = root;
+      for (const each of names) at = await at.getDirectoryHandle(each, { create: true });
+      const writable = await (await at.getFileHandle(name, { create: true })).createWritable();
+      await writable.write(Uint8Array.from(bytes));
+      await writable.close();
+    }
+  }, [...files].map(([path, bytes]): [string, number[]] => [path, [...bytes]]));
+  await page.reload();
 }
 
 /** The names of the entries in the folder at `path` in the browser's private storage. */

@@ -16,7 +16,7 @@ export function apply(file: FileNumber, edits: readonly Edit[], appearance: Appe
   document.output = undefined;
   let output: mupdf.PDFDocument | undefined;
   try {
-    const written = writeAndCheck(document.original, document.bytes, edits, appearance);
+    const written = writeAndCheck(document.working, document.bytes, edits, appearance);
     const bytes = written.bytes;
     output = written.output;
     const model = documentModel(output);

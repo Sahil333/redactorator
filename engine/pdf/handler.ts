@@ -1,8 +1,8 @@
 import { parsePdfRequest } from "../pdf-protocol/parse";
 import { apply } from "./apply";
-import { inspect } from "./inspect";
 import { match } from "./match";
 import { post } from "./messages";
+import { prepareFile } from "./prepareFile";
 import { render } from "./render";
 import { open } from "./state";
 import { text } from "./text";
@@ -19,8 +19,8 @@ export function handle(data: unknown): void {
     return;
   }
   switch (request.type) {
-    case "inspect":
-      inspect(request.inspection, request.bytes);
+    case "prepare":
+      prepareFile(request.preparation, request.bytes);
       break;
     case "match":
       match(request.match, request.keys, request.documents);

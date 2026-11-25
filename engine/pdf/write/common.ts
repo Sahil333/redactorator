@@ -1,6 +1,9 @@
 import * as mupdf from "mupdf";
 import type { Box } from "../../model/geometry";
 
+// What the writer and its check read letters with: as before preparation removed ActualText.
+export const CHECK_OPTIONS = "preserve-whitespace";
+
 /** Thrown inside apply to block the export with a reason the user sees. */
 export class CheckFailed extends Error {}
 

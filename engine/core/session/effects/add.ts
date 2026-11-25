@@ -2,6 +2,7 @@ import type { ErrorCode, Refusal, Result } from "../../../api/errors";
 import type { IncomingFile, Session } from "../../../api/facade";
 import type { Project, ProjectDocument } from "../../../model/project";
 import { hiddenTextKeys, spreadToAdded, type TextPlace } from "../../../model/spread";
+import { READER_TAG } from "../../../pdf-protocol/messages";
 import type { Store } from "../../../storage/store";
 import type { Intake } from "../../intake";
 import type { PdfClient } from "../../pdf-client/client";
@@ -52,12 +53,13 @@ export function adderOf({ store, folder, client, intake, allowed, dispatch, chan
     }
     let documents: ProjectDocument[];
     try {
-      documents = await writeOriginals(store, { folder, project: from }, taken.added);
+      documents = await writeOriginals(store, { folder, project: from }, taken.added, READER_TAG);
     } catch {
       return refuseAll("add-save-failed");
     }
     const readings = new Map(taken.added.map((each) => [each.id, each.reading]));
     change({ type: "documentsAdded", documents: spreadToAdded(from, documents, readings, places) });
+    for (const { id, removed } of taken.added) dispatch({ type: "documentPrepared", document: id, removed, lost: [] });
     return { ok: true, value: { added: documents.map(({ id }) => id), refused: taken.refused } };
   }
 

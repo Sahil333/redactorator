@@ -18,6 +18,9 @@ export interface SessionView {
  */
 type SessionCommand = "add" | "mark" | "history" | "markDownloaded" | "open" | "apply" | "approve" | "confirm" | "addDocuments" | "query" | "close";
 
+/** Refused while documents are prepared again for this build: each would act on marks and working copies about to change. */
+const waitsForUpdate = new Set<SessionCommand>(["add", "mark", "history", "open", "apply", "approve", "confirm", "addDocuments", "markDownloaded"]);
+
 /** Refused while the PDF worker is starting or stopped. */
 const needsWorker = new Set<SessionCommand>(["history", "apply", "approve"]);
 /** Refused while an apply runs, or documents are being added, with the code each gives; `documents.add` has its own codes. */
@@ -65,6 +68,7 @@ function waitsForWorker({ status }: SessionView["worker"], command: SessionComma
 export function gate({ worker, parts }: SessionView, command: SessionCommand, document?: DocumentId): ErrorCode | undefined {
   if (parts.operation.closing) return "session-closed";
   if (document !== undefined && !parts.record.present.project.documents.some(({ id }) => id === document)) return "unknown-document";
+  if (parts.operation.operation === "updating" && waitsForUpdate.has(command)) return "busy-updating";
   const approval = approving(parts.operation, command);
   if (approval !== undefined) return approval;
   const busyWith = running(command, parts.operation.operation);

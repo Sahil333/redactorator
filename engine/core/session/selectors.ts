@@ -1,4 +1,4 @@
-import type { SessionState } from "../../api/state";
+import type { DocumentStatus, SessionState } from "../../api/state";
 import type { DocumentId } from "../../model/project";
 import { newFrom, reachOf } from "../../model/spread";
 import { gate, type SessionView } from "./gate";
@@ -49,6 +49,18 @@ function can(view: SessionView): SessionState["can"] {
   };
 }
 
+/** Each document's status, with lost marks only while the document still has them. */
+function documentStatus({ parts }: SessionView): ReadonlyMap<DocumentId, DocumentStatus> {
+  const { documents } = parts.record.present.project;
+  return new Map(
+    [...parts.documents].map(([id, status]) => {
+      const marks = new Set(documents.find((document) => document.id === id)?.marks.map((mark) => mark.id));
+      const lost = status.lost.filter((mark) => marks.has(mark));
+      return [id, lost.length === status.lost.length ? status : { ...status, lost }];
+    }),
+  );
+}
+
 /** The open Session's part of the published state. */
 export function sessionState(view: SessionView, folder: string): SessionState {
   const { project } = view.parts.record.present;
@@ -67,5 +79,6 @@ export function sessionState(view: SessionView, folder: string): SessionState {
     can: can(view),
     reach: reachOf(project),
     newFrom: document === undefined ? [] : newFrom(project, document),
+    documentStatus: documentStatus(view),
   };
 }

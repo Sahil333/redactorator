@@ -108,8 +108,9 @@ function keptMarks(marks: readonly Mark[], hidden: ReadonlyMap<string, HiddenVal
 function textMark(id: number, value: HiddenValue, text: PageText, { page, start, end }: TextPlace, isNew: boolean): Mark | undefined {
   const [first, ...rest] = rangeBoxes(text, start, end);
   if (first === undefined) return undefined;
-  const piece = { page, start, end, boxes: [first, ...rest] };
-  return { id, type: value.type, linkId: "", isNew, target: { kind: "text", text: rangeText(text, start, end), pieces: [piece] } };
+  const letters = rangeText(text, start, end);
+  const piece = { page, start, end, boxes: [first, ...rest], text: letters };
+  return { id, type: value.type, linkId: "", isNew, target: { kind: "text", text: letters, pieces: [piece] } };
 }
 
 /** A mark of `value` at `place`, unless a mark there already covers it. */

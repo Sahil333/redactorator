@@ -4,10 +4,11 @@
 
 The asynchronous work behind the Session's commands: opening a document in the
 PDF worker, applying (writing the cleaned file), planning and confirming an
-approval, adding documents, reading stored readings, and saving the project
-record. Each effect receives its dependencies (store, folder, PDF client, the
-gate's `allowed`, `view`, `dispatch` and `change`, and for adding, `intake`,
-which reads the chosen files and has the PDF worker inspect them) from
+approval, adding documents, reading stored readings, preparing documents again
+for this build, and saving the project record. Each effect receives its
+dependencies (store, folder, PDF client, the gate's `allowed`, `view`,
+`dispatch` and `change`, and for adding, `intake`, which reads the chosen files
+and has the PDF worker prepare them) from
 [`../facade.ts`](../facade.ts), and reports what happened as `SessionChange`
 records that the [slices](../slices/README.md) reduce.
 
@@ -27,12 +28,24 @@ records that the [slices](../slices/README.md) reduce.
 - `add.ts`
   - `adderOf(host)`: builds `documents.add` plus `settled()`.
 - `readings.ts`
-  - `ReadingSource`: `store`, `folder` and a `PdfClient` with `inspect`.
+  - `ReadingSource`: `store`, `folder`, `failed(document)` (it could not be
+    prepared again) and `unavailable()` (a reading is missing or damaged).
   - `documentReadings(source, documents)`: each document's reading (page texts
-    and images); documents whose original is gone are left out.
+    and images) from the tag folder; documents whose original is gone, or that
+    could not be prepared again, are left out.
   - `imagesOf(source, document)`: a document's placed images.
   - `findPlaces(client, keys, documents)`: every place `PdfClient.match` finds
     each key in each document's text.
+- `reprepare.ts`
+  - `updaterOf(host)`: `update()` prepares again, one document at a time,
+    every document whose tag-folder files are missing or damaged, then saves;
+    `settled()`. It is the only code that prepares a document again.
+  - `preparedFilesOf(store, folder, document)`: its text, removed kinds and
+    working copy from the tag folder, or undefined when one is missing or
+    damaged.
+  - `anchorDocument(host, document, files, workingChanged)`: dispatches
+    `documentPrepared`, and `reanchored` when its marks moved or its working
+    copy changed.
 - `save.ts`
   - `saver({ store, folder, latest, dispatch })`: returns `flush()` and
     `changed()` for one Session's project record.
@@ -46,9 +59,13 @@ records that the [slices](../slices/README.md) reduce.
   (`facade.ts:openSession`, `output.apply`).
 - Opens are numbered; an open overtaken by a newer one never dispatches
   `opened`. It returns `staleHandle` when it is overtaken after reading the
-  original or after `PdfClient.open` answers; a failed read
-  (`original-missing`) or a worker error is returned as is, even when a newer
-  open has started (`open.ts:viewerOf`, `latest`, `isLatest`).
+  working copy or after `PdfClient.open` answers; a failed read or a worker
+  error is returned as is, even when a newer open has started
+  (`open.ts:viewerOf`, `latest`, `isLatest`).
+- Opening reads the document's working copy, never the user's file. A
+  document that could not be prepared again is refused with `prepare-failed`;
+  one whose working copy is missing starts the update and returns
+  `busy-updating`, or `original-missing` when its original is gone too.
 - Each page's text is fetched once per open document and cached as a promise
   (`open.ts:viewerOf`, `texts`, `pageText`).
 - `images` returns success with no value when reading the images throws, so
@@ -75,29 +92,36 @@ records that the [slices](../slices/README.md) reduce.
   a newer one; changes made during a save are saved together next, and a failed
   save is retried by the next change or flush (`save.ts:saver`, `writing`,
   `queued`, `unsaved`).
-- A reading that is missing or damaged is read again from the original through
-  `PdfClient.inspect`; a file written by a newer version is left alone
-  (`readings.ts:readingOf`, `"newer"`). A document whose original is gone has
-  no reading (`readings.ts:readingOf`).
-- `findPlaces` and `readingOf` throw `ReadingUnavailable` when the PDF worker
-  returns an error (`readings.ts`).
+- A reading is never read again from the original here: a missing or damaged
+  one starts the update and throws `ReadingUnavailable`, so nothing is
+  approved (`readings.ts:readingOf`). A document whose original is gone has no
+  reading.
+- `findPlaces` throws `ReadingUnavailable` when the PDF worker returns an error
+  (`readings.ts`).
+- The update re-anchors each document's marks on the text it now has
+  (`model/textAnchor.ts:reanchor`). `workingChanged` is true when the working
+  copy's SHA-256 or its removed kinds differ from those stored before, and
+  always when none was stored, as on the first open under a new tag. A
+  document that fails dispatches `preparationFailed` and the rest carry on.
+  Once it is done, the open document is opened again when its working copy was
+  made again (`facade.ts`, `updated`).
 
 ## Side Effects
 
 - Storage reads through `Store` (via `engine/core/stored/projects`):
-  `readOriginal` (`open.ts`), `readTexts`, `readImages` and `findOriginal`
-  (`readings.ts`).
+  `readWorking` and `findOriginal` (`open.ts`), `readTexts`, `readImages` and
+  `findOriginal` (`readings.ts`, `reprepare.ts`).
 - Storage writes through `Store`: `saveProject` (`save.ts`), `writeOriginals`
-  (`add.ts`), and `saveTexts` and `saveImages` when a reading is read again
-  (`readings.ts:readingOf`; a failed write there is ignored).
+  (`add.ts`), and `savePrepared` (`reprepare.ts`), all into the tag folder.
 - PDF worker calls through `PdfClient`: `open`, `text`, `render` (`open.ts`),
-  `apply` (`apply.ts`), `inspect` (`readings.ts`) and `match`
+  `apply` (`apply.ts`), `prepare` (`reprepare.ts`) and `match`
   (`readings.ts:findPlaces`, used by `add.ts` and `plan.ts`).
 - Dispatches `SessionChange` records to the engine state, including
   `opening`, `opened`, `pageTextLoaded`, `applyStarted`, `applied`,
   `applyFailed`, `planning`, `planned`, `approved`, `approvalFailed`,
-  `approvalCancelled`, `addStarted`, `documentsAdded`, `addFailed`, `saved` and
-  `saveFailed`.
+  `approvalCancelled`, `addStarted`, `documentsAdded`, `addFailed`, `saved`,
+  `saveFailed`, `updateStarted`, `updateFinished`, `documentPrepared`,
+  `preparationFailed` and `reanchored`.
 - No network requests are made in this directory.
 
 ## Verification

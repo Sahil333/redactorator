@@ -27,7 +27,9 @@ Browser tests call it through `tests/e2e/oracle.ts`.
 | `positions` | `words` | Every glyph of the input outside the given words is in the output at the same place (0.5 pt) |
 | `pixels` | `region`, `mask`?, `at`? | Image pixels wholly inside the region are one colour; pixels wholly outside are unchanged. With `mask`, the image's soft mask is judged. With `at`, the image drawn over that box is judged; without it, the file must draw one image |
 | `unchanged` | `at` | Every pixel of the image drawn over `at` is as it was (within 8 levels) |
-| `rendered` | `exceptions`? | Every page, drawn by PDFium as for printing with annotations at 72 dpi, looks as it did (within 8 levels a channel), outside the exceptions: `{ "page": n, "box": [x0, y0, x1, y1] }`, a 1-based page and points from the drawn page's bottom-left corner |
+| `structure` | — | Every key reachable from the trailer is one its type keeps: the type read from the vendored Arlington PDF Model (`vendor/arlington`), with a walker of its own (`oracle/structure.py`), and the keeps written there from the design's rules; it shares no code with the app's allowlist |
+| `image-metadata` | — | No JPEG holds an APPn segment other than Adobe's APP14, a comment segment, or bytes after its end-of-image marker, and no JPEG 2000 image holds a box other than those that draw it or a comment in its codestream; a JPEG under lossless filters such as a Flate layer is judged with that layer undone. It reads the images' own bytes with its own parser |
+| `rendered` | `exceptions`? | Every page, drawn by PDFium as for printing with annotations and form fields at 72 dpi, looks as it did (within 8 levels a channel), outside the exceptions: `{ "page": n, "box": [x0, y0, x1, y1] }`, a 1-based page and points from the drawn page's bottom-left corner |
 
 A pixel's place on the page follows the matrix the image is drawn with, so a
 turned or resized image is judged where its pixels actually land. Images are read
@@ -77,17 +79,59 @@ rotation and crop applied):
 | `layer-rules.pdf` | 612 × 792, two pages | Two layers, one on and one off. Page 1: "Statement 4400 7777 here" on a `/P /AnyOff` rule over both, which is met, so it shows (`4400 7777` at x 130.0–186.7, y 79.1–95.6). Page 2: "Page two" (x 72–122.0, y 39.1–55.6) on no layer, then "Hidden 4400 8888 here" (x 72–197.4, y 79.1–95.6) on a `/P /AllOn` rule over both, which is not met, so it is hidden |
 | `content-strings.pdf` | 612 × 792 | Two shown lines, a shown abbreviation and a blue square, with values no reader draws hidden in the content stream: `4400 9001` in a BDC's ActualText, `4400 9002` in an Alt, `4400 9003` in an E, `4400 9004` in a DP's properties, `4400 9005` under an extra key of an inline image's dictionary, `4400 9006` in a comment, and `4400 9007` as the operand of an unknown operator inside BX/EX |
 | `line-feed-glyph.pdf` | 612 × 792 | Two lines at x 72, 12 pt. Its font names byte 10's glyph `uni000A`, so the first line, "Dear Jane Roe", then a line-feed glyph, then " thank you for writing to us.", draws a line break as a glyph with a box: "Jane Roe" at x 101.3–152.7 and the glyph at x 152.7–156.0, y 79.1–95.6 |
+| `annotations.pdf` | 612 × 792 | "Notes page", and annotations holding `4400 91nn`: a shown free-text note "Note 4400 9101" over user space `[72 600 300 630]` (app box x 104.7–161.4, y 169.1–185.6), with contents and author; hidden, not-viewed and off-layer notes; a sticky note with a pop-up; a pending redaction; a link; and a file attachment. PDFium draws the off-layer note, over `[72 450 300 480]`, which a reader that follows optional content does not |
+| `form.pdf` | 612 × 792 | "Client name:" and a filled text field "Jane Roe" over `[160 734 360 754]` (app box x 162–213.4, y 39.1–55.6) whose name, tooltip and default hold `4400 9203`, `4400 9201` and `4400 9202`; a hidden field `4400 9204`; and a signed signature whose stamp "Signed 4400 9207" is over `[72 600 300 640]`, with signer and certificate `4400 9206` and `4400 9208` |
+| `carriers.pdf` | 612 × 792 | "Carriers page" and an image, with `4400 93nn` in what the allowlist deletes: bookmarks, embedded files, scripts, named destinations, the open action, page labels, structure, Info, XMP, page-piece data, a thumbnail, viewer preferences, document and page actions, page and image XMP; and "Old 4400 9312", removed from the content by an incremental update |
+| `hidden-content.pdf` | media box 1000 × 792, crop box 612 × 792 | Text on a layer that is off (`4400 9401`), a form XObject on it (`4400 9402`), text beyond the media box (`4400 9403`) and between the crop box and the media box (`4400 9404`); a 32 × 24 image over `[500 600 628 696]`, past the page's edge, and another, unlike it, over `[100 400 228 496]` clipped to its left half |
+| `image-data.pdf` | 612 × 792 | Four 32 × 24 images with metadata in their own data: a JPEG with EXIF, JFXX, IPTC, Adobe and comment segments and bytes after its end (`4400 9501` to `9505`), over `[100 600 228 696]`; a JPEG with EXIF under a Flate layer (`4400 9506`); a JP2 file with XML and UUID boxes and a codestream comment (`4400 9507` to `9509`); and a raw J2K codestream with a comment (`4400 9510`) |
+| `structure-keys.pdf` | 612 × 792 | "Structure keys page", drawn through a graphics state whose type-5 halftone has its own `/HalftoneName` (`4400 9603`) beside a colorant's halftone; the catalog has `/constructor /Client4400_9601` and the page `/toString /Client4400_9602`, keys that name JavaScript built-ins |
+| `wrong-array.pdf` | 612 × 792 | "Wrong array", on a page whose media box `[0 0 (4400 9604) 792]` holds a string |
+| `stray-parent.pdf` | 612 × 792 | "Stray parent", on a page whose `/Parent` is a page-tree node outside the page tree, with `4400 9605`; preparation refuses it |
+| `image-filter-names.pdf` | 612 × 792 | Two 32 × 24 JPEGs with EXIF, under the abbreviated filter name `/DCT` with `/ColorTransform 1` (`4400 9511`, over `[100 600 228 696]`) and under `[/Fl /DCT]` with `[null << /ColorTransform 1 >>]` (`4400 9512`, over `[300 600 428 696]`); and a third under `[/FlateDecode /DCTDecode]` whose one `/DecodeParms` dictionary, a PNG predictor, belongs to the Flate layer (`4400 9518`, over `[100 450 228 546]`) |
+| `jpeg-extension.pdf` | 612 × 792 | A 32 × 24 JPEG over `[100 600 228 696]` with a JPG0 extension segment holding `Extension 4400 9519` |
+| `jpeg-long-adobe.pdf` | 612 × 792 | A 32 × 24 JPEG over `[100 600 228 696]` whose Adobe APP14 holds `4400 9520` after its 12 bytes; preparation refuses it |
+| `grey-soft-masks.pdf` | 612 × 792 | Two 32 × 24 RGB images, over `[100 600 228 696]` and `[300 600 428 696]`, whose soft masks are a left-to-right ramp in `CalGray` and in a one-channel ICC profile (a stand-in, drawn by its `/Alternate /DeviceGray`) |
+| `shading-graphics-state.pdf` | 612 × 792 | "Shading page" and a square filled with a shading pattern whose `/ExtGState` holds a soft mask group with `/ActualText (4400 9913)` and the text "Mask 4400 9914", which is never drawn |
+| `abbreviated-stream-keys.pdf` | 612 × 792 | A JPEG XObject with EXIF (`4400 9915`) whose filter is named `/F /DCTDecode`; preparation refuses it |
+| `inherited-text-state.pdf` | 612 × 792 | "Spaced" at y 700 with `3.9 Tc`, then an empty `BT 0 Tc ET`, then a form XObject that draws "Secret text" at x 72, y 650 with `0 Tc` (app box of "Secret" x 72–106.7, y 129.1–145.6) |
+| `tight-lines.pdf` | 612 × 792 | "Done to Jane" in 6 pt at x 72, y 700, and "Roe" in 12 pt at y 689.5 ending where "Jane" starts (x 94.68), under the kept "to": the 12 pt line's font height reaches 0.7 pt into the 6 pt line's letters, though their ink does not touch (a drag down x 95.1 from y 88 to 101 selects "Jane Roe") |
+| `data-after-end.pdf` | 612 × 792 | A 32 × 24 RGB image over `[100 600 228 696]` whose Flate data is followed by `Tail 4400 9901`, which no reader decodes |
+| `image-prefilters.pdf` | 612 × 792 | A JPEG with EXIF (`4400 9902`) under `[/ASCII85Decode /DCTDecode]` over `[100 600 228 696]`, and a JP2 file with an XML box (`4400 9903`) under `[/AHx /JPXDecode]` over `[300 600 428 696]` |
+| `jpx-data.pdf` | 612 × 792 | Two 32 × 24 JPEG 2000 images: a raw codestream with `4400 9514` after its end, over `[100 600 228 696]`, and a JP2 file with a second `jp2c` box holding `4400 9515`, over `[300 600 428 696]` |
+| `icc-under-dct.pdf` | 612 × 792 | A 32 × 24 image over `[100 600 228 696]` whose ICC profile stream is JPEG data with EXIF (`4400 9516`) under `DCTDecode`; preparation refuses it |
+| `inline-jpeg.pdf` | 612 × 792 | "Inline JPEG" and a fully shown inline JPEG over `[100 600 228 696]` with EXIF (`4400 9517`) in its data |
+| `image-filter-not-last.pdf` | 612 × 792 | A JPEG with EXIF (`4400 9513`) under `[/DCTDecode /FlateDecode]`, whose image data can't be cut; preparation refuses it |
+| `two-roles.pdf` | 612 × 792 | A grey 32 × 24 image with `/Matte` drawn on its own as `/A` over `[100 600 228 696]`, and used as the soft mask of `/B`, an RGB image over `[300 600 428 696]`: as a plain image it keeps no `/Matte`, as a soft mask it does, so preparation refuses it |
+| `marked-pattern.pdf` | 612 × 792 | "Marked elsewhere": a tiling pattern's cell content holds `/ActualText (4400 9701)`, used to fill a square |
+| `marked-type3.pdf` | 612 × 792 | "Marked elsewhere": a Type 3 glyph's procedure holds `/Alt (4400 9702)`; the page shows that glyph |
+| `marked-soft-mask.pdf` | 612 × 792 | "Marked elsewhere": a soft mask's group holds `/E (4400 9703)`; the page draws a blue square through it |
+| `marked-escaped-name.pdf` | 612 × 792 | "Marked elsewhere": page content holds `/Actual#54ext (4400 9704)`, the name written with a `#xx` escape |
+| `marked-nul-delimiter.pdf` | 612 × 792 | "Marked elsewhere": page content holds `/ActualText` ended by a NUL, then `(4400 9705)` |
+| `postscript-xobject.pdf` | 612 × 792 | "PostScript page", which draws a PostScript XObject whose code shows `Client 4400 9801`; PDF 2.0 readers draw nothing for it |
+| `null-elements.pdf` | 612 × 792 | "Null elements" and a 32 × 24 grey image over `[72 500 200 596]` whose `/DecodeParms` array holds an explicit `null` for its first filter; explicit `null` values too in each kind of the page's resources, its `/Annots`, the catalog's layer lists and the image's own `/Note` |
+| `hybrid-xfa.pdf` | 612 × 792 | "Client name:" and a filled text field "Jane Roe" over `[160 734 360 754]`, with an XFA stream beside the form whose datasets hold `4400 9904`, which the page never shows |
+| `xfa-form.pdf` | 612 × 792 | "Please wait...", the page an XFA form shows to a reader without XFA; its catalog's form names an XFA stream, so adding it is refused |
+| `visibility-expression.pdf` | 612 × 792 | "Rule page" and a free-text note "On a rule" over `[72 600 300 630]` on a layer rule written as a `/VE` expression, which preparation refuses |
 
 ## Leak vectors
 
 `leak-vectors.json` lists ways a PDF can leak, each with a fixture, the mark a test makes
 and the checks that judge the output (fields as in `docs/designs/pdf-leak-suite.md`, Detailed
-item 28). `tests/e2e/leak-suite.spec.ts` runs one browser test per entry that makes a mark.
-Entries that make none are what preparation alone must clean: until the app prepares files
-(Phase 3, slice 2), `tests/e2e/preparation-saves.spec.ts` puts their fixtures through
-preparation's two MuPDF saves and judges the result. The list so far
-covers what MuPDF patch 0003 changed on today's write path: image redaction in CMYK, Indexed
-and Separation colour spaces, through a one-pixel image's soft mask and in an inline image,
-text redaction inside
-marked content, a clip, a layer and a form XObject, and the corrected `/P /AnyOff` layer rule;
-and the text step 5's content filter must drop from a content stream.
+item 28). `tests/e2e/leak-suite.spec.ts` runs one browser test per entry that makes a mark:
+the fixture is added, marked, written and judged. Entries that make none are what preparation
+alone must clean: one browser test per fixture adds it and judges the working copy the app
+stored, which is what a document with no marks downloads as. The list so far covers:
+
+- what MuPDF patch 0003 changed on the write path: image redaction in CMYK, Indexed and
+  Separation colour spaces, through a one-pixel image's soft mask and in an inline image, text
+  redaction inside marked content, a clip, a layer and a form XObject, and the corrected
+  `/P /AnyOff` layer rule;
+- the text step 5's content filter must drop from a content stream;
+- each preparation rule path: annotations deleted before flattening (hidden, not viewed, on a
+  layer that is off, pending redactions, pop-ups), flattened (comments, links, attachments),
+  and their flattened text marked; form fields, a hidden one and a signed signature, and a
+  flattened value marked; the carriers the allowlist deletes from the catalog, the page and an
+  image, and an earlier revision; keys that must be read as the model's alone, a rectangle that
+  is not four numbers, and a PostScript XObject; content on a layer that is off, beyond the crop box and the
+  media box; image pixels past the page's edge and outside a clip; and metadata inside JPEG
+  and JPEG 2000 data.

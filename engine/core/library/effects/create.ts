@@ -1,5 +1,6 @@
 import type { Refusal, Result } from "../../../api/errors";
 import type { IncomingFile, Session } from "../../../api/facade";
+import { READER_TAG } from "../../../pdf-protocol/messages";
 import type { Store } from "../../../storage/store";
 import { createProject, nameFromFile } from "../../stored/projects";
 import type { LibraryHost } from "../host";
@@ -18,7 +19,7 @@ export async function createFrom(host: LibraryHost, files: readonly IncomingFile
     refused = taken.refused;
     const [first] = taken.added;
     if (first === undefined) return { ok: true, value: { refused } };
-    const { folder, project } = await createProject(store, nameFromFile(first.file), taken.added);
+    const { folder, project } = await createProject(store, nameFromFile(first.file), taken.added, READER_TAG);
     await refresh(host);
     const opened = await openProject(host, { folder, id: project.id, name: project.name }, store);
     return { ok: true, value: opened.ok ? { session: opened.value, refused } : { refused } };

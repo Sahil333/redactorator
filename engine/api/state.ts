@@ -1,6 +1,7 @@
 import type { Change, Reach } from "../model/spread";
 import type { DocumentId, Project, Settings } from "../model/project";
-import type { PageModel } from "../model/document";
+import type { PageModel, RemovalKind } from "../model/document";
+import type { ReaderErrorCode } from "../model/errors";
 import type { EngineError } from "./errors";
 
 /** The engine's state: one immutable value, the same object until something changes. */
@@ -55,8 +56,8 @@ export interface SessionState {
   readonly folder: string;
   /** `failed` until the next write lands: the next change, or a flush, tries again. */
   readonly save: "saved" | "saving" | "failed";
-  /** Adding, approving and applying run one at a time. */
-  readonly operation: "idle" | "adding" | "planning" | "confirming" | "applying";
+  /** Adding, approving, applying and updating documents for a new build run one at a time. */
+  readonly operation: "idle" | "adding" | "planning" | "confirming" | "applying" | "updating";
   /** The approval waiting for the user to read its heads-up, while confirming. */
   readonly approval?: ApprovalPlan;
   /** The document open in the PDF worker. */
@@ -77,6 +78,15 @@ export interface SessionState {
   readonly reach: ReadonlyMap<string, Reach>;
   /** The files whose approval brought the open document's new marks. */
   readonly newFrom: readonly string[];
+  /** Per document, once it is read: what preparing it removed, its lost marks' ids, and why it could not be prepared again, if it could not. */
+  readonly documentStatus: ReadonlyMap<DocumentId, DocumentStatus>;
+}
+
+export interface DocumentStatus {
+  readonly removed: readonly RemovalKind[];
+  /** The ids of its text marks whose letters could not be found again; each is marked again. */
+  readonly lost: readonly number[];
+  readonly failed?: ReaderErrorCode;
 }
 
 /** The document open in the PDF worker, and its pages' sizes. */

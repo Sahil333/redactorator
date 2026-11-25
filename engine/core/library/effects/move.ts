@@ -1,5 +1,6 @@
 import type { EngineError, Result } from "../../../api/errors";
 import type { Settings } from "../../../model/project";
+import { READER_TAG } from "../../../pdf-protocol/messages";
 import type { Store } from "../../../storage/store";
 import type { StoredFileProblem } from "../../formats/project";
 import { listProjects, loadSettings, moveProjects } from "../../stored/projects";
@@ -12,8 +13,8 @@ const settingsProblems = (settings: Settings | StoredFileProblem): EngineError[]
 /** Moves every project and the settings from `from` into `into`; the problems say what stayed behind. */
 async function moveIn(host: LibraryHost, from: Store, into: Store, name: string) {
   try {
-    if ((await listProjects(from)).length > 0) host.dispatch({ type: "moveStarted" });
-    const leftBehind = await moveProjects(from, into, host.lock);
+    if ((await listProjects(from, READER_TAG)).length > 0) host.dispatch({ type: "moveStarted" });
+    const leftBehind = await moveProjects(from, into, host.lock, READER_TAG);
     return { leftBehind, problems: leftBehind.map((project): EngineError => ({ code: "left-behind", data: { name: project } })) };
   } catch {
     return { leftBehind: [], problems: [{ code: "not-moved", data: { name } } satisfies EngineError] };
@@ -27,7 +28,7 @@ async function moveIn(host: LibraryHost, from: Store, into: Store, name: string)
 export async function loadStore(host: LibraryHost, store: Store, adoptFrom: Store | undefined, name: string): Promise<Result<{ readonly leftBehind: readonly string[] }>> {
   const moved = adoptFrom === undefined ? { leftBehind: [], problems: [] } : await moveIn(host, adoptFrom, store, name);
   try {
-    const [entries, settings] = await Promise.all([listProjects(store), loadSettings(store)]);
+    const [entries, settings] = await Promise.all([listProjects(store, READER_TAG), loadSettings(store)]);
     host.dispatch({ type: "storeLoaded", projects: summaries(entries), settings, problems: [...settingsProblems(settings), ...moved.problems] });
     return { ok: true, value: { leftBehind: moved.leftBehind } };
   } catch {

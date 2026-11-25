@@ -1,5 +1,6 @@
 import type { EngineError, Result } from "../../../api/errors";
 import type { ProjectSummary } from "../../../api/state";
+import { READER_TAG } from "../../../pdf-protocol/messages";
 import { listProjects, type ProjectEntries } from "../../stored/projects";
 import type { LibraryHost } from "../host";
 
@@ -30,7 +31,7 @@ async function listAgain(host: LibraryHost): Promise<Result<void>> {
   const newest = () => host.state().library.list.started === list.started;
   if (place.store === undefined) return { ok: true, value: undefined };
   try {
-    const projects = summaries(await listProjects(place.store));
+    const projects = summaries(await listProjects(place.store, READER_TAG));
     if (newest()) host.dispatch({ type: "listed", projects });
     return { ok: true, value: undefined };
   } catch {

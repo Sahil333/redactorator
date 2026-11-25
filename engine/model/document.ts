@@ -1,3 +1,4 @@
+import type { Brand } from "./brand";
 import type { Box, Matrix, PageIndex, Points } from "./geometry";
 
 /** RED-6: the colour of each redaction box, as `#rrggbb`, and whether it carries a `[TYPE]` label. */
@@ -52,12 +53,15 @@ export interface Reading {
   readonly images: readonly PlacedImage[];
 }
 
-/** What the user marked: a range of a page's text, or a box with no text behind it. */
+/**
+ * What the user marked: a range of a page's text, with the letters the mark was made on, or a box
+ * with no text behind it.
+ */
 export type Edit =
-  | { readonly kind: "text"; readonly page: PageIndex; readonly start: number; readonly end: number; readonly label: string }
+  | { readonly kind: "text"; readonly page: PageIndex; readonly start: number; readonly end: number; readonly text: string; readonly label: string }
   | { readonly kind: "box"; readonly page: PageIndex; readonly box: Box; readonly label: string };
 
-/** Which document a render reads: the file the user opened, or the cleaned output. */
+/** Which document a render reads: the document's working copy, or the cleaned output. */
 export type Source = "original" | "output";
 
 /** A drawn page: `width` by `height` pixels, row by row, four bytes each (red, green, blue, alpha). */
@@ -66,3 +70,42 @@ export interface Pixels {
   readonly height: number;
   readonly rgba: Uint8ClampedArray<ArrayBuffer>;
 }
+
+/**
+ * Names the exact way a build prepares and reads documents, its PDF engine's build included. A
+ * different tag means each document's working copy and reading must be made again.
+ */
+export type ReaderTag = Brand<string, "ReaderTag">;
+
+/** A format's name and a number, like `pdf-3`; a later build of the format has a higher number. */
+export const isReaderTag = (value: unknown): value is ReaderTag => typeof value === "string" && /^[a-z]+-\d+$/.test(value);
+
+export function readerTag(value: string): ReaderTag {
+  if (!isReaderTag(value)) throw new Error("Not a reader tag");
+  return value;
+}
+
+/** What preparing a document removed from it, by kind; never what or how much. */
+export const removalKinds = [
+  "metadata",
+  "image-metadata",
+  "annotations",
+  "form-data",
+  "signatures",
+  "pending-redactions",
+  "attachments",
+  "scripts-actions",
+  "links",
+  "bookmarks",
+  "page-labels",
+  "accessibility-tags",
+  "marked-content",
+  "hidden-layers",
+  "outside-page",
+  "unshown-image-pixels",
+  "thumbnails",
+  "app-data",
+  "old-revisions",
+] as const;
+
+export type RemovalKind = (typeof removalKinds)[number];

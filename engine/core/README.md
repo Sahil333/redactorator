@@ -53,8 +53,10 @@ a worker channel through `ports.ts`.
   reads the rest sorted by path. A file counts as a PDF by its type
   `application/pdf` or a `.pdf` name (`intake.ts:isPdf`). A file that is not a
   PDF is refused with `not-pdf`, one that cannot be read with
-  `unreadable-file`, and one the worker's inspection refuses with the worker's
-  own error. Every added file gets a new `newDocumentId()` and its SHA-256.
+  `unreadable-file`, and one the worker's preparation refuses with the
+  worker's own error. Every added file gets a new `newDocumentId()`, its
+  SHA-256 (`hash.ts:sha256`) and what preparation made of it; intake stores
+  nothing.
 - `.fallowrc.json`: the `core` zone may import only `model`, `storage`, `api`
   and `pdf-protocol`.
 

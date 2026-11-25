@@ -80,6 +80,19 @@ function markCommand(part: MarksPart, change: Extract<SessionChange, { readonly 
   };
 }
 
+/**
+ * A document's marks placed again, which is not an edit: its edit count and download state stay.
+ * An approved document whose marks or working copy changed goes back to review.
+ */
+function reanchored(project: Project, { document: id, marks, workingChanged }: Extract<SessionChange, { readonly type: "reanchored" }>): Project {
+  const documents = project.documents.map((document): ProjectDocument => {
+    if (document.id !== id) return document;
+    const changed = workingChanged || marks !== document.marks;
+    return { ...document, marks, review: changed && document.review === "approved" ? "in-review" : document.review };
+  });
+  return { ...project, documents };
+}
+
 /** The project record and its documents' edit counters. */
 export function marks(part: MarksPart, change: SessionChange): MarksPart {
   switch (change.type) {
@@ -101,6 +114,8 @@ export function marks(part: MarksPart, change: SessionChange): MarksPart {
           change.documents.map(({ id }) => id),
         ),
       };
+    case "reanchored":
+      return { ...part, project: reanchored(part.project, change) };
     case "downloaded": {
       const documents = part.project.documents.map((document): ProjectDocument => (document.id === change.document ? { ...document, download: "downloaded" } : document));
       return { ...part, project: { ...part.project, documents } };
