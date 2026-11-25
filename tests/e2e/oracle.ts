@@ -33,6 +33,11 @@ async function run(project: string, args: readonly string[], failure: string): P
 
 /** Runs the outside checker (tests/oracle) on an output file and throws its reasons if any check fails. */
 export async function judge(input: string, output: string, checks: readonly OracleCheck[]): Promise<void> {
+  await judgeListed(input, output, checks);
+}
+
+/** As `judge`, for checks read from tests/oracle/leak-vectors.json: the checker itself refuses a check it does not know. */
+export async function judgeListed(input: string, output: string, checks: readonly unknown[]): Promise<void> {
   const spec = join(await mkdtemp(join(tmpdir(), "oracle-")), "spec.json");
   await writeFile(spec, JSON.stringify({ input, output, checks }));
   await run(oracleProject, ["-m", "oracle", spec], "The outside checker failed the output");

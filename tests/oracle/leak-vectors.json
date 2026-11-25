@@ -1,0 +1,298 @@
+[
+  {
+    "id": "image-cmyk-under-box",
+    "spec": "8.6.4.4 DeviceCMYK colour space",
+    "howItLeaks": "A CMYK image's pixels under a box stay unless redaction blanks them in CMYK, where white is no ink",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/image-spaces.pdf",
+    "value": null,
+    "mark": { "page": 1, "box": [100, 96, 164, 192] },
+    "markType": "Photo",
+    "expect": "clean",
+    "checks": [{ "check": "pixels", "at": [100, 600, 228, 696], "region": [100, 600, 164, 696] }]
+  },
+  {
+    "id": "image-indexed-under-box",
+    "spec": "8.6.6.3 Indexed colour spaces",
+    "howItLeaks": "An indexed image's pixels under a box stay unless redaction blanks them in its base colour space",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/image-spaces.pdf",
+    "value": null,
+    "mark": { "page": 1, "box": [300, 96, 364, 192] },
+    "markType": "Photo",
+    "expect": "clean",
+    "checks": [{ "check": "pixels", "at": [300, 600, 428, 696], "region": [300, 600, 364, 696] }]
+  },
+  {
+    "id": "image-separation-under-box",
+    "spec": "8.6.6.4 Separation colour spaces",
+    "howItLeaks": "A spot-colour image's pixels under a box stay unless redaction blanks them in its alternate colour space",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/image-spaces.pdf",
+    "value": null,
+    "mark": { "page": 1, "box": [100, 296, 164, 392] },
+    "markType": "Photo",
+    "expect": "clean",
+    "checks": [{ "check": "pixels", "at": [100, 400, 228, 496], "region": [100, 400, 164, 496] }]
+  },
+  {
+    "id": "image-one-pixel-soft-mask-under-box",
+    "spec": "11.6.5.3 Soft-mask images",
+    "howItLeaks": "A one-pixel image whose shape lives in its soft mask keeps that shape under a box unless redaction blanks the mask",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/image-spaces.pdf",
+    "value": null,
+    "mark": { "page": 1, "box": [300, 296, 364, 392] },
+    "markType": "Photo",
+    "expect": "clean",
+    "checks": [{ "check": "pixels", "at": [300, 400, 428, 496], "region": [300, 400, 364, 496], "mask": true }]
+  },
+  {
+    "id": "inline-image-under-box",
+    "spec": "8.9.7 Inline images",
+    "howItLeaks": "An inline image's pixels under a box stay unless redaction blanks them where the content stream holds them",
+    "rule": "rewrite",
+    "kind": null,
+    "fixture": "fixtures/image-spaces.pdf",
+    "value": null,
+    "mark": { "page": 1, "box": [300, 496, 364, 592] },
+    "markType": "Photo",
+    "expect": "clean",
+    "checks": [{ "check": "pixels", "at": [300, 200, 428, 296], "region": [300, 200, 364, 296] }]
+  },
+  {
+    "id": "text-in-marked-content-with-properties",
+    "spec": "14.6.2 Property lists",
+    "howItLeaks": "A marked value inside marked content with a property list stays unless redaction removes it there",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/marked-text.pdf",
+    "value": "4400 1111",
+    "mark": { "page": 1, "select": [116.0, 79.1, 172.7, 95.6] },
+    "markType": "Financial account",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 1111"] },
+      { "check": "covered", "word": "4400 1111" },
+      { "check": "positions", "words": ["4400 1111"] }
+    ]
+  },
+  {
+    "id": "text-in-marked-content-without-properties",
+    "spec": "14.6 Marked content",
+    "howItLeaks": "A marked value inside BMC marked content stays unless redaction removes it there",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/marked-text.pdf",
+    "value": "4400 2222",
+    "mark": { "page": 1, "select": [114.7, 99.1, 171.4, 115.6] },
+    "markType": "Financial account",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 2222"] },
+      { "check": "covered", "word": "4400 2222" },
+      { "check": "positions", "words": ["4400 2222"] }
+    ]
+  },
+  {
+    "id": "text-after-marked-content-points",
+    "spec": "14.6 Marked content (MP and DP)",
+    "howItLeaks": "A marked value after marked-content points stays unless redaction removes it there",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/marked-text.pdf",
+    "value": "4400 3333",
+    "mark": { "page": 1, "select": [102.7, 119.1, 159.4, 135.6] },
+    "markType": "Financial account",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 3333"] },
+      { "check": "covered", "word": "4400 3333" },
+      { "check": "positions", "words": ["4400 3333"] }
+    ]
+  },
+  {
+    "id": "text-inside-a-clip",
+    "spec": "8.5.4 Clipping path operators",
+    "howItLeaks": "A marked value drawn inside a clipping path stays unless redaction removes it there",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/marked-text.pdf",
+    "value": "4400 4444",
+    "mark": { "page": 1, "select": [116.0, 139.1, 172.7, 155.6] },
+    "markType": "Financial account",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 4444"] },
+      { "check": "covered", "word": "4400 4444" },
+      { "check": "positions", "words": ["4400 4444"] }
+    ]
+  },
+  {
+    "id": "text-on-a-layer-that-is-on",
+    "spec": "8.11.3.2 Optional content in content streams",
+    "howItLeaks": "A marked value on a layer that is on stays unless redaction removes it there",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/marked-text.pdf",
+    "value": "4400 5555",
+    "mark": { "page": 1, "select": [105.3, 159.1, 162.1, 175.6] },
+    "markType": "Financial account",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 5555"] },
+      { "check": "covered", "word": "4400 5555" },
+      { "check": "positions", "words": ["4400 5555"] }
+    ]
+  },
+  {
+    "id": "text-in-a-form-xobject",
+    "spec": "8.10 Form XObjects",
+    "howItLeaks": "A marked value drawn by a form XObject stays unless redaction removes it from the form",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/marked-text.pdf",
+    "value": "4400 6666",
+    "mark": { "page": 1, "select": [103.3, 179.1, 160.0, 195.6] },
+    "markType": "Financial account",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 6666"] },
+      { "check": "covered", "word": "4400 6666" },
+      { "check": "positions", "words": ["4400 6666"] }
+    ]
+  },
+  {
+    "id": "text-on-a-layer-rule-any-off",
+    "spec": "8.11.2.2 Optional content membership dictionaries",
+    "howItLeaks": "A value on a /P /AnyOff layer rule that is met is shown, so it must be readable and marked, or it stays in the file",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/layer-rules.pdf",
+    "value": "4400 7777",
+    "mark": { "page": 1, "select": [130.0, 79.1, 186.7, 95.6] },
+    "markType": "Financial account",
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 7777"] },
+      { "check": "covered", "word": "4400 7777" },
+      { "check": "positions", "words": ["4400 7777"] }
+    ]
+  },
+  {
+    "id": "content-stream-actual-text",
+    "spec": "14.9.4 Replacement text",
+    "howItLeaks": "A value in a BDC's ActualText property is in the file though no reader draws it",
+    "rule": "strip",
+    "kind": "marked-content",
+    "fixture": "fixtures/content-strings.pdf",
+    "value": "4400 9001",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9001"] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "content-stream-alt",
+    "spec": "14.9.3 Alternate descriptions",
+    "howItLeaks": "A value in a BDC's Alt property is in the file though no reader draws it",
+    "rule": "strip",
+    "kind": "marked-content",
+    "fixture": "fixtures/content-strings.pdf",
+    "value": "4400 9002",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9002"] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "content-stream-expansion",
+    "spec": "14.9.5 Expansion of abbreviations and acronyms",
+    "howItLeaks": "A value in a BDC's E property is in the file though no reader draws it",
+    "rule": "strip",
+    "kind": "marked-content",
+    "fixture": "fixtures/content-strings.pdf",
+    "value": "4400 9003",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9003"] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "content-stream-point",
+    "spec": "14.6 Marked content (DP)",
+    "howItLeaks": "A value in a marked point's properties is in the file though no reader draws it",
+    "rule": "strip",
+    "kind": "marked-content",
+    "fixture": "fixtures/content-strings.pdf",
+    "value": "4400 9004",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9004"] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "content-stream-inline-key",
+    "spec": "8.9.7 Inline images",
+    "howItLeaks": "A value under an extra key of an inline image's dictionary is in the file though no reader draws it",
+    "rule": "strip",
+    "kind": null,
+    "fixture": "fixtures/content-strings.pdf",
+    "value": "4400 9005",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9005"] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "content-stream-comment",
+    "spec": "7.2.4 Comments",
+    "howItLeaks": "A value in a content stream comment is in the file though no reader draws it",
+    "rule": "strip",
+    "kind": null,
+    "fixture": "fixtures/content-strings.pdf",
+    "value": "4400 9006",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9006"] },
+      { "check": "rendered" }
+    ]
+  },
+  {
+    "id": "content-stream-unknown-operand",
+    "spec": "7.8.2 Content streams (BX and EX)",
+    "howItLeaks": "A value given to an unknown operator inside BX and EX is in the file though no reader draws it",
+    "rule": "strip",
+    "kind": null,
+    "fixture": "fixtures/content-strings.pdf",
+    "value": "4400 9007",
+    "mark": null,
+    "markType": null,
+    "expect": "clean",
+    "checks": [
+      { "check": "absent", "values": ["4400 9007"] },
+      { "check": "rendered" }
+    ]
+  }
+]

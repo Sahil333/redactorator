@@ -32,6 +32,8 @@ def run(spec: dict) -> list[str]:
                 reasons += checks.pixels(source, output, tuple(check["region"]), check.get("mask", False), at)
             case "unchanged":
                 reasons += checks.unchanged(source, output, tuple(check["at"]))
+            case "rendered":
+                reasons += checks.rendered(source, output, check.get("exceptions", []))
             case unknown:
                 reasons.append(f"unknown check {unknown!r}")
     return reasons
