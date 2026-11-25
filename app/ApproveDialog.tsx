@@ -1,7 +1,31 @@
 import { useEffect, useId, useRef } from "react";
 import type { Session } from "../engine/api/facade";
 import type { ApprovalPlan } from "../engine/api/state";
+import { removalKinds, type RemovalKind } from "../engine/model/document";
 import type { DocumentId, ProjectDocument } from "../engine/model/project";
+
+/** One line per kind of content preparing a document removes, as the design's Appendix A.3 words it. */
+const removalLines: Record<RemovalKind, string> = {
+  metadata: "Document information and metadata: removed",
+  "image-metadata": "Image camera data: removed",
+  annotations: "Comments and annotations: visible ones made part of the page, the rest removed",
+  "form-data": "Form data: made part of the page",
+  signatures: "Digital signature: removed; the cleaned file is not signed",
+  "pending-redactions": "Unapplied redaction marks from another app: removed (their text is not redacted unless you mark it)",
+  attachments: "Attachments: removed",
+  "scripts-actions": "Scripts and actions: removed",
+  links: "Links: removed",
+  bookmarks: "Bookmarks: removed",
+  "page-labels": "Page labels and article threads: removed",
+  "accessibility-tags": "Accessibility tags: removed",
+  "marked-content": "Hidden alternative text: removed",
+  "hidden-layers": "Hidden layer content: removed",
+  "outside-page": "Content outside the page: removed",
+  "unshown-image-pixels": "Hidden parts of images: blanked",
+  thumbnails: "Page thumbnails: removed",
+  "app-data": "Private application data: removed",
+  "old-revisions": "Earlier versions of the file: removed",
+};
 
 const places = (count: number) => (count === 1 ? "1 place" : `${count} places`);
 
@@ -39,19 +63,47 @@ interface ApproveDialogProps {
   readonly documents: readonly ProjectDocument[];
 }
 
-/** The heads-up before an approval spreads to other documents, while one waits. Approving can't be undone. */
+/**
+ * The heads-up before an approval, while one waits: where it spreads to, and what preparing the
+ * document removed that no earlier approval of it listed. Approving can't be undone.
+ */
 export function ApproveDialog({ approval, ...props }: Omit<ApproveDialogProps, "approval"> & { readonly approval: ApprovalPlan | undefined }) {
   return approval && <HeadsUp approval={approval} {...props} />;
 }
 
+/** The kinds of content preparing the document removed, in the design's order, one line each. */
+function Removed({ removed }: { readonly removed: readonly RemovalKind[] }) {
+  const headingId = useId();
+  const listed = new Set(removed);
+  return (
+    removed.length > 0 && (
+      <section aria-labelledby={headingId} className="flex flex-col gap-1">
+        <h3 id={headingId} className="font-semibold">
+          Removed from this file
+        </h3>
+        <ul className="flex flex-col gap-0.5 text-sm text-ink-muted">
+          {removalKinds
+            .filter((kind) => listed.has(kind))
+            .map((kind) => (
+              <li key={kind}>{removalLines[kind]}</li>
+            ))}
+        </ul>
+      </section>
+    )
+  );
+}
+
 function HeadsUp({ session, approval, documents }: ApproveDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const approveRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const name = documents.find((document) => document.id === approval.document)?.file ?? "";
   const onApprove = () => void session.approval.confirm(approval.planId);
   const onCancel = () => session.approval.cancel(approval.planId);
   useEffect(() => {
     dialogRef.current?.showModal();
+    // Opening a modal dialog focuses its first control, Cancel; approving is what the user came to do.
+    approveRef.current?.focus();
   }, []);
   return (
     <dialog
@@ -69,11 +121,12 @@ function HeadsUp({ session, approval, documents }: ApproveDialogProps) {
             {line}
           </p>
         ))}
+        <Removed removed={approval.removed} />
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="rounded-md border border-rule px-3 py-1.5 hover:bg-paper-sunk">
             Cancel
           </button>
-          <button type="button" autoFocus onClick={onApprove} className="rounded-md bg-ink px-3.5 py-1.5 text-paper hover:bg-ink/85">
+          <button ref={approveRef} type="button" onClick={onApprove} className="rounded-md bg-ink px-3.5 py-1.5 text-paper hover:bg-ink/85">
             Approve
           </button>
         </div>

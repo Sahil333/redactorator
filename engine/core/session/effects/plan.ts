@@ -1,6 +1,7 @@
 import type { Result } from "../../../api/errors";
 import type { Session } from "../../../api/facade";
 import type { ApprovalPlan } from "../../../api/state";
+import type { RemovalKind } from "../../../model/document";
 import type { DocumentId, Project } from "../../../model/project";
 import { approve, changed, keysToFind, type Approval } from "../../../model/spread";
 import type { PdfClient } from "../../pdf-client/client";
@@ -33,29 +34,31 @@ const approved = ({ here, changes }: ApprovalPlan, project: Project): SessionCha
 /**
  * Approving a document: working out what spreads (the readings of every document, where the PDF
  * worker finds the values, then `approve`), landing it at once or after the heads-up, and
- * cancelling. The gate takes no change to the record while approval plans or waits, so an approval
- * always lands on the record it was worked out from; finding another means a command got past the
- * gate, and nothing is approved. `settled` resolves once no plan is being worked out.
+ * cancelling. The heads-up waits when the approval changes other places, or when preparing the
+ * document removed kinds of content no earlier approval of it listed. The gate takes no change to
+ * the record while approval plans or waits, so an approval always lands on the record it was
+ * worked out from; finding another means a command got past the gate, and nothing is approved.
+ * `settled` resolves once no plan is being worked out.
  */
 export function approvalOf({ source, view, allowed, dispatch, change }: ApprovalHost): Session["approval"] & { settled(): Promise<unknown> } {
   let plans = 0;
   let underWay: Promise<unknown> = Promise.resolve();
 
-  async function work(from: Project, document: DocumentId): Promise<Approval | undefined> {
+  async function work(from: Project, document: DocumentId, removed: readonly RemovalKind[]): Promise<Approval | undefined> {
     const readings = await documentReadings(source, from.documents);
     const searched = [...readings].map(([id, { texts }]) => ({ id, texts }));
     const places = await findPlaces(source.client, keysToFind(from, document), searched);
-    return approve(from, document, readings, places);
+    return approve(from, document, readings, places, removed);
   }
 
-  async function run(from: Project, document: DocumentId, planId: number): Promise<Planned> {
-    const approval = await work(from, document).catch(() => undefined);
+  async function run(from: Project, document: DocumentId, removed: readonly RemovalKind[], planId: number): Promise<Planned> {
+    const approval = await work(from, document, removed).catch(() => undefined);
     if (approval === undefined || view()?.parts.record.present.project !== from) {
       dispatch({ type: "approvalFailed" });
       return failed;
     }
-    const plan: ApprovalPlan = { planId, document, changes: approval.changes, here: approval.here };
-    if (plan.changes.length > 0 || changed(plan.here)) {
+    const plan: ApprovalPlan = { planId, document, changes: approval.changes, here: approval.here, removed: approval.removed };
+    if (plan.changes.length > 0 || changed(plan.here) || plan.removed.length > 0) {
       dispatch({ type: "planned", plan, from, project: approval.project });
       return { ok: true, value: { landed: false, plan } };
     }
@@ -76,8 +79,9 @@ export function approvalOf({ source, view, allowed, dispatch, change }: Approval
       const at = allowed("approve", document);
       if (!at.ok) return Promise.resolve(at);
       const from = at.value.parts.record.present.project;
+      const removed = at.value.parts.documents.get(document)?.removed ?? [];
       const planId = ++plans;
-      const planned = new Promise<Planned>((resolve) => dispatch({ type: "planning", document }, () => resolve(run(from, document, planId))));
+      const planned = new Promise<Planned>((resolve) => dispatch({ type: "planning", document }, () => resolve(run(from, document, removed, planId))));
       underWay = planned;
       return planned;
     },

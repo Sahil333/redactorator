@@ -12,8 +12,8 @@ describe("approve", () => {
       archived: false,
       // Marked across a page break once, so no search of single pages finds it again.
       hidden: [{ key: "jane roe", text: "Jane Roe", type: "person", from: id }],
-      documents: [{ id, file: "a.pdf", sha256: "00", pages: 2, marks: [], review: "in-review", download: "none", shown: [] }],
+      documents: [{ id, file: "a.pdf", sha256: "00", pages: 2, marks: [], review: "in-review", download: "none", shown: [], removedSeen: [] }],
     };
-    expect(approve(project, id, new Map(), [])?.project.hidden).toEqual([]);
+    expect(approve(project, id, new Map(), [], [])?.project.hidden).toEqual([]);
   });
 });

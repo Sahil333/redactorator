@@ -27,7 +27,7 @@ const { box, ...page } = onePage();
 
 /** A project of one one-page document, "a.pdf", with `marks`; and that document. */
 function projectWith(marks: ProjectDocument["marks"]): { readonly project: Project; readonly document: ProjectDocument } {
-  const document: ProjectDocument = { id: newDocumentId(), file: "a.pdf", sha256: "00", pages: 1, marks, review: "in-review", download: "none", shown: [] };
+  const document: ProjectDocument = { id: newDocumentId(), file: "a.pdf", sha256: "00", pages: 1, marks, review: "in-review", download: "none", shown: [], removedSeen: [] };
   return { project: { id: "p", name: "Letters", created: "2026-11-24T00:00:00.000Z", archived: false, hidden: [], documents: [document] }, document };
 }
 
@@ -49,6 +49,8 @@ function sessionOver(project: Project) {
   };
   open = openSession(host, { store, folder: "Letters", project, migrated: false }, { release: () => undefined }, () => undefined);
   const { session } = open;
+  // Each document's prepared files read, with nothing removed, as `begin` finds them.
+  for (const { id } of project.documents) host.dispatch(session, { type: "documentPrepared", document: id, removed: [], lost: [] });
   const parts = () => open?.parts ?? firstParts(project);
   return { session, land: (change: SessionChange) => host.dispatch(session, change), parts };
 }
@@ -98,7 +100,7 @@ describe("approval", () => {
     const { project, document } = projectWith([jane]);
     const opened = sessionOver(project);
     const approved: Project = { ...project, documents: [{ ...document, review: "approved" }] };
-    const plan = { planId: 1, document: document.id, changes: [], here: { ...none(document.id), hidden: 1 } };
+    const plan = { planId: 1, document: document.id, changes: [], here: { ...none(document.id), hidden: 1 }, removed: [] };
     opened.land({ type: "planned", plan, from: project, project: approved });
     return { ...opened, document, approved };
   }

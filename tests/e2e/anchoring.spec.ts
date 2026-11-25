@@ -10,6 +10,7 @@ import { isPageIndex } from "../../engine/model/geometry";
 import { rangeText } from "../../engine/model/pageText";
 import { applyAndDownload, crossPagePdf, downloadButton, filesIn, janeRoe, loadStorage, markText, marks, oneWordPdf, openApp, saved, show, storedFiles, storedNamesIn } from "./app";
 import { test } from "./coverage";
+import { holdPreparation } from "./fakes";
 import { judge } from "./oracle";
 
 const prePhase3 = new URL("../../fixtures/golden/pre-phase-3/", import.meta.url).pathname;
@@ -51,6 +52,16 @@ test("a project stored before reader tags keeps its older files, and its marks o
     { check: "absent", values: ["Jane", "Roe,"] },
     { check: "positions", words: ["Jane", "Roe,"] },
   ]);
+});
+
+test("while its documents are prepared again for this build, the status line says so (CUJ 5)", async ({ page }) => {
+  const release = await holdPreparation(page);
+  await openApp(page);
+  await loadStorage(page, prePhase3);
+  await page.getByRole("button", { name: "cross-page", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Updating documents…");
+  await release();
+  await expect(page.getByRole("status")).toHaveText(/^Page 1 of/);
 });
 
 test("a mark whose offsets point at other letters in this build's text is placed on its words again", async ({ page }) => {

@@ -58,7 +58,9 @@ The app has three screens:
   status, undo and redo, tool picker, Add documents, Approve, Preview, and
   Export labels.
 - `ApproveDialog` (ApproveDialog.tsx): the heads-up shown while an
-  `ApprovalPlan` waits. It confirms or cancels the plan.
+  `ApprovalPlan` waits: where the approval spreads, and under "Removed from this
+  file" the plan's `removed` kinds, one line each in the design's Appendix A.3
+  words and order. It confirms or cancels the plan.
 - `CheckedBanner`, `ReviewBanner`, `LabelExport`, `AppearanceSettings`: the
   output banner, a walk through new marks brought in by another document's
   approval, the ground-truth label form, and the box appearance settings (box
@@ -135,8 +137,10 @@ The app has three screens:
 ### Approval and output
 
 - `ApproveDialog.tsx:HeadsUp`: approval needs an explicit confirm, which calls
-  `session.approval.confirm(planId)`. Cancel or Escape calls
-  `session.approval.cancel(planId)`.
+  `session.approval.confirm(planId)`. Approve has the focus when it opens, so
+  Enter confirms. Cancel or Escape calls `session.approval.cancel(planId)`.
+- `ApproveDialog.tsx:Removed` shows kinds only, from fixed sentences: never a
+  value or a count.
 - `Workspace.tsx:Workspace`: the download takes `session.output.bytes()`. If
   the bytes are not ok, it throws "The output is out of date" and saves
   nothing. An approved output is saved as `<base>-redacted.pdf`, an unapproved
@@ -156,6 +160,8 @@ The app has three screens:
   `PageList` to `PageView`) until Dismiss, which `DropZone` shows beside such
   a refusal, or the next Preview. A lost mark's row in `MarksPanel` says
   "Mark again"; marking its letters again replaces it.
+  While a project's documents are prepared again for this build, the status
+  line says "Updating documents…" (`ProjectView.tsx:statusText`).
   `ProjectView.tsx:useEditing` defines busy as: a mark waits for its type, or
   the engine cannot apply or cannot approve.
 

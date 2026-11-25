@@ -137,8 +137,8 @@ There are three smaller problems behind this:
 *   **Blank image parts that are not shown:** pixels outside the page, or
     hidden by a clip, the same way pixels under a box are blanked.
 *   **Show what was removed.** Before the user approves a document, the
-    approval dialog lists the kinds of content removed from it. It shows
-    kinds only, never values or counts.
+    approval dialog lists the kinds of content removed from it, each kind
+    once per document. It shows kinds only, never values or counts.
 *   **Refuse with a reason, one document at a time.** The refusal table in
     part 6 lists every refusal with its sentence and what the user can do. The
     main ones are:
@@ -735,6 +735,13 @@ Found while building slice 3, on 25 Nov 2026, on synthetic PDFs only.
     6. A rewritten image keeps MuPDF's own ICC profile, as before Phase 3
        (Risks).
 
+*   **Owner answers during slice 4 (25 Nov 2026):**
+    1. The approval dialog lists each removed kind once per document: an
+       approval that lands saves the document's removed kinds in
+       `project.json`, and a later approval lists only others (part 8).
+    2. The golden storage files `expected/project.json` and
+       `expected-old/project.json` are recorded again for the new field.
+
 ## Critical User Journeys (CUJs)
 
 ### CUJ 1: A filled tax form is cleaned and stays readable
@@ -1065,8 +1072,9 @@ the project's `.redactorator/`:
   through `findProjectFile`, so a Phase-3 project with no root file moves
   and imports.
 - **The project file format stays version 3.** Pieces gain an optional
-  `text` field. Only builds that write tag folders write it, and older builds
-  never read those folders.
+  `text` field, and documents an optional `removedSeen` (slice 4). Only
+  builds that write tag folders write them, and older builds never read
+  those folders.
 - **Rollback:** an older build reads the root files, or its own tag folder,
   and finds the project exactly as it was when the newer build first opened
   it. Changes made in the newer build are not visible to it. They are still
@@ -1283,15 +1291,24 @@ tests.
 
 ### 8. The approval dialog and the marks panel (`app/`)
 
-- **The approval dialog** lists the document's removed kinds, taken from
-  `SessionState.documentStatus`, as plain lines, one per kind, using the
-  sentences in Appendix A. For example: "Form data:
-  made part of the page" and "Bookmarks: removed". It never shows values or
-  counts.
-- **The dialog now opens** on every approval of a document whose removed list
-  is not empty, as well as when the approval spreads or changes marks as
-  today. In practice that is almost every PDF, since nearly every PDF carries
-  some metadata.
+- **The approval dialog** lists the document's removed kinds, worked out
+  from `SessionState.documentStatus` and carried by `ApprovalPlan.removed`,
+  as plain lines under "Removed from this file", one per kind, using the
+  sentences of Appendix A.3 in its order. For example: "Form data: made part
+  of the page" and "Bookmarks: removed". It never shows values or counts. Approve has the focus, so Enter confirms.
+- **Each kind is listed once per document** (owner, 25 Nov 2026). An
+  approval that lands, confirmed or with no dialog, stores the document's
+  current removed kinds in `project.json` as `removedSeen`, replacing the
+  list before, and a later approval lists only kinds not in it. Cancelling
+  stores nothing. A document can't be approved until its prepared files are
+  read (`documentStatus` has it), so the list is never worked out from
+  nothing; until then the gate refuses `approve` with `busy-updating`.
+- **The dialog now opens** on every approval of a document with a removed
+  kind not yet listed, as well as when the approval spreads or changes marks
+  as today. In practice that is the first approval of almost every PDF, since
+  nearly every PDF carries some metadata; a later approval, after an edit or
+  another document's spread, opens it only for those reasons or a kind found
+  by a new reader tag.
 - **The marks panel is unchanged,** except that a lost mark's row shows a
   small "Mark again" label.
 - **Approval and download work with no marks.**
@@ -1787,7 +1804,7 @@ summary matches those tags.
 | 1 | **The patch spike:** patch 0003, the rebuild, the hand-run repro scripts, and the probes for the signed widget and the straddling path. The existing browser tests must pass on the rebuilt MuPDF. The first leak-vector entries, for the write-path branches the patch edits, the corrected layer rules and the text the content filter drops, and the oracle's `rendered` check | 1–2, 27–29 and 31 (those entries and `rendered` only) |
 | 2 | **Preparation, reading, storage and anchoring:** the protocol change together with its test fakes, the golden files re-recorded, the first anchoring test, and the allowlist's role table generated from the Arlington PDF Model | 1b, 2 (for patch 0004), 3–10, 12 (slice 2 parts), 13–20, 26 (the add-time sentences), 21 (`facade.ts`, `open.ts`, `readings.ts`, `add.ts`), 22–24, 27 (`structure`, `image-metadata`, and `rendered` with `init_forms()`), 28–29 (preparation vectors), 31 (entries with no mark), 32 (first case), 33 (fakes and protocol), 35, 36–37 |
 | 3 | **The writer and the gate:** patch 0005, refusal codes and their app sentences, Preview, zero-mark export, `textMoved` removed | 1c, 2 (for patch 0005), 11, 12 (`textMoved` removed), 21 (`apply.ts`), 26 (refusal parts), 28 (`structure` back on marked entries; patch 0005's entry), 29 (`tall-letter-boxes`, `signature-stroke`), 32 (second case), 33 (the rest) |
-| 4 | **The approval dialog:** removed kinds shown on approval | 21 (`plan.ts`), 25, 26 (dialog and status parts) |
+| 4 | **The approval dialog:** removed kinds shown on approval, each once per document | 21 (`plan.ts` and the files it lists), 25, 26 (status part) |
 | 5 | **The rest of the leak suite:** the manifest, the meta-test and the remaining fixtures, whose free-text entries cover kept object-graph keys only, not kept bodies ("What preparation promises"); every leak vector passes | 27–31 |
 
 Item 34, the directory READMEs, lands in every slice.
@@ -2192,8 +2209,25 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     - `apply.ts` (slice 3): builds edits with piece text, and passes refusal
       codes and data through. A document with a lost mark is refused with
       `mark-lost` before the worker is asked.
-    - `plan.ts` (slice 4): dispatches `planned` whenever the document's
-      removed kinds are not empty, so the approval dialog opens.
+    - `plan.ts` (slice 4): passes the document's removed kinds, from
+      `documentStatus`, to `approve`, and dispatches `planned` whenever
+      `Approval.removed` is not empty, so the approval dialog opens.
+      `engine/core/session/gate.ts` refuses `approve` for a document with no
+      `documentStatus` entry yet.
+    - With it (slice 4): `ProjectDocument.removedSeen` in
+      `engine/model/project.ts`, read as `[]` when missing by
+      `engine/core/formats/project.ts`; `approve` in
+      `engine/model/spread.ts` takes `removed`, stores it as the approved
+      document's `removedSeen`, and returns the kinds not in it before as
+      `Approval.removed`; `ApprovalPlan.removed` in `engine/api/state.ts`
+      carries them to the app. The golden `expected/` and `expected-old/`
+      project files are recorded again (owner, 25 Nov 2026).
+    - Tests (slice 4): `tests/e2e/approval.spec.ts` (the list, its order,
+      focus, once per document across a reload, cancel, no dialog when
+      nothing was removed, approval held until the prepared files are read);
+      the status line in `anchoring.spec.ts`; `approve` and `approvalLands`
+      in `tests/e2e/app.ts`; `removedSeen` read and written in
+      `engine/core/formats/project.test.ts`.
 
 #### 22. `engine/core/session/changes.ts`, `engine/core/session/gate.ts`, `engine/core/session/selectors.ts`, `engine/core/session/slices/index.ts`, `engine/core/session/slices/documents.ts`, `engine/core/session/slices/operation.ts`, `engine/core/session/slices/history.ts`, `engine/core/session/slices/marks.ts` (Modify, `documents.ts` Create) — slice 2
 
@@ -2243,11 +2277,12 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 
 *   **Type / Scope**: UI.
 *   **Proposed Changes**:
-    - `ProjectView` passes the document's removed kinds, from
-      `SessionState.documentStatus`, to `ApproveDialog`.
+    - `ApproveDialog` reads the kinds to list from the plan
+      (`ApprovalPlan.removed`), which the engine works out with the kinds
+      already listed, so `ProjectView` passes nothing new.
     - The dialog shows a "Removed from this file" section, listing the kinds
-      with the sentences of Appendix A.3, when the document's removed kinds
-      are not empty.
+      with the sentences of Appendix A.3 in its order, when the plan's
+      `removed` is not empty. Approve takes the focus once the dialog opens.
 
 #### 26. App UI files (Modify) — slices 2, 3 and 4
 
@@ -2275,9 +2310,9 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
         `TopBar.tsx:133`, and drop `hasMarks` from `ProjectView.tsx:154`;
       - the "Apply" and "applied" wording in `useHandOffFocus.ts:5`,
         `engineStatus.ts:7` and `errors.ts:37` changes to match.
-    - **Status line (slice 4):** `engineStatus(worker, operation)` and its
-      `statusText` show "Updating documents…" while `operation` is
-      `"updating"`. `Workspace` passes the operation.
+    - **Status line (slice 4):** `ProjectView`'s `statusText` shows
+      "Updating documents…" while `operation` is `"updating"` and the worker
+      is ready; `engineStatus` keeps the worker's own states.
 
 #### 27. Outside checker files (Modify) — slices 1, 2 and 5
 

@@ -47,7 +47,9 @@ write project folders.
   optional `text`, its letters; one stored without it reads as `""`, which is
   unknown, so the piece is lost until `migratePieces` fills it
   (`project.ts:parsePiece`). Only builds that write reader-tag folders write
-  it, and older builds never read those folders.
+  it, and older builds never read those folders. A document gains an optional
+  `removedSeen`, the removed kinds its approval dialog listed; one stored
+  without it reads as `[]` (`project.ts:parseReview`).
 - A record that fails any field check makes the whole file `"damaged"`
   (`parseProject`, `parseDocument`, `parseSettings`).
 - Stored text must have one entry per page, and its boxes must account for

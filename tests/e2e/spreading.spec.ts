@@ -4,6 +4,7 @@ import {
   addDocuments,
   applyAndDownload,
   aJaneRoe,
+  approvalLands,
   approve,
   approveButton,
   bStatement,
@@ -533,7 +534,7 @@ test("while an approval is worked out, the page and the marks panel take no mark
   await expect(panel.getByRole("button", { name: /^Change type of Jane Roe/ })).toBeDisabled();
 
   await release();
-  await expect(page.getByRole("banner").getByText("Approved", { exact: true })).toBeVisible();
+  await approvalLands(page, undefined);
   await expect(marks(page)).toHaveText([/Jane Roe/]);
   await expect(panel.getByRole("button", { name: /^Remove mark Jane Roe/ })).toBeEnabled();
   await saved(page);
@@ -556,7 +557,7 @@ test("a file dropped while an approval is worked out isn't added, and says why",
   // The earlier refusal is still listed with it.
   await expect(page.getByText(/This PDF is encrypted/)).toBeVisible();
   await release();
-  await expect(page.getByRole("banner").getByText("Approved", { exact: true })).toBeVisible();
+  await approvalLands(page, undefined);
   await expect(inExplorer(page, "letter-b.pdf")).toHaveCount(0);
 });
 

@@ -73,7 +73,8 @@ limit this folder to importing [engine/model](../model/README.md) and
   - the Library, add-file, save and approval codes;
   - `original-missing`, when the open document's original is not in the
     project's folder;
-  - `busy-updating`, while documents are prepared again;
+  - `busy-updating`, while documents are prepared again, and for an approval
+    of a document whose prepared files are not read yet;
   - the refusal codes that the app never shows.
 - `PdfClientErrorCode`: `worker-stopped`, `worker-not-running`,
   `unexpected-reply`, `unreadable-reply`, `unknown-request`, `stale-handle`.
