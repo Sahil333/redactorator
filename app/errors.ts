@@ -1,7 +1,17 @@
 // The sentence a user sees for each error code the app shows.
 import type { EngineError, ErrorCode } from "../engine/api/errors";
 
+// Refusals name a 0-based page; people count pages from 1.
+const shownPage = (data: (key: string) => string) => Number(data("page")) + 1;
+
 const sentences: Partial<Record<ErrorCode, (data: (key: string) => string) => string>> = {
+  "mark-lost": (data) => `A mark on page ${shownPage(data)} no longer matches the page. Mark it again.`,
+  "extra-text-removed": (data) => `Cleaning would also remove unmarked text next to a mark on page ${shownPage(data)}. The extra letters are highlighted.`,
+  "text-moved": (data) => `Other text on page ${shownPage(data)} would move in the cleaned file. This PDF can't be cleaned here yet.`,
+  "partly-covered-drawing": (data) => `A box on page ${shownPage(data)} covers part of a drawing. Cover the whole drawing with a margin around it, or remove the box.`,
+  "check-failed": (data) =>
+    data("page") === "" ? "The cleaned file failed a check. This PDF can't be cleaned here yet." : `The cleaned file failed a check on page ${shownPage(data)}. This PDF can't be cleaned here yet.`,
+  "apply-failed": () => "The marks could not be applied. Preview again.",
   "worker-not-running": () => "The PDF engine is not running. Reload the page to try again.",
   "unexpected-reply": () => "The PDF engine sent something unexpected. Reload the page to try again.",
   "unreadable-reply": () => "The PDF engine sent something unreadable. Reload the page to try again.",
@@ -36,7 +46,7 @@ const sentences: Partial<Record<ErrorCode, (data: (key: string) => string) => st
   "add-search-failed": () =>
     "This file could not be searched for the project's hidden values, so it wasn't added. Reload the page, then add it again.",
   "add-while-approving": () => "This file wasn't added while a document was being approved. Add it again once the approval is done.",
-  "add-while-applying": () => "This file wasn't added while a document was being applied and checked. Add it again once the check is done.",
+  "add-while-applying": () => "This file wasn't added while a document was being previewed. Add it again once the preview is done.",
   "original-missing": (data) => `${data("file")} is missing from the project's folder, so it can't be shown. Add the file again with Add documents.`,
   "save-failed": () => "Your latest changes could not be saved. Check that the disk has space; the next change tries again.",
   "approval-failed": () => "The documents' text could not be read, so nothing was approved. Reload the page and approve again.",

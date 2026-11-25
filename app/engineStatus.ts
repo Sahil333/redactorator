@@ -4,6 +4,6 @@ import type { EngineState } from "../engine/api/state";
 export function engineStatus(worker: EngineState["worker"]): string | undefined {
   if (worker.status === "starting") return "Starting the PDF engine…";
   if (worker.status === "stopped") return "The PDF engine is not running.";
-  if (worker.status === "applying") return "Applying and checking…";
+  if (worker.status === "applying") return "Previewing…";
   return undefined;
 }

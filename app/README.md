@@ -55,8 +55,8 @@ The app has three screens:
   document view (thumbnails, pages, marks panel) and the checked-output preview
   with its download.
 - `TopBar`, `Editing`, `History` (TopBar.tsx): the header with save state,
-  status, undo and redo, tool picker, Add documents, Approve, Apply and check,
-  and Export labels.
+  status, undo and redo, tool picker, Add documents, Approve, Preview, and
+  Export labels.
 - `ApproveDialog` (ApproveDialog.tsx): the heads-up shown while an
   `ApprovalPlan` waits. It confirms or cancels the plan.
 - `CheckedBanner`, `ReviewBanner`, `LabelExport`, `AppearanceSettings`: the
@@ -147,7 +147,15 @@ The app has three screens:
 - `CheckedBanner.tsx`: Download is disabled while a save runs, so only one save
   runs at a time.
 - `TopBar.tsx:EditingActions`: Approve and Export labels are disabled while
-  busy. Apply and check needs at least one mark.
+  busy. Preview is too, and works with no marks: the document then downloads
+  as its working copy.
+- A refused Preview says why in the sentence `errors.ts` gives its code, with
+  pages counted from 1 (`useEngineError.failed` keeps a writer refusal, which
+  has no message). Its boxes, such as the unmarked letters a mark would also
+  remove, are highlighted on its page (`Workspace.tsx:refusedBoxes`, through
+  `PageList` to `PageView`) until Dismiss, which `DropZone` shows beside such
+  a refusal, or the next Preview. A lost mark's row in `MarksPanel` says
+  "Mark again"; marking its letters again replaces it.
   `ProjectView.tsx:useEditing` defines busy as: a mark waits for its type, or
   the engine cannot apply or cannot approve.
 

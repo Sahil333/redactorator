@@ -115,7 +115,7 @@ describe("approval", () => {
     const { project, document } = projectWith([jane]);
     const { session, land, parts } = sessionOver(project);
     const planned = session.approval.plan(document.id);
-    land({ type: "markAdded", document: document.id, mark: dear });
+    land({ type: "markAdded", document: document.id, mark: dear, replaces: [] });
     expect(await planned).toEqual({ ok: false, error: { code: "approval-failed" } });
     expect(parts().record.present.project.documents[0]).toMatchObject({ review: "in-review", marks: [jane, dear] });
     expect(parts().operation.operation).toBe("idle");
@@ -144,7 +144,7 @@ describe("approval", () => {
 
   test("a heads-up confirmed on a record changed since its plan approves nothing", async () => {
     const { session, document, land, parts } = waitingForHeadsUp();
-    land({ type: "markAdded", document: document.id, mark: dear });
+    land({ type: "markAdded", document: document.id, mark: dear, replaces: [] });
     expect(await session.approval.confirm(1)).toEqual({ ok: false, error: { code: "approval-failed" } });
     expect(parts().record.present.project.documents[0]).toMatchObject({ review: "in-review", marks: [jane, dear] });
     expect(parts().approval).toBeUndefined();

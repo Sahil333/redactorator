@@ -38,6 +38,7 @@ import { judge } from "./oracle";
 const lineFeedGlyph = new URL("../../fixtures/line-feed-glyph.pdf", import.meta.url).pathname;
 const unmatchableImages = new URL("../../fixtures/unmatchable-images.pdf", import.meta.url).pathname;
 const signatures = new URL("../../fixtures/signatures.pdf", import.meta.url).pathname;
+const formPdf = new URL("../../fixtures/form.pdf", import.meta.url).pathname;
 
 // More words of letter-a.pdf, from tests/oracle/README.md, in the app's box convention.
 const aAccount: PointBox = [72, 99.1, 128.7, 115.6];
@@ -369,7 +370,7 @@ test("the review steps through new marks; a spread marks a download as changed; 
 
   await approve(page, undefined);
   await expect(newMarks(page)).toHaveCount(0);
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(downloadButton(page)).toHaveText("Download cleaned PDF");
   const output = await saveFile(page, () => downloadButton(page).click());
   expect(output).toMatch(/letter-b-redacted\.pdf$/);
@@ -397,11 +398,30 @@ test("a PDF that draws a line break as a glyph is added, and its text is marked,
   ]);
 });
 
+// form.pdf's filled field "Jane Roe", flattened into the page by preparation, in the app's box convention.
+const formValue: PointBox = [162, 39.1, 213.4, 55.6];
+
+test("a form field's value, made part of the page, is marked, spread and removed", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, formPdf, oneWordPdf);
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/form\.pdf/);
+
+  await markText(page, 1, formValue, "Person");
+  await expect(marks(page)).toHaveText([/Jane Roe/]);
+  await approve(page, /hides 1 place in one-word\.pdf/);
+  await judge(formPdf, await applyAndDownload(page), [{ check: "absent", values: ["Jane Roe"] }, { check: "structure" }]);
+
+  await page.getByRole("button", { name: "Back to editing" }).click();
+  await show(page, "one-word.pdf");
+  await expect(marks(page)).toHaveText([/Jane Roe/]);
+  await judge(oneWordPdf, await applyAndDownload(page), [{ check: "absent", values: ["Jane Roe"] }, { check: "positions", words: ["Jane Roe"] }]);
+});
+
 test("a document counts as downloaded only once its file is saved: a cancelled or failed save changes nothing", async ({ page }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
 
   await standInForSaveDialog(page, "cancel");
   await downloadButton(page).click();
@@ -418,7 +438,7 @@ test("a document counts as downloaded only once its file is saved: a cancelled o
   await saved(page);
   await page.reload();
   await expect(inExplorer(page, "one-word.pdf")).toContainText("Not downloaded");
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
   // A double click saves once: a second dialog while the first opens would be refused.
   await saveFile(page, () => downloadButton(page).dblclick());
   expect(await page.evaluate(() => Reflect.get(window, "refusedDialogs") ?? 0)).toBe(0);

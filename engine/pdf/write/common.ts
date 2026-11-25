@@ -1,11 +1,22 @@
 import * as mupdf from "mupdf";
-import type { Box } from "../../model/geometry";
+import type { WriterErrorCode } from "../../model/errors";
+import type { Box, PageIndex } from "../../model/geometry";
 
-// What the writer and its check read letters with: as before preparation removed ActualText.
-export const CHECK_OPTIONS = "preserve-whitespace";
+/** Where a refusal applies, never what the document says. */
+interface RefusalData {
+  readonly page?: PageIndex;
+  readonly boxes?: readonly Box[];
+}
 
-/** Thrown inside apply to block the export with a reason the user sees. */
-export class CheckFailed extends Error {}
+/** Thrown inside apply to block the export; the app says why from its code. */
+export class WriteRefused extends Error {
+  constructor(
+    readonly code: WriterErrorCode,
+    readonly data?: RefusalData,
+  ) {
+    super(code);
+  }
+}
 
 export interface Redaction {
   /** The box drawn, and the area whose images and drawings are removed. */
@@ -24,5 +35,5 @@ export function openPdf(bytes: Uint8Array): mupdf.PDFDocument {
   const document = mupdf.Document.openDocument(bytes.slice(0), "application/pdf");
   if (document instanceof mupdf.PDFDocument) return document;
   document.destroy();
-  throw new CheckFailed("The cleaned file could not be read back.");
+  throw new WriteRefused("apply-failed");
 }

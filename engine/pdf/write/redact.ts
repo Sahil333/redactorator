@@ -1,11 +1,12 @@
 import * as mupdf from "mupdf";
 import type { Appearance, Edit } from "../../model/document";
 import type { Box, PageIndex } from "../../model/geometry";
-import { rangeBoxes } from "../../model/pageText";
+import { rangeBoxes, rangeText } from "../../model/pageText";
 import { around } from "../geometry";
 import { centre, glyphsOf, inside, overlap, type PageGlyph } from "../glyphs";
+import { READING_OPTIONS } from "../readingOptions";
 import { readText, withPage } from "../text";
-import { CHECK_OPTIONS, CheckFailed, openPdf, type Redaction } from "./common";
+import { openPdf, WriteRefused, type Redaction } from "./common";
 
 // The label font is Helvetica in WinAnsiEncoding, which matches Latin-1 on these code points.
 const inWinAnsi = (c: string) => {
@@ -14,14 +15,14 @@ const inWinAnsi = (c: string) => {
 };
 
 /**
- * A text edit's box and ink band on each line. An edit that is not wholly on the page's text
- * would leave text unmarked, so it fails.
+ * A text edit's box and ink band on each line. An edit whose letters are not the page's at its
+ * offsets would remove other text and keep its own, so it is refused as lost (the guard).
  */
 function textAreas({ text, ink }: ReturnType<typeof readText>, edit: Extract<Edit, { kind: "text" }>): { box: Box; textArea: Box }[] {
-  const fits = edit.end <= text.chars.length;
+  const fits = edit.end <= text.chars.length && rangeText(text, edit.start, edit.end) === edit.text;
   const boxes = fits ? rangeBoxes(text, edit.start, edit.end) : [];
   const bands = fits ? rangeBoxes(ink, edit.start, edit.end) : [];
-  if (boxes.length === 0 || bands.length !== boxes.length) throw new CheckFailed(`A mark on page ${edit.page + 1} does not match the page's text.`);
+  if (boxes.length === 0 || bands.length !== boxes.length) throw new WriteRefused("mark-lost", { page: edit.page });
   return boxes.map((box, line) => ({ box, textArea: bands[line] ?? box }));
 }
 
@@ -50,7 +51,7 @@ function trimmed({ box, textArea }: { box: Box; textArea: Box }, kept: readonly 
 /** A page's redactions with each text mark's box trimmed clear of the letters no box removes. */
 function trimmedOnPage(original: mupdf.Document, page: PageIndex, redactions: readonly Redaction[], fromText: ReadonlySet<Redaction>): Redaction[] {
   if (!redactions.some((redaction) => fromText.has(redaction))) return [...redactions];
-  const kept = withPage(original, page, (each) => glyphsOf(each, CHECK_OPTIONS)).filter(
+  const kept = withPage(original, page, (each) => glyphsOf(each, READING_OPTIONS)).filter(
     (glyph) => glyph.c.trim() !== "" && !redactions.some(({ textArea }) => inside(textArea, centre(glyph.body))),
   );
   return redactions.map((redaction) => (fromText.has(redaction) ? { ...redaction, box: trimmed(redaction, kept) } : redaction));
@@ -151,6 +152,10 @@ export function redact(bytes: Uint8Array, byPage: Map<PageIndex, Redaction[]>, a
         page.applyRedactions(false, mupdf.PDFPage.REDACT_IMAGE_NONE, mupdf.PDFPage.REDACT_LINE_ART_NONE, mupdf.PDFPage.REDACT_TEXT_REMOVE);
         for (const { box } of redactions) mark(box);
         page.applyRedactions(false, mupdf.PDFPage.REDACT_IMAGE_PIXELS, mupdf.PDFPage.REDACT_LINE_ART_REMOVE_IF_COVERED, mupdf.PDFPage.REDACT_TEXT_NONE);
+        // Applying takes the Redact annotations out of /Annots but leaves the empty array, which
+        // the working copy never had and the outside checker's structure check rejects.
+        const annotations = page.getObject().get("Annots");
+        if (annotations.isArray() && annotations.length === 0) page.getObject().delete("Annots");
         drawBoxes(document, page, redactions, appearance);
       } finally {
         page.destroy();

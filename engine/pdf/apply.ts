@@ -4,7 +4,19 @@ import type { FileNumber } from "../pdf-protocol/messages";
 import { fail, post } from "./messages";
 import { documentModel } from "./read";
 import { current } from "./state";
-import { CheckFailed, writeAndCheck } from "./write";
+import { checkStructure } from "./structure";
+import { openPdf, writeAndCheck, WriteRefused } from "./write";
+
+/**
+ * With no edits there is nothing to write: the working copy is the cleaned file, downloaded as it
+ * is once its structure passes (review answer 6). A copy is posted, as the working bytes stay for
+ * the next Preview.
+ */
+function unchanged(working: mupdf.PDFDocument, workingBytes: Uint8Array): { bytes: Uint8Array<ArrayBuffer>; output: mupdf.PDFDocument } {
+  if (checkStructure(working) !== undefined) throw new WriteRefused("check-failed");
+  const bytes = workingBytes.slice();
+  return { bytes, output: openPdf(bytes) };
+}
 
 export function apply(file: FileNumber, edits: readonly Edit[], appearance: Appearance): void {
   const document = current(file);
@@ -16,21 +28,17 @@ export function apply(file: FileNumber, edits: readonly Edit[], appearance: Appe
   document.output = undefined;
   let output: mupdf.PDFDocument | undefined;
   try {
-    const written = writeAndCheck(document.working, document.bytes, edits, appearance);
+    const written = edits.length === 0 ? unchanged(document.working, document.bytes) : writeAndCheck(document.working, document.bytes, edits, appearance);
     const bytes = written.bytes;
     output = written.output;
     const model = documentModel(output);
-    if (model === undefined) throw new CheckFailed("The cleaned file has no pages.");
+    if (model === undefined) throw new WriteRefused("check-failed");
     document.output = output;
     post({ type: "applied", file, bytes: bytes.buffer, output: model }, [bytes.buffer]);
   } catch (error) {
     // Fail closed: nothing reaches the UI to download unless every check passed.
     output?.destroy();
-    const reason = error instanceof CheckFailed ? error.message : "The marks could not be applied.";
-    fail(
-      file,
-      error instanceof CheckFailed ? "check-failed" : "apply-failed",
-      `${reason} Nothing was exported. Apply and check again; if it fails again, this PDF can't be cleaned here yet.`,
-    );
+    if (error instanceof WriteRefused) fail(file, error.code, undefined, error.data);
+    else fail(file, "apply-failed");
   }
 }

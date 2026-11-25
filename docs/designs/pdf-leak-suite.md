@@ -472,21 +472,17 @@ branches that only the new options turn on, and the layer rule fix below.
 Found while building slice 2, on 25 Nov 2026, on synthetic PDFs, apart
 from the refusal counts in the NFRs.
 
-*   **MuPDF's garbage collection drops the data of a stream that holds a
-    reference it renumbers.**
+*   **MuPDF's garbage collection drops the data of a stream whose dictionary
+    is held elsewhere.**
     In MuPDF 1.28.6, a save with `garbage` can write a stream as a plain
-    dictionary, without its data. It happens to a stream that holds a
-    reference the save renumbers, when the stream is unchanged from the file
-    and its data has been read since the file was opened. `renumberobjs` calls
-    `pdf_update_object`, which gives the object a fresh xref entry with no
-    stream offset. Step 7 resolves every object and reads stream data, and
-    step 6 draws every page, so the 1 x 1 image of
-    `image-spaces.pdf`, whose `/SMask` moved from object 10 to 9, came out
-    empty, and step 9 refused the file. Preparation now saves (step 7a, with
-    `compress`) and opens the result again before step 8, so nothing has been read when
-    step 8 renumbers. The writer (`write/redact.ts`) reads the images it
-    draws and saves with `garbage=4` too, so it may meet the same case; see
-    Risks.
+    dictionary, without its data. `renumberobjs` calls `pdf_update_object`,
+    which gives the object a fresh xref entry with no stream offset. Step 7
+    resolves every object, so the 1 x 1 image of `image-spaces.pdf` came out
+    empty, and step 9 refused the file. Slice 2 saved (step 7a, with
+    `compress`) and opened the result again before step 8. Slice 3 found that
+    the conditions first written here were wrong: neither a read of the data
+    nor a change of number is needed. Patch 0005 fixed it, and step 7a was
+    removed (slice 3 Probe Findings).
 *   **The trailer's `Encrypt` stays until step 8.** A file with an empty open
     password keeps its encryption through steps 4 and 5, and MuPDF goes on
     encrypting what it writes until step 8's `encrypt=none`. With the key
@@ -557,6 +553,80 @@ from the refusal counts in the NFRs.
     under `/DCT`, or `[/FlateDecode /DCT]`, drew, and kept its EXIF through
     preparation until step 7 read the names in full (Appendix A.2). An
     inline JPEG's EXIF did not survive step 5, which rewrites inline images.
+
+### Slice 3 (the writer and the gate)
+
+Found while building slice 3, on 25 Nov 2026, on synthetic PDFs only.
+
+*   **The garbage-save bug is real in stock MuPDF, and patch 0005 fixes it.**
+    It was reproduced on the 1.28.6 tag built with no patches (built here in
+    the pinned Emscripten image), and on the vendored build with patches 0001
+    to 0004, with the same results. A local rebuild of 0001 to 0004 the same
+    way matched `SHA256SUMS` byte for byte. `vendor/mupdf/upstream/0005-repro.mjs`
+    holds the cases.
+    - **When it happens.** A save with `garbage` of 2 or more loses the data
+      of a stream when all of these hold:
+      - the stream was read from the file and has not been changed in this
+        session;
+      - its dictionary holds an indirect reference itself;
+      - something besides the xref holds that dictionary while the save runs.
+
+      No read of its data, no edit and no change of its number are needed;
+      `garbage=1` keeps it.
+    - **Why.** `renumberobj` edits a dictionary in place when the xref holds
+      its only reference, and an edit made during a save leaves the object's
+      entry, with its stream offset, where it was. A shared dictionary is
+      copied instead, and `pdf_update_object` files the copy in a new, empty
+      entry of the incremental xref section, with no stream offset or buffer.
+    - **How the app met it.** In MuPDF.js 1.28.6 every `PDFObject` keeps its
+      `pdf_obj` twice and `destroy()` drops it once, so one `resolve()` holds
+      the dictionary for good. Step 7 resolves every object.
+    - **Upstream.** Master (b20db02b9, 23 Nov 2026) has the same C path. It
+      fixed the MuPDF.js double keep in b8d579fee (10 Nov 2026), which alone
+      does not help while a handle is live. MuPDF bug 709830 (UNCONFIRMED)
+      reaches the same lines through `garbage=3`'s second pass.
+    - **The fix.** Patch 0005 moves the object's own entry into the
+      incremental section before `pdf_update_object` (Detailed item 1c). It
+      fixes 709830's case too.
+    - **The app today.** Step 7a is removed (owner, 25 Nov 2026), so step 8
+      saves the document step 7 resolved, with every object it resolved still
+      held, and patch 0005 alone keeps their streams.
+      - Without 7a, the 0001 to 0004 build refused `image-spaces.pdf` and
+        `grey-soft-masks.pdf` at step 9. With 0005, every fixture prepared to
+        a working copy of the same size as with 7a, with no stream left a
+        dictionary and none over 64 bytes without a filter: step 8's
+        `compress` compresses the streams step 7 wrote again.
+      - The WebAssembly heap peak did not change: 344 MB for 5 half-hidden
+        scans and 66 MB for 20 shown ones, with and without 7a.
+      - The writer resolves no stream before its save. A probe that wrote a
+        box on every fixture through the 0001 to 0004 build lost no stream.
+        Leak entry `kept-soft-masked-image-when-written` judges a kept image
+        with a soft mask after a write.
+*   **MuPDF bounds a stroke with its miter allowance.** For
+    `REDACT_LINE_ART_REMOVE_IF_COVERED`, a stroked part's bounds reach up to
+    the miter limit times half its width past its points, so with the default
+    limit of 10, a 1.5 pt signature stroke needs a box 7.5 pt past it to be
+    removed. The gate grows strokes by half their width only (part 6), so a
+    box short of the allowance leaves the part whole, and the gate refuses it
+    as `partly-covered-drawing`: it fails closed (`signature-stroke.pdf`).
+*   **A font whose letters are declared taller than drawn loses neighbours.**
+    MuPDF's redaction removes a letter whose box, from its font's descender to
+    its ascender and shrunk by a tenth, meets an area. With `/Ascent 1000
+    /Descent -1000` on lines 13 pt apart, removing "Jane" on one line also
+    removed "name" above it, which no mark touches: the gate's
+    `extra-text-removed` (CUJ 8; `tall-letter-boxes.pdf`).
+*   **A rewritten image gets MuPDF's own colour profile.** Image redaction
+    and `blank-unshown-pixels` decode an image into a pixmap in MuPDF's
+    device colour space, blank pixels and store a new image
+    (`pdf-clean.c`, `pdf_add_image`). With colour management built in, that
+    space is an ICC one, so `pdf_add_colorspace` writes
+    `[/ICCBased …]` with MuPDF's built-in profile: sRGB for a `DeviceRGB`
+    image, its CMYK profile for `DeviceCMYK`. This has been so since before
+    Phase 3, in the writer and, since slice 1, in preparation. The samples
+    are unchanged, as the `pixels` check shows, and MuPDF draws the same.
+    PDFium draws an RGB image within 8 levels, but the kept half of a CMYK
+    one up to 23 levels apart in a channel (`image-spaces.pdf`). The owner
+    accepts it (25 Nov 2026; Risks).
 
 ## Decisions Made During Drafting and Review
 
@@ -652,6 +722,19 @@ from the refusal counts in the NFRs.
         decision, and a finding inside one is out of scope unless user data
         reaches it. Review findings on kept bodies are closed against it.
 
+*   **Owner answers during slice 3 (25 Nov 2026):**
+    1. The garbage-save bug is real in stock MuPDF; patch 0005 fixes it, and
+       preparation's step 7a, a save and reopen before step 8, is removed.
+    2. Patch 0005 does not change `READER_TAG`: it changes how files are
+       saved, not how they are read (part 2).
+    3. Marking a lost mark's word again replaces the lost mark (part 4).
+    4. The partly covered drawing sentence asks for a margin, as MuPDF
+       removes a stroke only when the box clears its miter allowance (part 6).
+    5. A refused Preview's highlight can be dismissed (part 8). `mark-lost`
+       naming the mark's first page is accepted.
+    6. A rewritten image keeps MuPDF's own ICC profile, as before Phase 3
+       (Risks).
+
 ## Critical User Journeys (CUJs)
 
 ### CUJ 1: A filled tax form is cleaned and stays readable
@@ -688,7 +771,8 @@ from the refusal counts in the NFRs.
 *   **Then**:
     - nothing is exported for that document;
     - the message says a box on page 2 covers part of a drawing, and asks the
-      user to cover the whole drawing or remove the box;
+      user to cover the whole drawing with a margin around it, or remove the
+      box;
     - the user enlarges the box and previews again, and the drawing is gone
       from the file;
     - the other documents could still be exported throughout.
@@ -881,13 +965,13 @@ The order of the steps matters:
    - Layer settings (`/OCProperties`) are removed, since step 5 already removed
      both the hidden content and the layer markers. Removing them records no
      kind; `hidden-layers` comes only from the device pass before step 5.
-   - **Step 7a, save and reopen** (`saveToBuffer("compress")`, then open), so that no
-     stream has been read when step 8 renumbers objects: MuPDF 1.28.6 drops
-     the data of a stream, once read and unchanged, that holds a reference
-     the save renumbers (slice 2 Probe Findings). Its `compress` compresses
-     the streams step 7 wrote again from their decoded bytes (Appendix A.2).
 8. **Save** with `saveToBuffer("garbage=4,compress,encrypt=none")`: one
-   revision, and anything nothing points to is dropped.
+   revision, and anything nothing points to is dropped. Its `compress`
+   compresses the streams step 7 wrote again from their decoded bytes
+   (Appendix A.2). Step 7 still holds every object it resolved; patch 0005
+   keeps their streams through the save (slice 3 Probe Findings). Slice 2's
+   step 7a, a save and reopen before this one, was removed in slice 3
+   (owner, 25 Nov 2026).
 9. **Check the preparation** with MuPDF alone (`prepare/check.ts`): the
    working copy has as many pages as the original, and
    - every glyph the original draws on screen is still drawn at the same place
@@ -934,7 +1018,10 @@ The **reader tag** is `READER_TAG = "pdf-3"`, exported from
 `engine/pdf-protocol/messages.ts`, so the core and the worker share one
 constant (the core may import `pdf-protocol`). It changes on *any* change to
 preparation, to reading, or to the vendored MuPDF build, meaning its patch
-set or `SHA256SUMS`. The worker's `ready` message repeats it; if the two ever
+set or `SHA256SUMS`, when that change can change what preparation or reading
+makes. Patch 0005 kept `pdf-3`: it changes how a file is saved, not how one
+is read, and the working copies come out the same (owner, 25 Nov 2026). The
+worker's `ready` message repeats it; if the two ever
 differ, the client stops the worker as `unexpected-reply`.
 
 `READING_OPTIONS = "preserve-whitespace,ignore-actualtext"` lives in a leaf
@@ -1037,6 +1124,12 @@ cache.
     change the download state (owner, 25 Nov 2026).
 - **The guard.** The writer refuses with `mark-lost` (part 6) when the
   letters at an edit's offsets in the working copy differ from `Edit.text`.
+  The core refuses a document with a lost mark the same way before the
+  worker is asked.
+- **Marking again.** A new text mark with the same letters as a lost mark,
+  on a page the lost mark is on, takes its place in the same undoable step
+  (`markAdded`'s `replaces`), so the preview then passes (CUJ 7; owner, 25 Nov
+  2026).
 
 ### 5. The third MuPDF patch (`vendor/mupdf/patches/0003-…`)
 
@@ -1111,8 +1204,12 @@ The gate stays MuPDF-only and checks the writer's own promises:
        sides aligned in page space to within 0.01 pt;
      - a single straight line: move, line.
 
-  Our own boxes are rectangles, so they pass. A part still wholly under a box
-  fails too, as a defence; MuPDF should already have removed it.
+  A part still wholly under a box fails too, as a defence; MuPDF should
+  already have removed it. Our own boxes are left out: a rectangle the size
+  of a redaction box, to within 0.01 pt, is one of them. MuPDF grows a stroke
+  by more than half its width (slice 3 Probe Findings), so a stroke this
+  check finds wholly under a box can still be one MuPDF kept, and it is
+  refused.
 
 **Refusals.** Refusals carry a code and data (a page, and boxes), never
 document text. The worker throws `WriteRefused` (in `write/common.ts`), which
@@ -1126,8 +1223,8 @@ replaces `CheckFailed`. The app turns each code into its sentence.
 | `mark-lost` | Preview | `redact.ts:22` | page | "A mark on page N no longer matches the page. Mark it again." | Mark the text again |
 | `extra-text-removed` | Preview | `check.ts:141` (missing letters) | page, boxes of the missing letters | "Cleaning would also remove unmarked text next to a mark on page N. The extra letters are highlighted." | Change or remove the mark |
 | `text-moved` | Preview | `check.ts:141` (moved letters) | page | "Other text on page N would move in the cleaned file. This PDF can't be cleaned here yet." | None |
-| `partly-covered-drawing` | Preview | new drawing check | page, the redaction box | "A box on page N covers part of a drawing. Cover the whole drawing, or remove the box." | Enlarge or remove the box |
-| `check-failed` | Preview | `check.ts:131/133/135` (structure), `check.ts:144/147` (text or image under a box), `apply.ts:23` (no pages) | page, if known | "The cleaned file failed a check on page N. This PDF can't be cleaned here yet." | None |
+| `partly-covered-drawing` | Preview | new drawing check | page, the redaction box | "A box on page N covers part of a drawing. Cover the whole drawing with a margin around it, or remove the box." The margin is because MuPDF removes a stroke only when the box clears its miter allowance (slice 3 Probe Findings; owner, 25 Nov 2026) | Enlarge or remove the box |
+| `check-failed` | Preview | `check.ts:131/133/135` (structure), `check.ts:144/147` (text or image under a box), `apply.ts:23` (no pages) | page, if known | "The cleaned file failed a check on page N. This PDF can't be cleaned here yet.", or with no page, "The cleaned file failed a check. This PDF can't be cleaned here yet." | None |
 | `apply-failed` | Preview | `redact.ts:30`, `common.ts:24`, any other exception | none | "The marks could not be applied. Preview again." | Preview again |
 
 A document whose re-preparation fails while updating is shown as refused with
@@ -1198,7 +1295,8 @@ tests.
 - **The marks panel is unchanged,** except that a lost mark's row shows a
   small "Mark again" label.
 - **Approval and download work with no marks.**
-- **A refusal with boxes** highlights them on the page view.
+- **A refusal with boxes** highlights them on the page view, until the user
+  dismisses the refusal or previews again (owner, 25 Nov 2026).
 - **While documents are rebuilt for a new reader tag,** the workspace shows
   "Updating documents…" in the existing engine status line.
 
@@ -1530,13 +1628,14 @@ tests.
 | Most IRS forms carry XFA: 36 of 45 irs.gov files hold an `/XFA` entry, all beside normal fields | Hybrid forms are flattened and their XFA deleted (slice 2 answer 7); all 36 now prepare (NFRs, refusals). A form drawn by XFA alone is still refused |
 | A soft mask's colour space other than `DeviceGray` refused files MuPDF draws (1 of the owner's 41 PDFs) | A one-channel space that reads as grey is rewritten as `DeviceGray` (slice 2 answer 8); that file now prepares. Any other array colour space on a soft mask still refuses (Appendix A.1) |
 | A JPEG or JPEG 2000 image behind filters other than one Flate layer refused files (found on synthetic fixtures; no real file in the counts) | The lossless filters ahead of the image filter are undone (slice 2 answer 9). A chain with any filter outside that set before the image filter, or any filter after it, still refuses |
-| Bytes after a stream's end of data survive step 8's save (probed, `data-after-end.pdf`) | Step 7 writes every kept stream whose filters are all lossless again from its decoded bytes, and step 7a's save compresses them (slice 2 answer 10). MuPDF holds each decoded copy until that save, so the WebAssembly heap peak grows with the total decoded size of those streams: 344 MB for 5 half-hidden scans, as before answer 10, as the blanked scans are Flate. 40 such scans are not measured; if they do not fit, the rewrite can run in batches, each followed by a `compress` save and reopen. Streams kept as they are, so that bytes after their end of data remain a gap: any with a filter outside the lossless set (`CCITTFaxDecode`, `JBIG2Decode`, `Crypt`, an unknown name or a non-name), the lossless layers ahead of them included. The outside checker reads past a zlib stream's end only |
+| Bytes after a stream's end of data survive step 8's save (probed, `data-after-end.pdf`) | Step 7 writes every kept stream whose filters are all lossless again from its decoded bytes, and step 8's save compresses them (slice 2 answer 10). MuPDF holds each decoded copy until that save, so the WebAssembly heap peak grows with the total decoded size of those streams: 344 MB for 5 half-hidden scans, as before answer 10, as the blanked scans are Flate. 40 such scans are not measured; if they do not fit, the rewrite can run in batches, each followed by a `compress` save and reopen. Streams kept as they are, so that bytes after their end of data remain a gap: any with a filter outside the lossless set (`CCITTFaxDecode`, `JBIG2Decode`, `Crypt`, an unknown name or a non-name), the lossless layers ahead of them included. The outside checker reads past a zlib stream's end only |
 | MuPDF's stock `sanitize` drops or moves a few letters on some pages (NFRs, refusals): it loses a text-state reset made in an empty text object before a form is drawn (Probe Findings, slice 2) | Fixed by patch 0004 (slice 2 answer 11): the filter sends pending text state before a form is drawn. Step 9 still refuses a file whose text the filter changes in any other way, and the writer's gate an export |
 | The browser's storage quota is reached while preparing | The write fails, that document is refused, and `writeOriginals` removes what it wrote. Other documents carry on |
 | A rollback shows the project as it was before the upgrade | By design (part 3). Newer changes are kept for the next upgrade |
 | The Arlington model misses a role, or a key, that real files use | A key the model does not list is deleted, never kept, so it can't leak. A drawing that needed it draws wrong, which the outside checker's `rendered` check catches on the fixtures; the gate's glyph check sees only text. An object that matches no role refuses its file. The model is pinned to one commit, and the refusal counts (NFRs) measure how often it refuses |
 | An update of the vendored model changes what is kept | Only by updating `vendor/arlington/` and running the generator, whose output is reviewed as a diff, then `pnpm test` with every leak vector |
-| MuPDF 1.28.6's `garbage` save writes a stream, once read and unchanged, that holds a reference the save renumbers, without its data (Probe Findings, slice 2) | Preparation saves and opens again before step 8 (step 7a), and step 9 refuses a file that still comes out wrong. Not yet fixed in the writer, which reads the images it draws: an image not under a box, holding a reference the save renumbers, could vanish from an output. The gate's glyph check does not see it; the structural check run on the output would, as it finds a stream left as a dictionary. A lost stream can't leak a value, but a lost soft mask, mask or form changes what the page shows. For the owner: a slice 3 fix, a patch 0004, or both, with the structural check on the writer's output in slice 3 |
+| MuPDF 1.28.6's `garbage` save writes a stream read from the file as a bare dictionary, without its data, when its dictionary holds a reference and is held elsewhere (Probe Findings, slice 3) | Real in stock MuPDF and not fixed upstream; patch 0005 fixes it (Detailed item 1c), and `0005-repro.mjs` fails without it. Step 7a is removed, so preparation relies on 0005: without it, `image-spaces.pdf` and `grey-soft-masks.pdf` are refused at step 9, which refuses any file that comes out wrong, and their leak entries fail. The writer resolves no stream before its save, and the gate now runs the structural check on its output. Leak entry `kept-soft-masked-image-when-written` judges a kept image after a write. For the owner: whether to backport upstream's MuPDF.js double-keep fix (b8d579fee), a memory leak that 0005 makes harmless to output |
+| A rewritten image is stored as `[/ICCBased …]` with MuPDF's own profile, and PDFium draws a CMYK image's unmarked pixels up to 23 levels apart (Probe Findings, slice 3) | Found in slice 3; the behaviour predates Phase 3, and preparation's pixel blanking does the same. The samples are unchanged, and MuPDF draws the same. Accepted by the owner (25 Nov 2026): nothing leaks, and another reader's colour shift in the kept pixels is small. Keeping the image's own colour space would take a patch to `pdf-clean.c` |
 | Preparing a long text document is slow and uses much memory | Measured in the NFRs ("Measured in slice 2"): most of it is the JavaScript heap of step 9, not the WebAssembly heap. If the worker dies of it, rather than MuPDF throwing, the preparation in flight settles as `worker-stopped` and the file is not added. Not optimised in slice 2; for the owner: does the 500-page cost matter? |
 | A duplicate keeps the root `project.json` it copied, with the original's id, so a build from before reader tags lists two projects with one id | A rollback-only case that follows from never writing the root files. For the owner: what should happen to the duplicate id? |
 
@@ -1687,7 +1786,7 @@ summary matches those tags.
 | --- | --- | --- |
 | 1 | **The patch spike:** patch 0003, the rebuild, the hand-run repro scripts, and the probes for the signed widget and the straddling path. The existing browser tests must pass on the rebuilt MuPDF. The first leak-vector entries, for the write-path branches the patch edits, the corrected layer rules and the text the content filter drops, and the oracle's `rendered` check | 1–2, 27–29 and 31 (those entries and `rendered` only) |
 | 2 | **Preparation, reading, storage and anchoring:** the protocol change together with its test fakes, the golden files re-recorded, the first anchoring test, and the allowlist's role table generated from the Arlington PDF Model | 1b, 2 (for patch 0004), 3–10, 12 (slice 2 parts), 13–20, 26 (the add-time sentences), 21 (`facade.ts`, `open.ts`, `readings.ts`, `add.ts`), 22–24, 27 (`structure`, `image-metadata`, and `rendered` with `init_forms()`), 28–29 (preparation vectors), 31 (entries with no mark), 32 (first case), 33 (fakes and protocol), 35, 36–37 |
-| 3 | **The writer and the gate:** refusal codes and their app sentences, Preview, zero-mark export, `textMoved` removed | 11, 12 (`textMoved` removed), 21 (`apply.ts`), 26 (refusal parts), 32 (second case), 33 (the rest) |
+| 3 | **The writer and the gate:** patch 0005, refusal codes and their app sentences, Preview, zero-mark export, `textMoved` removed | 1c, 2 (for patch 0005), 11, 12 (`textMoved` removed), 21 (`apply.ts`), 26 (refusal parts), 28 (`structure` back on marked entries; patch 0005's entry), 29 (`tall-letter-boxes`, `signature-stroke`), 32 (second case), 33 (the rest) |
 | 4 | **The approval dialog:** removed kinds shown on approval | 21 (`plan.ts`), 25, 26 (dialog and status parts) |
 | 5 | **The rest of the leak suite:** the manifest, the meta-test and the remaining fixtures, whose free-text entries cover kept object-graph keys only, not kept bodies ("What preparation promises"); every leak vector passes | 27–31 |
 
@@ -1733,6 +1832,21 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
     and `form-inherits-text-state-when-written` (a mark inside the form,
     written by the writer).
 
+#### 1c. `vendor/mupdf/patches/0005-Keep-a-stream-s-data-when-garbage-collection-renumbe.patch` (Create) — slice 3
+
+*   **Type / Scope**: C patch to MuPDF 1.28.6, on top of 0001 to 0004. It
+    touches `source/pdf/pdf-write.c` only.
+*   **Proposed Changes**: `renumberobjs` calls
+    `pdf_xref_ensure_incremental_object` before `pdf_update_object` stores a
+    renumbered copy, so the object's entry keeps its stream (slice 3 Probe
+    Findings). With it:
+    - `vendor/mupdf/upstream/0005-bug-report.md`, a comment for MuPDF bug
+      709830;
+    - `0005-repro.mjs`, which fails on stock 1.28.6 and on 0001 to 0004;
+    - the README row, the rebuilt `package/dist` (only `mupdf-wasm.wasm`
+      changes) and new `SHA256SUMS`;
+    - leak entry `kept-soft-masked-image-when-written` on `image-spaces.pdf`.
+
 #### 2. Vendored build files (Modify / Create) — slice 1
 
 *   **Type / Scope**: Vendored build.
@@ -1764,11 +1878,11 @@ Before Phase 3 merges, `leak-suite.spec.ts` must pass on the patched build.
 *   **Proposed Changes**:
     `prepareDocument(bytes): { preparedBytes, reading, removed: readonly RemovalKind[] } | { code: ReaderErrorCode }`.
     `removed` is sorted and holds no repeats. It runs the nine steps of
-    part 1, with step 7a. Step-to-file map:
+    part 1. Step-to-file map:
 
     | Step | File |
     | --- | --- |
-    | 1, 7a and 8 | `prepare/index.ts`, saving and opening through `prepare/reopen.ts` |
+    | 1 and 8 | `prepare/index.ts`, saving and opening through `prepare/reopen.ts` |
     | 2–4 | `prepare/annotations.ts`, with the layer rules in `prepare/layers.ts` |
     | 5–6 | `prepare/page.ts`, with the layer rules in `prepare/layers.ts` |
     | 7 | `engine/pdf/allowlist.ts`, strip mode, with the image cutting in `engine/pdf/imageData.ts` |
@@ -2262,20 +2376,21 @@ checker judges the writer's output structurally.
       `hybrid-xfa`, `grey-soft-masks`, `image-prefilters`, `data-after-end`,
       `shading-graphics-state`, `abbreviated-stream-keys`,
       `jpx-data`, `jpeg-extension`, `jpeg-long-adobe`, `icc-under-dct`,
-      `inline-jpeg` and the five `marked-*`.
+      `inline-jpeg` and the five `marked-*`. Slice 3 adds `tall-letter-boxes`
+      (CUJ 8) and `signature-stroke` (CUJ 3), for the gate's refusals.
     - One builder per fixture file, written as `fixtures/<name>.pdf` and
       `fixtures/<name>-cleaned.pdf` for the checker's own tests. Several
       entries may share a fixture.
     - The probe cases from this design are rebuilt here in code: forms,
       hidden text, a shared drawing, paths and images.
     - New builders:
-      - grid, shading, barcode and signature-stroke drawings;
+      - grid, shading and barcode drawings (the signature stroke is slice 3's);
       - an OCMD layer rule and a `BaseState /OFF` layer;
       - JFIF and JFXX thumbnails, and bytes after the end-of-image marker;
       - JPX metadata boxes, and COM segments inside `jp2c`;
       - text whose only mapping is ActualText;
-      - a font whose letter boxes are wider than its letters are drawn
-        (CUJ 8).
+      - a font whose letter boxes are larger than its letters are drawn
+        (CUJ 8; slice 3's `tall-letter-boxes`, whose boxes are taller).
 
     All values are synthetic.
 
@@ -2350,9 +2465,11 @@ checker judges the writer's output structurally.
       - a `pdf-3/` folder was created;
       - the marks sit on the same words;
       - the export passes the oracle's `absent` and `positions` checks.
-    - **Second case (slice 3).** It edits the `fa7f4a62…` multi-piece mark's
-      first piece in `pre-phase-3/cross-page/.redactorator/text/<id>.json`, at
-      page 0, offsets 84–88, so that its letters differ. It expects the
+    - **Second case (slice 3).** It edits the letters under the first piece
+      of `cross-page.pdf`'s multi-piece mark, "Jane Roe,", in the older
+      build's reading of that document,
+      `pre-phase-3/cross-page/.redactorator/text/fa7f4a62….json`, at page 0,
+      offsets 84–88, so that they differ. It expects the
       `mark-lost` sentence on Preview and "Mark again" in the panel.
     - **`golden.spec.ts`:**
       - re-recorded with `GOLDEN_UPDATE=1`;
@@ -2393,9 +2510,14 @@ slice 2 also touches beyond the items above are `app/useDocumentInEngine.ts`
       - `keyboard.spec.ts:30` and `app.ts:315` click "Preview";
       - `app.ts`'s `approve(page, undefined)` confirms the approval dialog
         whenever it opens, since removed kinds now open it for most fixtures;
-      - new cases: marking and spreading a flattened form value, the
-        extra-letters refusal with its highlight, a zero-mark export, and
-        Preview;
+      - new cases: marking and spreading a flattened form value
+        (`spreading.spec.ts`), and in `preview.spec.ts` the extra-letters
+        refusal with its highlight (CUJ 8), a zero-mark export judged against
+        the stored working copy (CUJ 4), and a partly covered drawing refused
+        until the box covers it, while another document exports (CUJ 3).
+        Until slice 5's `drawings` check, the outside checker judges that
+        output with `absent`, `structure` and `rendered` only, so the
+        stroke's removal under the box is shown by the gate alone;
       - `redact.spec.ts:264`'s assertion becomes the `mark-lost` sentence,
         "A mark on page 1 no longer matches the page. Mark it again.", since
         `tamperApply` (256–265) now trips the guard;
@@ -2703,8 +2825,9 @@ document as `prepare-failed`; check mode returns `"unplaced"` for it.
 
 **The trailer's `Encrypt`** is kept, and not walked, until step 8's
 `encrypt=none` drops it: MuPDF goes on encrypting what it writes until then,
-so with the key deleted in step 7, step 7a wrote encrypted streams with no
-`Encrypt` to read them by, and step 9 refused `edit-locked.pdf`. Being
+so with the key deleted in step 7, slice 2's step 7a, a save before step 8,
+wrote encrypted streams with no `Encrypt` to read them by, and step 9
+refused `edit-locked.pdf`. Being
 kept, it records no kind. Check mode, which step 9 runs, reports an `Encrypt`
 still there, so a file whose encryption survived step 8 is refused.
 
@@ -2857,11 +2980,11 @@ check mode returns `"unplaced"` for it.
   under `DCTDecode` or `JPXDecode` whose filters are all lossless (the set
   above) is written again from its decoded bytes, with no `Filter` or
   `DecodeParms`, so bytes after a filter's end of data, which no reader
-  decodes, go; step 7a's save compresses it with Flate (slice 2 answer 10).
+  decodes, go; step 8's save compresses it with Flate (slice 2 answer 10).
   It records no kind. A stream with any other filter is kept as it is:
   `CCITTFaxDecode`, `JBIG2Decode`, `Crypt`, an unknown name or a non-name,
   with any lossless layers ahead of them. MuPDF holds each decoded copy
-  until step 7a's save (Risks).
+  until step 8's save (Risks).
 - **Check mode,** which step 9 runs, reports an image whose data still
   holds what is dropped here (`" (image data)"`) and a filter still ahead of
   image data (`" (a filter over image data)"`).

@@ -25,6 +25,8 @@ interface PageListProps {
   readonly onPick: (type: MarkTypeOption) => void;
   readonly onCancel: () => void;
   readonly onHighlight: (mark: Mark["id"] | undefined) => void;
+  /** Where a refused Preview points: boxes on one page. */
+  readonly refused: { readonly page: number; readonly boxes: readonly Box[] } | undefined;
 }
 
 /** The space around the pages, in CSS pixels. Fitting a page to the pane leaves it free. */
@@ -76,6 +78,7 @@ export function PageList(props: PageListProps) {
           onVisible={(detail) => props.onVisible(page.index, detail)}
           onMark={(target) => props.onMark({ target, selection: undefined })}
           onHighlight={props.onHighlight}
+          refused={props.refused?.page === page.index ? props.refused.boxes : []}
         >
           {end?.page === page.index && (
             <PickerAt

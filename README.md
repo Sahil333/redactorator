@@ -9,8 +9,7 @@ The app (`./app`, React 19) talks to one `Engine` object. The engine core keeps
 projects in a folder the user picks, or in the browser's private storage. It
 does all PDF work in a Web Worker that runs MuPDF compiled to WebAssembly
 (vendored in `vendor/mupdf`). A cleaned file is written with the marked text
-deleted, then re-opened and checked before the user can save it. Line art is
-the exception today; see Global Invariants.
+deleted, then re-opened and checked before the user can save it.
 
 The core never names a browser API. It asks for a worker channel, a project
 lock and a store through ports, and `engine/host-browser` fills them.
@@ -80,16 +79,19 @@ engine/pdf/worker.ts (Web Worker, MuPDF) ◄────────────
   `engine/pdf/write/redact.ts:redact` removes the glyphs under each mark
   (judged on each text mark's ink band, or on a drawn box) and sets image
   pixels under each box to one value, and only then draws the boxes. `engine/pdf/write/index.ts:writeAndCheck` re-opens the result and
-  `engine/pdf/write/check.ts:check` throws `CheckFailed` when text or image
-  content is left under a box, when the trailer `Info` or catalog `Metadata`
-  is still there, or when the file is not one unencrypted revision. A failed
-  check produces no output (`engine/pdf/apply.ts:apply`). The exact limits of
+  `engine/pdf/write/check.ts:check` throws `WriteRefused` when text or image
+  content is left under a box, when unmarked letters are gone or moved, when
+  a box covers part of a drawing, or when the file fails the structural check
+  preparation also runs (one unencrypted revision, no annotations or form, no
+  key outside the allowlist). A failed check produces no output
+  (`engine/pdf/apply.ts:apply`), and the app says why from its code. The exact limits of
   each check are in [engine/pdf/write/README.md](./engine/pdf/write/README.md).
-- Known gap: line art. `redact` removes a vector path only when a box covers
-  all of it (`REDACT_LINE_ART_REMOVE_IF_COVERED`). A path a box only partly
-  covers stays in the file under the painted box, and `check` does not look at
-  line art. This is a planned Phase 3 leak fixture (`docs/HLD.md`,
-  `docs/Implementation-Plan.md`).
+- A box that covers part of a drawing is refused. `redact` removes each part of
+  a vector path (each move step) that a box covers whole
+  (`REDACT_LINE_ART_REMOVE_IF_COVERED`). The gate refuses the file when a box
+  overlaps any other part, unless that part is a single axis-aligned
+  rectangle or straight line, which hides nothing outside the box
+  (`partly-covered-drawing`; docs/designs/pdf-leak-suite.md, part 6).
 - Zone imports are limited by `.fallowrc.json` `boundaries.rules`, which
   `pnpm test` checks with `fallow architecture --boundaries`. `app` may import
   only `model`, `storage`, `api` and `host-browser`. One line is exempt:

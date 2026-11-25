@@ -33,6 +33,8 @@ interface MarksPanelProps {
   readonly onKeepHere: (mark: Mark) => void;
   /** Labelling mode only: gives each item a link id field. */
   readonly onLink?: (mark: Mark, linkId: string) => void;
+  /** Marks that no longer match the page, which the user marks again. */
+  readonly lost: ReadonlySet<Mark["id"]>;
 }
 
 type View = "document" | "project" | "new";
@@ -113,6 +115,8 @@ interface ItemRowProps extends Pick<MarksPanelProps, "canMark" | "typeOptions" |
   readonly highlighted: boolean;
   /** Whether it is a box that no approval will spread, being mostly on no image. */
   readonly stays: boolean;
+  /** Whether a mark of it no longer matches the page. */
+  readonly lost: boolean;
   readonly onRemove: () => void;
   /** Given when its value is hidden across the project, so it can be kept visible here alone. */
   readonly onKeepHere: (() => void) | undefined;
@@ -127,7 +131,7 @@ function removeOnDelete(event: KeyboardEvent, canMark: boolean, remove: () => vo
   remove();
 }
 
-function ItemRow({ item, highlighted, stays, canMark, typeOptions, onHighlight, onRetype, onLink, onRemove, onKeepHere }: ItemRowProps) {
+function ItemRow({ item, highlighted, stays, lost, canMark, typeOptions, onHighlight, onRetype, onLink, onRemove, onKeepHere }: ItemRowProps) {
   const [retyping, setRetyping] = useState(false);
   const [mark] = item;
   const where = `${markName(mark)} on ${placesLabel(item)}`;
@@ -149,6 +153,7 @@ function ItemRow({ item, highlighted, stays, canMark, typeOptions, onHighlight, 
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           {isNew && <span className="shrink-0 rounded bg-accent px-1 py-px text-[10px] leading-3 font-medium text-white">New</span>}
+          {lost && <span className="shrink-0 rounded bg-mark px-1 py-px text-[10px] leading-3 font-medium text-white">Mark again</span>}
           <PageLink page={firstPage(mark.target)} mark={mark.id} className="block min-h-6 min-w-0 truncate leading-6 hover:underline">
             {markName(mark)}
           </PageLink>
@@ -217,24 +222,43 @@ function staysPut({ target }: Mark, images: readonly PlacedImage[] | undefined):
   return target.kind === "box" && target.image === undefined && images !== undefined && anchorOf(target.page, target.box, images) === undefined;
 }
 
-export function MarksPanel({ id, width, marks, hidden, reach, images, highlighted, onRemove, onKeepHere, ...row }: MarksPanelProps) {
-  const [view, setView] = useState<View>("document");
+/**
+ * Where focus goes once a removed item's row is gone: the row now in its place, or the heading.
+ * Call `removing` with the row's index just before it is removed.
+ */
+function useFocusAfterRemove(marks: readonly Mark[]) {
   const listRef = useRef<HTMLUListElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  // Where focus goes once a removed item's row is gone: the row now in its place, or the heading.
-  const focusAfterRemove = useRef<number | undefined>(undefined);
-  const hiddenKeys = new Set(hidden.map((value) => value.key));
-  const newMarks = marks.filter((mark) => mark.isNew);
-  const items = itemsOf(view === "new" ? newMarks : marks);
-
+  const after = useRef<number | undefined>(undefined);
   useEffect(() => {
-    const index = focusAfterRemove.current;
+    const index = after.current;
     if (index === undefined) return;
-    focusAfterRemove.current = undefined;
+    after.current = undefined;
     const links = listRef.current?.querySelectorAll("a");
     const next = links?.[Math.min(index, links.length - 1)];
     (next ?? headingRef.current)?.focus();
   }, [marks]);
+  return {
+    listRef,
+    headingRef,
+    removing: (index: number) => {
+      after.current = index;
+    },
+  };
+}
+
+/** "Don't hide here" for a mark whose value is hidden across the project; nothing for another. */
+function keepHereFor(mark: Mark, hiddenKeys: ReadonlySet<string>, keep: () => void): (() => void) | undefined {
+  const key = markKey(mark);
+  return key !== undefined && hiddenKeys.has(key) ? keep : undefined;
+}
+
+export function MarksPanel({ id, width, marks, hidden, reach, images, highlighted, lost, onRemove, onKeepHere, ...row }: MarksPanelProps) {
+  const [view, setView] = useState<View>("document");
+  const { listRef, headingRef, removing } = useFocusAfterRemove(marks);
+  const hiddenKeys = new Set(hidden.map((value) => value.key));
+  const newMarks = marks.filter((mark) => mark.isNew);
+  const items = itemsOf(view === "new" ? newMarks : marks);
 
   const empty = view === "new" ? "No marks are new here." : "Select text or draw a box on a page to mark it for removal.";
   return (
@@ -254,26 +278,22 @@ export function MarksPanel({ id, width, marks, hidden, reach, images, highlighte
         <ul ref={listRef} className="min-h-0 flex-1 overflow-y-auto border-t border-rule">
           {items.map((item, index) => {
             const [mark] = item;
-            const key = markKey(mark);
             return (
               <ItemRow
                 key={itemKey(mark)}
                 item={item}
                 highlighted={item.some((each) => each.id === highlighted)}
                 stays={staysPut(mark, images)}
+                lost={item.some((each) => lost.has(each.id))}
                 {...row}
                 onRemove={() => {
-                  focusAfterRemove.current = index;
+                  removing(index);
                   onRemove(mark);
                 }}
-                onKeepHere={
-                  key !== undefined && hiddenKeys.has(key)
-                    ? () => {
-                        focusAfterRemove.current = index;
-                        onKeepHere(mark);
-                      }
-                    : undefined
-                }
+                onKeepHere={keepHereFor(mark, hiddenKeys, () => {
+                  removing(index);
+                  onKeepHere(mark);
+                })}
               />
             );
           })}

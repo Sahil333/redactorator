@@ -4,6 +4,8 @@ interface DropZoneProps {
   readonly ref?: Ref<HTMLElement>;
   /** Shown above the content: why the last open, add or apply failed. */
   readonly error: string | undefined;
+  /** Given when the error can be put away, such as a refused Preview's highlight on the page. */
+  readonly onDismissError?: () => void;
   readonly onFiles: (files: readonly File[]) => void;
   readonly onScroll?: (event: UIEvent<HTMLElement>) => void;
   readonly children: ReactNode;
@@ -52,7 +54,7 @@ function droppedFiles(transfer: DataTransfer): Promise<File[]> {
 }
 
 /** The centre pane: it scrolls its content and takes PDFs, and folders of them, dropped on it. */
-export function DropZone({ ref, error, onFiles, onScroll, children }: DropZoneProps) {
+export function DropZone({ ref, error, onDismissError, onFiles, onScroll, children }: DropZoneProps) {
   const [dragging, setDragging] = useState(false);
 
   function onDrop(event: DragEvent) {
@@ -76,9 +78,16 @@ export function DropZone({ ref, error, onFiles, onScroll, children }: DropZonePr
       className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-auto bg-paper-sunk ${dragging ? "outline-2 -outline-offset-4 outline-accent outline-dashed" : ""}`}
     >
       {error !== undefined && (
-        <p role="alert" className="m-4 mb-0 rounded-md border border-mark/40 bg-fail-wash px-3 py-2 text-mark">
-          {error}
-        </p>
+        <div className="m-4 mb-0 flex items-baseline gap-3 rounded-md border border-mark/40 bg-fail-wash px-3 py-2">
+          <p role="alert" className="flex-1 text-mark">
+            {error}
+          </p>
+          {onDismissError !== undefined && (
+            <button type="button" onClick={onDismissError} className="min-h-6 rounded px-2 text-ink-muted hover:bg-paper-raised hover:text-ink">
+              Dismiss
+            </button>
+          )}
+        </div>
       )}
       {children}
     </main>

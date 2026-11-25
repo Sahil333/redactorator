@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 
 /**
  * The button a keyboard user wants next replaces the one they pressed: Download after
- * Apply and check, and Apply and check after Back to editing.
+ * Preview, and Preview after Back to editing.
  */
 export function useHandOffFocus(previewing: boolean) {
   const applyRef = useRef<HTMLButtonElement>(null);

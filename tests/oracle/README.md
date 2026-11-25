@@ -112,6 +112,8 @@ rotation and crop applied):
 | `hybrid-xfa.pdf` | 612 × 792 | "Client name:" and a filled text field "Jane Roe" over `[160 734 360 754]`, with an XFA stream beside the form whose datasets hold `4400 9904`, which the page never shows |
 | `xfa-form.pdf` | 612 × 792 | "Please wait...", the page an XFA form shows to a reader without XFA; its catalog's form names an XFA stream, so adding it is refused |
 | `visibility-expression.pdf` | 612 × 792 | "Rule page" and a free-text note "On a rule" over `[72 600 300 630]` on a layer rule written as a `/VE` expression, which preparation refuses |
+| `tall-letter-boxes.pdf` | 612 × 792 | Helvetica under a font descriptor that declares its letters 2,000 units tall (`/Ascent 1000 /Descent -1000`): "Above the name" at x 72, baseline y 700, and "Dear Jane Roe here" 13 pt below ("Jane" at x 101.3–127.4). MuPDF's redaction removes a letter whose declared box meets the area, so removing "Jane" would also remove "name" above it (CUJ 8) |
+| `signature-stroke.pdf` | 612 × 792, two pages | Page 1: "Dear Jane Roe, thank you for writing to us." Page 2: "Signed" at x 100, baseline y 680, and a signature drawn as one stroke of four curves, 1.5 pt wide, from (100, 620) to (300, 605), whose control points reach x 100–300, y 560–690 (CUJ 3) |
 
 ## Leak vectors
 

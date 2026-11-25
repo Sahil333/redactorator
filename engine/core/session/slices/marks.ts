@@ -54,7 +54,7 @@ function edited(document: ProjectDocument, change: SessionChange): { readonly ed
   };
   switch (change.type) {
     case "markAdded":
-      return { edits: { marks: [...marks, change.mark], shown }, kind: "edit" };
+      return { edits: { marks: [...marks.filter((each) => !change.replaces.includes(each.id)), change.mark], shown }, kind: "edit" };
     case "markRetyped":
       return { edits: { marks: onItem(change.markId, (each) => ({ ...each, type: change.markType })), shown }, kind: "edit" };
     case "markRemoved": {

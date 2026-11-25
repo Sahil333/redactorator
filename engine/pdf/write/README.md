@@ -7,11 +7,13 @@ copy of the document's working copy, which preparation made from the user's
 file ([../prepare/README.md](../prepare/README.md)), deletes the text, image pixels and wholly
 covered vector paths under each mark, draws the boxes (and optional labels),
 strips metadata, saves the file as a single revision without encryption, then
-re-opens the result and checks it. If a check fails it throws `CheckFailed`.
+re-opens the result and checks it (the gate). When it refuses the file it
+throws `WriteRefused`, with a code and where it applies, never document text.
 Other errors propagate as plain errors. Either way no output is returned.
-A vector path a box covers only in part is not removed (see Invariants).
 
-The only caller is `engine/pdf/apply.ts` (see [../README.md](../README.md)).
+The only caller is `engine/pdf/apply.ts` (see [../README.md](../README.md)). A document with
+no edits never reaches this folder: `apply.ts` checks the working copy's
+structure and posts it unchanged.
 
 ## Interface
 
@@ -19,22 +21,23 @@ Public entry (`index.ts`):
 
 - `writeAndCheck(original: mupdf.PDFDocument, bytes: Uint8Array, edits: readonly Edit[], appearance: Appearance): { bytes: Uint8Array<ArrayBuffer>; output: mupdf.PDFDocument }`
   writes the cleaned file and checks it. On success the caller owns `output`
-  and must `destroy()` it.
-- `CheckFailed` (class, extends `Error`, re-exported from `common.ts`): its
-  `message` is a reason the user sees.
+  and must `destroy()` it. `original` is the open working copy, `bytes` its
+  bytes.
+- `WriteRefused` (class, extends `Error`, from `common.ts`): `code`, a
+  `WriterErrorCode` (`engine/model/errors.ts`), and `data?: { page?: PageIndex; boxes?: readonly Box[] }`
+  (`RefusalData`). The app words each code (`app/errors.ts`).
+- `openPdf(bytes)`, re-exported from `common.ts`: opens `bytes.slice(0)` as a
+  `PDFDocument`, or throws `WriteRefused("apply-failed")` when they don't open
+  as one. It opens the written output, the input bytes (`redact.ts:redact`)
+  and, in `apply.ts`, the copy of a working copy downloaded unchanged.
 
 Used inside the folder:
 
-- `common.ts`: `Redaction { box, textArea, printed }`, `openPdf(bytes)`.
-  `openPdf` throws `CheckFailed` ("The cleaned file could not be read back.")
-  when the bytes do not open as a `PDFDocument`. It opens both the written
-  output (`index.ts:writeAndCheck`) and the input bytes (`redact.ts:redact`).
+- `common.ts`: `Redaction { box, textArea, printed }`.
 - `redact.ts`: `redactionsByPage(original, edits): Map<PageIndex, Redaction[]>`,
   `redact(bytes, byPage, appearance): Uint8Array<ArrayBuffer>`.
 - `check.ts`: `check(original, output, byPage, appearance): void` (RED-3).
-  `original` is the working copy written from. It reads glyphs with
-  `../glyphs.ts:glyphsOf` and the options it read with before Phase 3
-  (`"preserve-whitespace"`); slice 3 moves it to `READING_OPTIONS`.
+  It reads glyphs with `../glyphs.ts:glyphsOf` and `READING_OPTIONS`.
 
 `Edit` and `Appearance` come from `engine/model/document.ts`. `Box` and
 `PageIndex` come from `engine/model/geometry.ts`.
@@ -44,14 +47,16 @@ Used inside the folder:
 - **Delete, then cover.** For each page, `redact.ts:redact` first applies
   Redact annotations over each `textArea` with `REDACT_TEXT_REMOVE`. It then
   applies them over each `box` with `REDACT_IMAGE_PIXELS` and
-  `REDACT_LINE_ART_REMOVE_IF_COVERED`. Only after both passes does
-  `drawBoxes` paint the filled boxes.
-- **Line art is removed only when wholly covered.** With
-  `REDACT_LINE_ART_REMOVE_IF_COVERED` (`redact.ts:redact`), MuPDF removes a
-  vector path only when a box covers all of it. A path a box only partly
-  covers stays in the file under the painted box, and `check` never inspects
-  line art or shadings. This is a known leak, tracked as a Phase 3 leak
-  fixture in `docs/HLD.md` and `docs/Implementation-Plan.md`.
+  `REDACT_LINE_ART_REMOVE_IF_COVERED`, deletes the empty `/Annots` array the
+  applied annotations leave, and only then `drawBoxes` paints the filled boxes.
+- **Line art is removed only when wholly covered, and a partial cover is
+  refused.** MuPDF removes each part of a path (each move step) whose bounds
+  a box contains. Its bounds for a stroke include the miter allowance, up to
+  the miter limit times half the line width, so a box must reach that far past
+  a stroked line to cover it. The gate refuses with `partly-covered-drawing` a
+  part a box overlaps unless it is a single axis-aligned rectangle (move, three
+  lines, close) or a single straight line (move, line), and any part still
+  wholly under a box other than our own boxes (`check.ts:partlyCoveredDrawing`).
 - **Text area is the ink, not the font box.** A text edit's `textArea` is the
   letters' ink band from `readText(...).ink`, so that removal does not reach
   into closely set neighbouring lines (`common.ts:Redaction.textArea`,
@@ -59,13 +64,15 @@ Used inside the folder:
 - **A text mark's box stops at the next line's letters.** Its box starts as the
   letters' full font height, which on lines set closer than that reaches the
   letters of the line above or below. Before writing, each such box is trimmed
-  clear of the letters no mark removes (read with `CHECK_OPTIONS`), never into
-  its own `textArea`, so it hides nothing the file keeps
+  clear of the letters no mark removes (read with `READING_OPTIONS`), never
+  into its own `textArea`, so it hides nothing the file keeps
   (`redact.ts:trimmed`; `tight-lines.pdf`).
-- **Marks must match the text.** If a text edit runs past the page's
-  characters, covers no line boxes, or its line boxes and ink bands differ in
-  count, `textAreas` throws `CheckFailed`. If an edit names a page past `countPages()`,
-  `redactionsByPage` throws a plain `Error`. In both cases the write stops.
+- **The guard: marks must match the text.** If a text edit runs past the
+  page's characters, its letters there (`rangeText`) are not its `text`, it
+  covers no line boxes, or its line boxes and ink bands differ in count,
+  `textAreas` throws `WriteRefused("mark-lost", { page })`. If an edit names a
+  page past `countPages()`, `redactionsByPage` throws a plain `Error`. In both
+  cases the write stops.
 - **Every write starts from the bytes given.** `openPdf` opens
   `bytes.slice(0)`, and `redact` works on its own document, which it destroys
   in `finally`. The `original` document is only read
@@ -87,42 +94,40 @@ Used inside the folder:
 - **Metadata removed.** `redact` deletes the trailer `Info`, `Root/Metadata`,
   and every page's `Metadata`. It saves with
   `"garbage=4,compress,encrypt=none"`: a full rewrite, one revision, objects
-  nothing refers to are dropped, and there is no encryption.
+  nothing refers to are dropped, and there is no encryption. Patch 0005 keeps
+  a stream's data through that save even when its dictionary is held
+  elsewhere (`vendor/mupdf/README.md`).
 - **Checks before return (fail closed).** `check.ts:check` throws
-  `CheckFailed` in any of these cases:
-  - the output does not have exactly one version;
-  - the trailer has `Encrypt`;
-  - the trailer has `Info` or `Root/Metadata`;
-  - on any redacted page, a non-whitespace letter of the original that no
-    `textArea` touches is missing or has moved by more than 0.05 pt
-    (`glyphs.ts:textMoved`). A letter counts as touched when a `textArea`
-    overlaps its `body` or contains its centre. For a text edit the
-    `textArea` is the ink band, which is smaller than the box;
-  - a non-whitespace glyph overlaps a box with its `body`, and its centre is
-    not inside any box (`textUnderBoxes`). The `body` runs only from the
-    baseline up to 0.7 × font size (`geometry.ts:bodyOf`), so descenders and
-    anything above that height can sit under a box without failing. A glyph
-    whose centre is inside any box is exempt here;
-  - the glyphs centred in a box, with all whitespace removed, differ from its
-    label with all whitespace removed (or from nothing when labels are off)
-    (`textUnderBoxes`);
-  - any image or image mask under a box is not one uniform value across the
-    pixels the box overlaps (`imagesUnderBoxes`, `blankUnder`).
+  `WriteRefused` in any of these cases, in this order:
+  - `check-failed`: the output fails the shared structural check
+    (`../structure.ts:checkStructure`: one unencrypted revision, no
+    annotations, no form, no key outside the allowlist);
+  - on each redacted page, comparing the working copy's letters with the
+    output's (`../glyphs.ts`):
+    - `extra-text-removed`, with the boxes of the letters: a non-whitespace
+      letter no `textArea` touches is gone from its baseline
+      (`missingGlyphs`). A letter counts as touched when a `textArea`
+      overlaps its `body` or contains its centre;
+    - `text-moved`: such a letter is only elsewhere on its baseline
+      (`movedGlyphs`);
+  - `check-failed`, with the page: a non-whitespace glyph overlaps a box with
+    its `body` and its centre is not inside any box, or the glyphs centred in
+    a box, without whitespace, differ from its label (or from nothing when
+    labels are off) (`textUnderBoxes`); or an image or image mask under a box
+    is not one uniform value across the pixels the box overlaps
+    (`imagesUnderBoxes`, `blankUnder`). The `body` runs only from the
+    baseline up to 0.7 × font size (`geometry.ts:bodyOf`);
+  - `partly-covered-drawing`, with the page and the box: the drawing rule
+    above.
 
-  An error raised while judging an image counts as a failure
-  (`imagesUnderBoxes`: `failed`).
-- **Which errors are `CheckFailed`.** Inside `check`, only errors raised while
-  judging an image are caught and turned into a failed check. Any other throw
-  propagates as a plain `Error`: from `withPage`, `glyphsOf` or `page.run`,
-  or "A box is not a finite size" from `geometry.ts:around`. A plain
-  `Error` from `redactionsByPage` (page past `countPages()`) or from MuPDF
-  during `redact` propagates the same way. `apply.ts` reports these as
-  `apply-failed`, not `check-failed`. Both stop the write.
-- **Scope of the check.** `check` inspects only pages present in `byPage`. It
-  does not re-check page-level `Metadata`, which only `redact` removes. It
-  never inspects line art or shadings: its device collects only
-  `fillImage`, `fillImageMask` and `clipImageMask`
-  (`check.ts:imagesUnderBoxes`).
+  An error raised while judging an image or a path inside MuPDF's device
+  counts as a failure (`check-failed`).
+- **Which errors are `WriteRefused`.** Any other throw propagates as a plain
+  `Error`: from `withPage`, `glyphsOf` or `page.run`, or "A box is not a
+  finite size" from `geometry.ts:around`, and from MuPDF during `redact`.
+  `apply.ts` reports these as `apply-failed`. Both stop the write.
+- **Scope of the check.** `check` judges letters, images and drawings only on
+  pages present in `byPage`; the structural check covers the whole file.
 - **The output is destroyed on failure.** `writeAndCheck` destroys `output` if
   `check` throws, then re-throws.
 - **Boundary.** `.fallowrc.json` zone `pdf-write` may import only `model` and
@@ -140,11 +145,11 @@ Used inside the folder:
   `drawBoxes`, `redact` and `check` are never destroyed explicitly.
 - Mutates only the private copy opened in `redact`. It adds Redact
   annotations, the content streams, the `/RedactLabel` font and, if missing,
-  `Resources`/`Font` dictionaries.
+  `Resources`/`Font` dictionaries, and deletes the empty `/Annots`.
 - No network, storage or DOM access.
 
 ## Verification
 
 - Run: `pnpm test` (this includes `tsc -p engine/pdf`, the
   `fallow architecture --boundaries` check, and the Python oracle in
-  `tests/oracle/`).
+  `tests/oracle/`). The refusals are judged in `tests/e2e/preview.spec.ts`.

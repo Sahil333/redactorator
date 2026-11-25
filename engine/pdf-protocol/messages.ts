@@ -102,7 +102,7 @@ export type PdfReply =
       readonly image: Pixels;
     }
   | { readonly type: "text"; readonly file: FileNumber; readonly page: PageIndex; readonly text: PageText }
-  // Sent only when the output passed every check; otherwise an error with code check-failed.
+  // Sent only when the output passed every check; otherwise an error with the refusal's code.
   | { readonly type: "applied"; readonly file: FileNumber; readonly bytes: ArrayBuffer; readonly output: DocumentModel }
   // `file` is undefined only for a request the worker could not read.
   | { readonly type: "error"; readonly file: FileNumber | undefined; readonly error: PdfError };

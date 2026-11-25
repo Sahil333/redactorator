@@ -1131,6 +1131,35 @@ def tight_lines() -> bytes:
     return write_pdf(page_objects("/MediaBox [0 0 612 792]", stream("", content.encode())), "/Root 1 0 R")
 
 
+# tall-letter-boxes.pdf (CUJ 8): a font that declares its letters far taller than it draws them, on
+# lines 13 pt apart. MuPDF removes a letter whose declared box meets a redaction area, so removing
+# "Jane" on the second line also removes the letters of "name" above it, which no mark touches.
+def tall_letter_boxes() -> bytes:
+    content = line(72, 700, 12, "Above the name") + line(72, 687, 12, "Dear Jane Roe here")
+    objects = page_objects("/MediaBox [0 0 612 792]", stream("", content.encode()))
+    objects[3] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FontDescriptor 6 0 R >>"
+    objects.append(b"<< /Type /FontDescriptor /FontName /Helvetica /Flags 32 /FontBBox [-200 -1000 1000 1000] /ItalicAngle 0"
+                   b" /Ascent 1000 /Descent -1000 /CapHeight 718 /StemV 88 >>")
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# signature-stroke.pdf (CUJ 3): page 1 is a letter, and page 2 a signature drawn as one long stroke of
+# curves under "Signed", over user space x 100-300, y 600-660.
+def signature_stroke() -> bytes:
+    stroke = ("q 0 0 0.5 RG 1.5 w 100 620 m 120 680 140 560 160 630 c 180 690 200 570 220 625 c"
+              " 240 680 260 590 280 640 c 290 660 300 610 300 605 c S Q\n")
+    pages = [line(72, 700, 12, "Dear Jane Roe, thank you for writing to us."), line(100, 680, 12, "Signed") + stroke]
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        *[stream("", content.encode()) for content in pages],
+    ]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
 def image_filter_not_last() -> bytes:
     """A JPEG whose image filter is followed by another, so its data can't be cut: preparation refuses the file."""
     w, h = SPACES_SIZE
@@ -1217,6 +1246,7 @@ if __name__ == "__main__":
                         ("image-filter-names", image_filter_names), ("image-filter-not-last", image_filter_not_last),
                         ("two-roles", two_roles), ("jpx-data", jpx_data), ("data-after-end", data_after_end), ("tight-lines", tight_lines), ("inherited-text-state", inherited_text_state), ("shading-graphics-state", shading_graphics_state),
                         ("abbreviated-stream-keys", abbreviated_stream_keys), ("hybrid-xfa", hybrid_xfa), ("grey-soft-masks", grey_soft_masks), ("image-prefilters", image_prefilters), ("jpeg-extension", jpeg_extension), ("jpeg-long-adobe", jpeg_long_adobe), ("icc-under-dct", icc_under_dct), ("inline-jpeg", inline_jpeg),
+                        ("tall-letter-boxes", tall_letter_boxes), ("signature-stroke", signature_stroke),
                         *[(f"marked-{where}", lambda where=where: marked_elsewhere(where)) for where in MARKED]]:
         (FIXTURES / f"{name}.pdf").write_bytes(build())
         print(f"wrote fixtures/{name}.pdf")

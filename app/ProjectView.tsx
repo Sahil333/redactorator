@@ -100,13 +100,14 @@ function Alerts({ saveFailed, problems }: { readonly saveFailed: boolean; readon
 }
 
 /** The open document's place in the project's review, for the workspace. */
-function reviewOf(session: Session, { project, reach, newFrom }: SessionState, document: ProjectDocument | undefined): Review {
+function reviewOf(session: Session, { project, reach, newFrom, documentStatus }: SessionState, document: ProjectDocument | undefined): Review {
   return {
     file: document?.file ?? "",
     hidden: project.hidden,
     reach,
     newFrom,
     approved: document?.review === "approved",
+    lost: new Set(document && documentStatus.get(document.id)?.lost),
     onKeepHere: (mark) => {
       if (document !== undefined) session.marks.keepHere(document.id, mark.id);
     },
@@ -151,7 +152,6 @@ function useEditing(
     appearance: settings.appearance,
     onAppearance,
     applyRef: focus.applyRef,
-    hasMarks: marking.marks.length > 0,
     busy,
     onApply: () => {
       onFailure.clear();
@@ -311,6 +311,7 @@ export function ProjectView(props: ProjectViewProps) {
             canMark={can.mark}
             error={failure.error}
             onFailure={failure.failed}
+            onDismissError={failure.clear}
             marks={marking}
             review={reviewOf(session, props.opened, activeDocument)}
             images={images}

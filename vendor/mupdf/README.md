@@ -1,14 +1,16 @@
 # MuPDF.js, patched
 
 The app uses this build of MuPDF.js 1.28.6 instead of the npm package. It is the official
-1.28.6 source with four patches:
+1.28.6 source with five patches:
 - two fixes to how redaction keeps the text around a removed word in place. Without them,
   removing text can move the rest of its line, so the cleaned file's layout changes and the
   next word can slide under the redaction box;
 - three save options that preparation uses to clean a file before marking (Phase 3,
   `docs/designs/pdf-leak-suite.md` part 5);
 - a fix to the content filter, which lost a text-state change made where no text followed
-  before a form XObject, so the form's text moved.
+  before a form XObject, so the form's text moved;
+- a fix to saving with garbage collection, which wrote a stream as a bare dictionary, without its
+  data, when anything else held a reference to its dictionary.
 
 | Patch | Source | Fixes |
 |---|---|---|
@@ -16,6 +18,7 @@ The app uses this build of MuPDF.js 1.28.6 instead of the npm package. It is the
 | `patches/0002-…` | Ours, not yet in MuPDF | Text after a removal moves back by the width of the first removed character. Happens whenever removal starts after the beginning of a string: in `TJ` arrays, and in `Tj` strings when one character is removed |
 | `patches/0003-…` | Ours, not yet in MuPDF | Adds the save options `drop-hidden-oc` (drop content on layers that are off, and the layer markers), `drop-mc-properties` (a `BDC` with properties other than a layer becomes a `BMC`, a `DP` an `MP`) and `blank-unshown-pixels` (blank image pixels outside the page or every clip, in place, so shared images stay shared). Each runs the sanitize filter. Also fixes layer rules (OCMDs) with `/P /AllOn` or `/AnyOff`, which MuPDF judged wrongly, both when drawing and when dropping |
 | `patches/0004-…` | Ours, not yet in MuPDF | The sanitize filter sends text state (`Tc`, `Tw`, `Tz`, `Tr`, `Ts`) only inside a text object, so a change made in an empty `BT`/`ET` before a form is lost, and the form's text is drawn with the text state sent before it (slice 2 Probe Findings). It now sends pending text state before a form |
+| `patches/0005-…` | Ours, not yet in MuPDF; same cause as MuPDF bug 709830 | A save with `garbage` of 2 or more wrote a stream as a bare dictionary, with no data, when its dictionary holds an indirect reference and anything else also holds that dictionary, such as a live MuPDF.js `PDFObject` (MuPDF.js 1.28.6 keeps each `pdf_obj` twice, so one stays held after `destroy()`). `renumberobjs` stored its renumbered copy in a new, empty xref entry; it now moves the object's own entry first, so the entry keeps its stream (slice 3 Probe Findings) |
 
 The second bug is in `filter_string_in_segments` in `source/pdf/pdf-op-filter.c`: after
 sending the text before a removed character, it records the end of the sent text as the
@@ -37,7 +40,8 @@ https://github.com/Sahil333/mupdf. For patch 0003 it holds a feature request
 it by hand with `node upstream/0003-repro.mjs` (it uses this folder's build unless given
 the path to another `mupdf.js`). Patch 0003 has not been rebased onto master. For patch 0004
 it holds a bug report (`0004-bug-report.md`) and `0004-repro.mjs`, which prints PASS or FAIL.
-None of these has been submitted yet.
+For patch 0005 it holds a comment for MuPDF bug 709830 (`0005-bug-report.md`) and
+`0005-repro.mjs`, which prints PASS or FAIL. None of these has been submitted yet.
 
 ## Rebuilding
 
@@ -56,8 +60,8 @@ tag, and run `git format-patch -1`.
 
 ## Removing
 
-Once a MuPDF.js release has both fixes and the three save options (under these names, or
+Once a MuPDF.js release has the four fixes and the three save options (under these names, or
 others the preparation code is changed to use), set `mupdf` in `package.json` back to that
 npm version, delete this folder, and run the browser tests. Until then a patch can only be
-dropped when its change is in the release this folder builds; patch 0003 also needs the
-`0003-repro.mjs` checks to pass on that release.
+dropped when its change is in the release this folder builds; patches 0003, 0004 and 0005 also
+need their `upstream/000N-repro.mjs` checks to pass on that release.

@@ -132,9 +132,9 @@ test("undo waits while an apply runs", async ({ page }) => {
   await markText(page, 1, janeRoe, "Person");
   await expect(undoButton(page)).toBeEnabled();
 
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
 
-  await expect(page.getByRole("status")).toHaveText("Applying and checking…");
+  await expect(page.getByRole("status")).toHaveText("Previewing…");
   await expect(undoButton(page)).toBeDisabled();
   await expect(page.getByText("Checked:")).toBeVisible();
 });

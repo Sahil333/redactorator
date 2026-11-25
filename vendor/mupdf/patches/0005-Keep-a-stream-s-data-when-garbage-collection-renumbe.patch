@@ -1,0 +1,42 @@
+From fcf146b2955003ec1c229faebdbea586eac1b089 Mon Sep 17 00:00:00 2001
+From: Redactorator build <build@redactorator.invalid>
+Date: Wed, 25 Nov 2026 21:29:35 +0530
+Subject: [PATCH] Keep a stream's data when garbage collection renumbers a
+ shared dictionary
+
+renumberobjs rewrites each object's indirect references. When something
+other than the xref also holds an object's dictionary, renumberobj works
+on a copy, and pdf_update_object stores that copy in the incremental xref
+section. For an object not yet in that section, it gets a new, empty
+entry there, with no stream offset or buffer, and the stream is written
+as a bare dictionary without its data.
+
+Move the object's entry into the incremental section first, as editing
+the object would, so the entry keeps its stream.
+---
+ source/pdf/pdf-write.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/source/pdf/pdf-write.c b/source/pdf/pdf-write.c
+index 860d113..25f6f3d 100644
+--- a/source/pdf/pdf-write.c
++++ b/source/pdf/pdf-write.c
+@@ -558,7 +558,15 @@ static void renumberobjs(fz_context *ctx, pdf_document *doc, pdf_write_state *op
+ 			{
+ 				nval = renumberobj(ctx, doc, opts, obj);
+ 				if (nval != obj)
++				{
++					/* nval is a copy, made because something else also
++					 * holds obj. pdf_update_object stores it in the
++					 * incremental xref section, so move the object's
++					 * entry there first: a new, empty entry would lose
++					 * the stream that obj is the dictionary of. */
++					pdf_xref_ensure_incremental_object(ctx, doc, num);
+ 					pdf_update_object(ctx, doc, num, nval);
++				}
+ 				nval = NULL;
+ 			}
+ 		}
+-- 
+2.55.0
+

@@ -3,7 +3,7 @@
 // fails a test whose fake never acted, and a hold fails when it is released holding nothing.
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import type { ReaderTag } from "../../engine/model/document";
-import { READER_TAG, type PdfReply, type PdfRequest } from "../../engine/pdf-protocol/messages";
+import { READER_TAG, type PdfError, type PdfReply, type PdfRequest } from "../../engine/pdf-protocol/messages";
 
 /** A message as it crosses the wire: the same shape, with plain numbers for branded ones. */
 type Wire<T> = T extends number
@@ -205,6 +205,29 @@ export async function tamperApply(page: Page): Promise<void> {
     });
   });
   await workerFake(page, "tamperApply", { prelude });
+}
+
+/**
+ * The PDF worker refuses each Preview with the next of `errors` in turn, as its gate would, without
+ * writing: for refusals no synthetic fixture brings about.
+ */
+export async function refuseApply(page: Page, errors: readonly Wire<PdfError>[]): Promise<void> {
+  const prelude = sourceOf(
+    (scope: WorkerScope, acted, errors: Wire<PdfError>[]) => {
+      let next = 0;
+      scope.addEventListener("message", (event) => {
+        const { data } = event;
+        const error = errors[next];
+        if (data.type !== "apply" || error === undefined) return;
+        event.stopImmediatePropagation();
+        next++;
+        acted("refuseApply");
+        scope.postMessage({ type: "error", file: data.file, error });
+      });
+    },
+    [...errors],
+  );
+  await workerFake(page, "refuseApply", { prelude });
 }
 
 /** The PDF worker sends each cleaned output `ms` late. */
