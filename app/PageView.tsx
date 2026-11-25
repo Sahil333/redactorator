@@ -28,6 +28,8 @@ interface PageViewProps {
   /** A box drawn on this page. */
   readonly onMark: (target: MarkTarget) => void;
   readonly onHighlight: (mark: Mark["id"] | undefined) => void;
+  /** Where a refused Preview points on this page, such as the unmarked letters it would remove. */
+  readonly refused: readonly Box[];
   readonly children?: ReactNode;
 }
 
@@ -94,13 +96,14 @@ interface MarkLayerProps {
   readonly highlighted: Mark["id"] | undefined;
   readonly selection: readonly Box[];
   readonly focusBox: Box | undefined;
+  readonly refused: readonly Box[];
 }
 
 /**
  * The marks, a new mark waiting for its type, and the selection being made. Only the highlighted
  * mark shows its type, on a tag above it, so tags never cover the text above the other marks.
  */
-function MarkLayer({ page, marks, pending, highlighted, selection, focusBox }: MarkLayerProps) {
+function MarkLayer({ page, marks, pending, highlighted, selection, focusBox, refused }: MarkLayerProps) {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
       {marks.flatMap((mark) =>
@@ -125,6 +128,9 @@ function MarkLayer({ page, marks, pending, highlighted, selection, focusBox }: M
         ))}
       {selection.map((box, index) => (
         <div key={index} className="absolute border border-accent bg-accent/20" style={boxStyle(page, box)} />
+      ))}
+      {refused.map((box, index) => (
+        <div key={`refused-${index}`} data-refused="" className="absolute bg-fail-wash/60 outline-2 outline-mark outline-dotted" style={boxStyle(page, box)} />
       ))}
       {focusBox && <InView page={page} box={focusBox} />}
     </div>
@@ -181,6 +187,7 @@ export function PageView({
   onVisible,
   onMark,
   onHighlight,
+  refused,
   children,
 }: PageViewProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -208,6 +215,7 @@ export function PageView({
         highlighted={highlighted}
         selection={[...pointer.drawn, ...keys.draft, ...text.boxes]}
         focusBox={keys.focusBox}
+        refused={refused}
       />
       {tool !== undefined && (
         <>

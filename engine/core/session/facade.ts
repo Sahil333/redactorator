@@ -2,7 +2,7 @@ import type { Result } from "../../api/errors";
 import type { IncomingFile, Session, TargetInput } from "../../api/facade";
 import type { DocumentHandle, EngineState } from "../../api/state";
 import { groundTruth } from "../../model/groundTruth";
-import { markKey, nextId, type Mark, type MarkTarget } from "../../model/marks";
+import { markKey, markPages, nextId, type Mark, type MarkTarget } from "../../model/marks";
 import { customTypeName, type MarkType } from "../../model/markTypes";
 import type { DocumentId, Project, Settings } from "../../model/project";
 import { textTarget, type TextPieceRange, type Texts } from "../../model/selection";
@@ -62,6 +62,15 @@ function targetOf(texts: Texts, handle: DocumentHandle, input: TargetInput): Mar
   const { page, box } = input;
   const onPage = handle.pages.some(({ index }) => index === page);
   return onPage && box.x1 > box.x0 && box.y1 > box.y0 ? { kind: "box", page, box } : "empty-box";
+}
+
+/** The lost marks a new text mark stands for: the same letters, on a page they share (CUJ 7). */
+function markedAgain(lost: readonly Mark[], target: MarkTarget): Mark["id"][] {
+  if (target.kind !== "text") return [];
+  const pages = new Set(markPages(target));
+  return lost
+    .filter(({ target: was }) => was.kind === "text" && was.text === target.text && markPages(was).some((page) => pages.has(page)))
+    .map(({ id }) => id);
 }
 
 /**
@@ -170,7 +179,8 @@ export function openSession(
         if (typeof built === "string") return { ok: false, error: { code: built } };
         const marks = documentIn(record.present.project, handle.document)?.marks ?? [];
         const mark: Mark = { id: nextId(marks), type, linkId: "", target: built, isNew: false };
-        change({ type: "markAdded", document: handle.document, mark });
+        const lost = at.value.parts.documents.get(handle.document)?.lost ?? [];
+        change({ type: "markAdded", document: handle.document, mark, replaces: markedAgain(marks.filter((each) => lost.includes(each.id)), built) });
         rememberType(type);
         return { ok: true, value: { markId: mark.id } };
       },

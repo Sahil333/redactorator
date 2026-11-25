@@ -4,6 +4,7 @@ import * as mupdf from "mupdf";
 import type { RemovalKind } from "../../model/document";
 import { quadCorners, transform, type Point } from "../geometry";
 import { nameAt, objectAt, valuesOf } from "../objects";
+import { drawnParts } from "../paths";
 import { withPage } from "../text";
 import { layersOf, type Layers } from "./layers";
 import { reopen } from "./reopen";
@@ -196,39 +197,10 @@ function anythingOutside(page: mupdf.PDFPage): boolean {
     text.destroy();
   }
   if (outside) return true;
-  const parts = (path: mupdf.Path, ctm: mupdf.Matrix, grow: number) => {
-    const all: Point[][] = [];
-    let part: Point[] = [];
-    const add = (x: number, y: number) => part.push(transform(ctm, [x, y]));
-    path.walk({
-      moveTo(x, y) {
-        if (part.length > 0) all.push(part);
-        part = [];
-        add(x, y);
-      },
-      lineTo: add,
-      curveTo(x1, y1, x2, y2, x3, y3) {
-        add(x1, y1);
-        add(x2, y2);
-        add(x3, y3);
-      },
-    });
-    if (part.length > 0) all.push(part);
-    for (const each of all) {
-      const box = extent(each);
-      if (isOutside(bounds, { x0: box.x0 - grow, y0: box.y0 - grow, x1: box.x1 + grow, y1: box.y1 + grow })) outside = true;
-    }
-  };
-  const device = new mupdf.Device({
-    fillPath: (path, _evenOdd, ctm) => parts(path, ctm, 0),
-    strokePath: (path, stroke, ctm) => parts(path, ctm, stroke.getLineWidth() / 2),
+  drawnParts(page, ({ points }, grow) => {
+    const box = extent(points);
+    if (isOutside(bounds, { x0: box.x0 - grow, y0: box.y0 - grow, x1: box.x1 + grow, y1: box.y1 + grow })) outside = true;
   });
-  try {
-    page.run(device, mupdf.Matrix.identity);
-    device.close();
-  } finally {
-    device.destroy();
-  }
   return outside;
 }
 

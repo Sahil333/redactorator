@@ -48,8 +48,11 @@ The PDF engine runs inside a Web Worker. It answers requests from the UI (see
 - `images.ts`: `placedImages(page, index): PlacedImage[]`.
 - `geometry.ts`: `quadCorners`, `transform`, `around`, `bodyOf`.
 - `glyphs.ts`: `PageGlyph` (with `origin`, where its baseline starts),
-  `glyphsOf(page, options)`, `centre`, `inside`, `overlap`, `missingGlyphs`,
-  `movedGlyphs` and `textMoved`.
+  `glyphsOf(page, options)`, `centre`, `inside`, `overlap`, `missingGlyphs`
+  and `movedGlyphs`.
+- `paths.ts`: `pathParts(path, ctm)`, a drawn path's parts, one from each move
+  step, with their steps and points in page space; the writer's drawing check
+  and preparation's step 6 split paths with it.
 - `allowlist.ts`: `stripToAllowlist(document)` (preparation's step 7) and
   `keyOutsideAllowlist(document)` (its check mode). Both walk every object
   reachable from the trailer and give each a role, one of the Arlington PDF
@@ -68,7 +71,7 @@ The PDF engine runs inside a Web Worker. It answers requests from the UI (see
 - Subdirectory: [prepare/](./prepare/README.md). Preparation,
   `prepareDocument`.
 - Subdirectory: [write/](./write/README.md). The PDF write path,
-  `writeAndCheck` and `CheckFailed`.
+  `writeAndCheck`, `WriteRefused` and `openPdf`.
 
 ## Invariants
 
@@ -87,14 +90,17 @@ The PDF engine runs inside a Web Worker. It answers requests from the UI (see
   `open-failed`. `documentModel` requires every page to have a positive, finite
   size.
 - **Apply fails closed.** `apply.ts:apply` destroys the previous output first.
-  It posts `applied` (with the bytes transferred) only after `writeAndCheck`
-  passed and the output has pages. Any throw destroys the output and posts
-  `check-failed` (for a `CheckFailed`) or `apply-failed` (for anything else).
-  In both cases the message says "Nothing was exported".
+  With edits, it posts `applied` (with the bytes transferred) only after
+  `writeAndCheck` passed and the output has pages. With none, the working copy
+  is the cleaned file: it posts a copy of the working bytes once
+  `checkStructure` passes on the working copy, and keeps a fresh open of that
+  copy as the output (review answer 6). Any throw destroys the output and
+  posts the `WriteRefused`'s code and data, with no message, or
+  `apply-failed` for anything else; the app words each code.
 - **Error text is fixed.** Every message posted through `fail` or `refused` is
-  a fixed string. At most it adds a page number or a `CheckFailed` message,
-  which is itself fixed text plus a page number. A refusal from preparation
-  carries a code alone. Messages from other caught exceptions are dropped
+  a fixed string, at most with a page number added. Refusals from
+  preparation and from the writer carry a code and, from the writer, where
+  it applies (a page, and boxes), never document text. Messages from other caught exceptions are dropped
   (`apply.ts`, `render.ts`, `text.ts`, `prepare/index.ts`, `read.ts`).
 - **Preparation keeps nothing.** `prepareDocument` destroys every document it
   opened. `prepareFile` posts either `prepared` (the working copy, each page's

@@ -4,9 +4,9 @@ import { check } from "./check";
 import { openPdf } from "./common";
 import { redact, redactionsByPage } from "./redact";
 
-export { CheckFailed } from "./common";
+export { openPdf, WriteRefused } from "./common";
 
-/** Writes the cleaned file from the original's bytes and checks it. */
+/** Writes the cleaned file from the working copy's bytes and checks it. */
 export function writeAndCheck(
   original: mupdf.PDFDocument,
   bytes: Uint8Array,

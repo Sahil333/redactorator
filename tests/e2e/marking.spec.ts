@@ -41,7 +41,8 @@ test("clicking outside the type picker, or tabbing out of it, makes no mark", as
   await expect(picker(page)).toHaveCount(0);
 
   await expect(marksPanel(page)).toContainText("Select text or draw a box");
-  await expect(page.getByRole("button", { name: "Apply and check" })).toBeDisabled();
+  // With no marks, Preview still checks the file, which then downloads as preparation left it.
+  await expect(page.getByRole("button", { name: "Preview", exact: true })).toBeEnabled();
 });
 
 test("a click inside the type picker keeps it open and its keys working", async ({ page }) => {

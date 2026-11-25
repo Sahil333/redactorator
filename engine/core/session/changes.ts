@@ -18,7 +18,8 @@ export interface OutputTag {
 
 /** Every change to the open Session's part of the state. */
 export type SessionChange =
-  | { readonly type: "markAdded"; readonly document: DocumentId; readonly mark: Mark }
+  /** `replaces`: the document's lost marks the new mark stands for, which it takes the place of (CUJ 7). */
+  | { readonly type: "markAdded"; readonly document: DocumentId; readonly mark: Mark; readonly replaces: readonly Mark["id"][] }
   /** Retypes every mark of the item `markId` belongs to, since a value has one type. */
   | { readonly type: "markRetyped"; readonly document: DocumentId; readonly markId: number; readonly markType: MarkType }
   /** Removes every mark of the item `markId` belongs to. */

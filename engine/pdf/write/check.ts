@@ -2,9 +2,12 @@ import * as mupdf from "mupdf";
 import type { Appearance } from "../../model/document";
 import type { Box, PageIndex } from "../../model/geometry";
 import { around, transform, type Point } from "../geometry";
-import { centre, glyphsOf, inside, overlap, textMoved, type PageGlyph } from "../glyphs";
+import { centre, glyphsOf, inside, missingGlyphs, movedGlyphs, overlap, type PageGlyph } from "../glyphs";
+import { drawnParts, type PathPart } from "../paths";
+import { READING_OPTIONS } from "../readingOptions";
+import { checkStructure } from "../structure";
 import { withPage } from "../text";
-import { CHECK_OPTIONS, CheckFailed, type Redaction } from "./common";
+import { WriteRefused, type Redaction } from "./common";
 
 /**
  * Text left on a page under its redaction boxes. Only our own labels may be there: each
@@ -111,25 +114,67 @@ function imagesUnderBoxes(page: mupdf.Page, redactions: readonly Redaction[]): b
   return shows || failed;
 }
 
-/** RED-3: re-read the written file and throw CheckFailed on anything left behind. */
+// How far, in points, a side may lean and still count as horizontal or vertical.
+const ALIGNED = 0.01;
+
+/** A single rectangle with its sides along the page's axes: move, three lines and close. */
+function isRectangle({ steps, points }: PathPart): boolean {
+  if (steps !== "MLLLZ") return false;
+  return points.every(([x, y], i) => {
+    const [nextX, nextY] = points[(i + 1) % points.length] ?? [x, y];
+    return Math.abs(nextX - x) <= ALIGNED || Math.abs(nextY - y) <= ALIGNED;
+  });
+}
+
+const sameBox = (a: Box, b: Box) =>
+  Math.abs(a.x0 - b.x0) <= ALIGNED && Math.abs(a.y0 - b.y0) <= ALIGNED && Math.abs(a.x1 - b.x1) <= ALIGNED && Math.abs(a.y1 - b.y1) <= ALIGNED;
+const within = (box: Box, part: Box) => part.x0 >= box.x0 && part.y0 >= box.y0 && part.x1 <= box.x1 && part.y1 <= box.y1;
+
+/**
+ * The first box that covers part of a drawing it may not: a part MuPDF kept whole because the box
+ * covers only some of it, unless it is a single rectangle or straight line, which hide nothing
+ * outside the box. A part still wholly under a box is refused too, as MuPDF should have removed
+ * it.
+ */
+function partlyCoveredDrawing(page: mupdf.Page, redactions: readonly Redaction[]): Box | "failed" | undefined {
+  let found: Box | "failed" | undefined;
+  const judge = (part: PathPart, grow: number) => {
+    const reach = around(part.points);
+    const bounds = around([
+      [reach.x0 - grow, reach.y0 - grow],
+      [reach.x1 + grow, reach.y1 + grow],
+    ]);
+    // Our own boxes are rectangles exactly the size of one.
+    if (isRectangle(part) && redactions.some(({ box }) => sameBox(box, bounds))) return;
+    const simple = isRectangle(part) || part.steps === "ML";
+    found ??= redactions.find(({ box }) => overlap(box, bounds) && (within(box, bounds) || !simple))?.box;
+  };
+  // A throw inside MuPDF's callback could leave it half run, so failures are only noted here.
+  drawnParts(page, (part, grow) => {
+    try {
+      judge(part, grow);
+    } catch {
+      found = "failed";
+    }
+  });
+  return found;
+}
+
+/** RED-3: re-read the written file and refuse it on anything left behind. */
 export function check(original: mupdf.PDFDocument, output: mupdf.PDFDocument, byPage: Map<PageIndex, Redaction[]>, appearance: Appearance): void {
-  if (output.countVersions() !== 1) throw new CheckFailed("The cleaned file has more than one revision.");
-  const trailer = output.getTrailer();
-  if (!trailer.get("Encrypt").isNull()) throw new CheckFailed("The cleaned file is still encrypted.");
-  if (!trailer.get("Info").isNull() || !trailer.get("Root").get("Metadata").isNull()) {
-    throw new CheckFailed("The cleaned file still has metadata.");
-  }
-  for (const [index, redactions] of byPage) {
-    const cleaned = withPage(output, index, (page) => glyphsOf(page, CHECK_OPTIONS));
+  if (checkStructure(output) !== undefined) throw new WriteRefused("check-failed");
+  for (const [page, redactions] of byPage) {
+    const cleaned = withPage(output, page, (each) => glyphsOf(each, READING_OPTIONS));
+    const before = withPage(original, page, (each) => glyphsOf(each, READING_OPTIONS));
     const textAreas = redactions.map(({ textArea }) => textArea);
-    if (textMoved(withPage(original, index, (page) => glyphsOf(page, CHECK_OPTIONS)), cleaned, textAreas)) {
-      throw new CheckFailed(`Other text on page ${index + 1} would move in the cleaned file.`);
+    const missing = missingGlyphs(before, cleaned, textAreas);
+    if (missing.length > 0) throw new WriteRefused("extra-text-removed", { page, boxes: missing.map(({ box }) => box) });
+    if (movedGlyphs(before, cleaned, textAreas).length > 0) throw new WriteRefused("text-moved", { page });
+    if (textUnderBoxes(cleaned, redactions, appearance) || withPage(output, page, (each) => imagesUnderBoxes(each, redactions))) {
+      throw new WriteRefused("check-failed", { page });
     }
-    if (textUnderBoxes(cleaned, redactions, appearance)) {
-      throw new CheckFailed(`Text is still under a box on page ${index + 1}.`);
-    }
-    if (withPage(output, index, (page) => imagesUnderBoxes(page, redactions))) {
-      throw new CheckFailed(`An image under a box on page ${index + 1} still shows what was under it.`);
-    }
+    const drawing = withPage(output, page, (each) => partlyCoveredDrawing(each, redactions));
+    if (drawing === "failed") throw new WriteRefused("check-failed", { page });
+    if (drawing !== undefined) throw new WriteRefused("partly-covered-drawing", { page, boxes: [drawing] });
   }
 }

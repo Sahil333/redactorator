@@ -82,23 +82,3 @@ export const missingGlyphs = (original: readonly PageGlyph[], cleaned: readonly 
 /** The original's letters that no box touches and that are on the cleaned page only elsewhere on their baseline. */
 export const movedGlyphs = (original: readonly PageGlyph[], cleaned: readonly PageGlyph[], boxes: readonly Box[]): PageGlyph[] =>
   compared(original, cleaned, boxes).moved;
-
-/**
- * Whether a letter of the original page that no box touches is missing from the cleaned page or
- * has moved: removing text must leave the rest where it was. Spaces draw nothing, and a letter a
- * box touches may be removed with the text under it. Each cleaned letter stands for one
- * original, so a letter drawn twice in one place must still be there twice.
- */
-export function textMoved(original: readonly PageGlyph[], cleaned: readonly PageGlyph[], boxes: readonly Box[]): boolean {
-  // The cleaned letters not yet matched to an original, by character.
-  const unmatched = Map.groupBy(cleaned, (glyph) => glyph.c);
-  const touched = (glyph: PageGlyph) => boxes.some((box) => overlap(box, glyph.body) || inside(box, centre(glyph.box)));
-  return original.some((glyph) => {
-    if (glyph.c.trim() === "" || touched(glyph)) return false;
-    const candidates = unmatched.get(glyph.c) ?? [];
-    const match = candidates.findIndex((each) => samePlace(each.box, glyph.box));
-    if (match === -1) return true;
-    candidates.splice(match, 1);
-    return false;
-  });
-}

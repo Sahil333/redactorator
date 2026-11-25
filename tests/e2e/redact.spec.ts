@@ -87,7 +87,7 @@ test("the preview shows the cleaned output before download", async ({ page }) =>
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
 
   await expect(page.getByText("Checked:")).toBeVisible();
   // The page image is drawn at its printed size (96/72 CSS pixels a point) at the screen's pixel ratio.
@@ -99,7 +99,7 @@ test("the preview shows the cleaned output before download", async ({ page }) =>
   expect(centre.slice(0, 3)).toEqual([0, 0, 0]);
 
   await page.getByRole("button", { name: "Back to editing" }).click();
-  await expect(page.getByRole("button", { name: "Apply and check" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Preview", exact: true })).toBeFocused();
   await expect(page.getByRole("complementary", { name: "Marks" })).toContainText("Jane Roe");
 });
 
@@ -260,25 +260,25 @@ test("changing a mark after apply drops the checked output", async ({ page }) =>
   await openPdf(page, oneWordPdf);
   await markText(page, 1, dear, "Other");
   await markText(page, 1, janeRoe, "Person");
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText("Checked:")).toBeVisible();
 
   await page.getByRole("button", { name: "Remove mark Dear on page 1" }).click();
 
   await expect(page.getByText("Checked:")).toHaveCount(0);
   await expect(downloadButton(page)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Apply and check" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Preview", exact: true })).toBeEnabled();
 });
 
-test("a text mark that runs past the page's text blocks the export", async ({ page }) => {
+test("a text mark that runs past the page's text is refused as lost, and nothing is exported", async ({ page }) => {
   await tamperApply(page);
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
 
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
 
-  await expect(page.getByRole("alert")).toHaveText(/^A mark on page 1 does not match the page's text\. Nothing was exported\./);
+  await expect(page.getByRole("alert")).toHaveText("A mark on page 1 no longer matches the page. Mark it again.");
   await expect(downloadButton(page)).toHaveCount(0);
 });
 
@@ -288,14 +288,14 @@ test("changing a mark while apply runs drops the output that arrives after", asy
   await openPdf(page, oneWordPdf);
   await markText(page, 1, dear, "Other");
   await markText(page, 1, janeRoe, "Person");
-  await page.getByRole("button", { name: "Apply and check" }).click();
-  await expect(page.getByRole("status")).toHaveText("Applying and checking…");
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Previewing…");
 
   await page.getByRole("button", { name: "Remove mark Dear on page 1" }).click();
 
   await expect(page.getByRole("status")).toHaveText("Page 1 of 1");
   await expect(page.getByText("Checked:")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Apply and check" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Preview", exact: true })).toBeEnabled();
 });
 
 test("while apply runs, no document can be added, a dropped one says why, and once it is done one can", async ({ page }) => {
@@ -303,13 +303,13 @@ test("while apply runs, no document can be added, a dropped one says why, and on
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await markText(page, 1, janeRoe, "Person");
-  await page.getByRole("button", { name: "Apply and check" }).click();
-  await expect(page.getByRole("status")).toHaveText("Applying and checking…");
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Previewing…");
 
   await expect(page.getByLabel("Add documents")).toBeDisabled();
   await dropFiles(page, page.locator("#page-1"), [twoPagePdf]);
   await expect(page.getByRole("region", { name: "1 file not added" }).getByRole("listitem")).toHaveText([
-    "two-pages.pdf: This file wasn't added while a document was being applied and checked. Add it again once the check is done.",
+    "two-pages.pdf: This file wasn't added while a document was being previewed. Add it again once the preview is done.",
   ]);
   await expect(page.getByText("Checked:")).toBeVisible();
   await expect(inExplorer(page, "two-pages.pdf")).toHaveCount(0);
@@ -329,13 +329,13 @@ test("an error about another request while apply runs leaves the apply running, 
   await page.locator("#page-2").scrollIntoViewIfNeeded();
   await asked();
 
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
 
   await expect(page.getByRole("alert")).toHaveText("Page 2 could not be drawn. Open the PDF again.");
   // Until the apply answers, no mark can be added and no second apply started, so its output
   // cannot land as a later one's.
-  await expect(page.getByRole("status")).toHaveText("Applying and checking…");
-  await expect(page.getByRole("button", { name: "Apply and check" })).toBeDisabled();
+  await expect(page.getByRole("status")).toHaveText("Previewing…");
+  await expect(page.getByRole("button", { name: "Preview", exact: true })).toBeDisabled();
   await expect(page.getByText("Checked:")).toBeVisible();
 
   await page.getByRole("button", { name: "Back to editing" }).click();

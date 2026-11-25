@@ -11,7 +11,7 @@ import { pageText, withPage } from "../text";
 import { flattenAnnotations } from "./annotations";
 import { preparedWell } from "./check";
 import { cleanContent, removeOutside } from "./page";
-import { open, reopen } from "./reopen";
+import { open } from "./reopen";
 
 const STEP_8 = "garbage=4,compress,encrypt=none";
 
@@ -60,12 +60,8 @@ export function prepareDocument(bytes: ArrayBuffer): Prepared | NotPrepared {
     const stripped = stripToAllowlist(document);
     if (stripped === "refused") return failed;
     for (const kind of stripped) removed.add(kind);
-    // MuPDF 1.28.6's garbage collection drops the data of a stream read from the file whose
-    // references it renumbers, once that stream has been read, as the walk above reads every one.
-    // Saved and opened again first, nothing has been read when step 8 renumbers. The save
-    // compresses the streams step 7 wrote again from their decoded bytes, which would otherwise
-    // fill MuPDF's memory as a copy that large.
-    document = reopen(document, "compress");
+    // The walk above still holds every object it resolved; patch 0005 keeps their streams through
+    // this save's garbage collection, whose compress compresses the streams step 7 wrote again.
     const preparedBytes = document.saveToBuffer(STEP_8).asUint8Array().slice();
     document.destroy();
     document = open(preparedBytes);

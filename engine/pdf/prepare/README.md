@@ -45,12 +45,13 @@ copy keeps what a reader sees on screen or in print, and nothing else.
 - **Saved bytes are copied.** `saveToBuffer(...).asUint8Array()` is a view
   into MuPDF's memory, which moves as it grows, so every save is copied
   (`.slice()`) before it is opened again.
-- **Step 8 saves a fresh document.** MuPDF 1.28.6's garbage collection writes
-  a stream, once read and unchanged, that holds a reference the save
-  renumbers, without its data. Step 7 reads every object, so the document is
-  saved with `compress` and opened again first (step 7a, `index.ts`); the
-  `compress` compresses the streams step 7 wrote again from their decoded
-  bytes, which MuPDF holds until that save.
+- **Step 8 saves the document step 7 resolved.** Stock MuPDF 1.28.6's garbage
+  collection writes a stream as a bare dictionary, without its data, when its
+  dictionary holds a reference and anything else holds that dictionary;
+  MuPDF.js keeps every `PDFObject` it resolves for good, and step 7 resolves
+  every object. Patch 0005 fixes it (`vendor/mupdf/README.md`), so step 8
+  saves without reopening first. Its `compress` compresses the streams step 7
+  wrote again from their decoded bytes, which MuPDF holds until that save.
 - **Kinds the filter removes are found before it runs.** One device pass in
   `page.ts:contentKinds` records `hidden-layers` (a layer that is off is used,
   by `beginLayer`, or named in `/OC` by a resource), `marked-content` (the

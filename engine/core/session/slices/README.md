@@ -57,6 +57,9 @@ and the facade do that.
   nor `approved`: an undoable change always records a snapshot and returns a
   new part, even when the wrapped slice changed nothing, and `approved` always
   returns a new part.
+- `markAdded` also drops the lost marks it `replaces`, which the facade
+  works out: the document's lost marks of the same letters on a page the new
+  mark shares (`facade.ts:markedAgain`; CUJ 7).
 - Only `markAdded`, `markRetyped`, `markRemoved` and `keptHere` are undoable
   (`index.ts:isUndoable`). `linked` is labelling data: it is not undone, does
   not count as an edit and leaves the document's review state alone

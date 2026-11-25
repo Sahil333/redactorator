@@ -27,7 +27,7 @@ test("a word is marked, applied and downloaded with the keyboard alone", async (
   await expect(surface).toBeFocused();
   await expect(page.getByRole("complementary", { name: "Marks" })).toContainText("Jane Roe,");
 
-  await tabTo(page, page.getByRole("button", { name: "Apply and check" }));
+  await tabTo(page, page.getByRole("button", { name: "Preview", exact: true }));
   await page.keyboard.press("Enter");
   await expect(page.getByText("Checked:")).toBeVisible();
   await expect(downloadButton(page)).toBeFocused();

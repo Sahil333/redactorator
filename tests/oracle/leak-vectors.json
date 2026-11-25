@@ -10,7 +10,7 @@
     "mark": { "page": 1, "box": [100, 96, 164, 192] },
     "markType": "Photo",
     "expect": "clean",
-    "checks": [{ "check": "pixels", "at": [100, 600, 228, 696], "region": [100, 600, 164, 696] }]
+    "checks": [{ "check": "structure" }, { "check": "pixels", "at": [100, 600, 228, 696], "region": [100, 600, 164, 696] }]
   },
   {
     "id": "image-indexed-under-box",
@@ -23,7 +23,7 @@
     "mark": { "page": 1, "box": [300, 96, 364, 192] },
     "markType": "Photo",
     "expect": "clean",
-    "checks": [{ "check": "pixels", "at": [300, 600, 428, 696], "region": [300, 600, 364, 696] }]
+    "checks": [{ "check": "structure" }, { "check": "pixels", "at": [300, 600, 428, 696], "region": [300, 600, 364, 696] }]
   },
   {
     "id": "image-separation-under-box",
@@ -36,7 +36,7 @@
     "mark": { "page": 1, "box": [100, 296, 164, 392] },
     "markType": "Photo",
     "expect": "clean",
-    "checks": [{ "check": "pixels", "at": [100, 400, 228, 496], "region": [100, 400, 164, 496] }]
+    "checks": [{ "check": "structure" }, { "check": "pixels", "at": [100, 400, 228, 496], "region": [100, 400, 164, 496] }]
   },
   {
     "id": "image-one-pixel-soft-mask-under-box",
@@ -49,7 +49,7 @@
     "mark": { "page": 1, "box": [300, 296, 364, 392] },
     "markType": "Photo",
     "expect": "clean",
-    "checks": [{ "check": "pixels", "at": [300, 400, 428, 496], "region": [300, 400, 364, 496], "mask": true }]
+    "checks": [{ "check": "structure" }, { "check": "pixels", "at": [300, 400, 428, 496], "region": [300, 400, 364, 496], "mask": true }]
   },
   {
     "id": "inline-image-under-box",
@@ -62,7 +62,7 @@
     "mark": { "page": 1, "box": [300, 496, 364, 592] },
     "markType": "Photo",
     "expect": "clean",
-    "checks": [{ "check": "pixels", "at": [300, 200, 428, 296], "region": [300, 200, 364, 296] }]
+    "checks": [{ "check": "structure" }, { "check": "pixels", "at": [300, 200, 428, 296], "region": [300, 200, 364, 296] }]
   },
   {
     "id": "text-in-marked-content-with-properties",
@@ -75,7 +75,7 @@
     "mark": { "page": 1, "select": [116.0, 79.1, 172.7, 95.6] },
     "markType": "Financial account",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["4400 1111"] },
       { "check": "covered", "word": "4400 1111" },
       { "check": "positions", "words": ["4400 1111"] }
@@ -92,7 +92,7 @@
     "mark": { "page": 1, "select": [114.7, 99.1, 171.4, 115.6] },
     "markType": "Financial account",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["4400 2222"] },
       { "check": "covered", "word": "4400 2222" },
       { "check": "positions", "words": ["4400 2222"] }
@@ -109,7 +109,7 @@
     "mark": { "page": 1, "select": [102.7, 119.1, 159.4, 135.6] },
     "markType": "Financial account",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["4400 3333"] },
       { "check": "covered", "word": "4400 3333" },
       { "check": "positions", "words": ["4400 3333"] }
@@ -126,7 +126,7 @@
     "mark": { "page": 1, "select": [116.0, 139.1, 172.7, 155.6] },
     "markType": "Financial account",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["4400 4444"] },
       { "check": "covered", "word": "4400 4444" },
       { "check": "positions", "words": ["4400 4444"] }
@@ -143,7 +143,7 @@
     "mark": { "page": 1, "select": [105.3, 159.1, 162.1, 175.6] },
     "markType": "Financial account",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["4400 5555"] },
       { "check": "covered", "word": "4400 5555" },
       { "check": "positions", "words": ["4400 5555"] }
@@ -160,7 +160,7 @@
     "mark": { "page": 1, "select": [103.3, 179.1, 160.0, 195.6] },
     "markType": "Financial account",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["4400 6666"] },
       { "check": "covered", "word": "4400 6666" },
       { "check": "positions", "words": ["4400 6666"] }
@@ -177,7 +177,7 @@
     "mark": { "page": 1, "select": [130.0, 79.1, 186.7, 95.6] },
     "markType": "Financial account",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["4400 7777"] },
       { "check": "covered", "word": "4400 7777" },
       { "check": "positions", "words": ["4400 7777", "Hidden 4400 8888 here"] }
@@ -441,7 +441,7 @@
     "mark": { "page": 1, "select": [104.7, 169.1, 161.4, 185.6] },
     "markType": "Financial account",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["4400 9101"] }
     ]
   },
@@ -507,7 +507,7 @@
     "mark": { "page": 1, "select": [162, 39.1, 213.4, 55.6] },
     "markType": "Person",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["Jane Roe"] }
     ]
   },
@@ -1505,7 +1505,7 @@
     "mark": { "page": 1, "select": [72, 129.1, 106.7, 145.6] },
     "markType": "Person",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["Secret"] },
       { "check": "covered", "word": "Secret" },
       { "check": "positions", "words": ["Secret"] }
@@ -1522,10 +1522,23 @@
     "mark": { "page": 1, "select": [94.4, 87, 95.8, 102] },
     "markType": "Person",
     "expect": "clean",
-    "checks": [
+    "checks": [{ "check": "structure" }, 
       { "check": "absent", "values": ["Jane", "Roe"] },
       { "check": "positions", "words": ["Jane", "Roe"] },
       { "check": "rendered", "exceptions": [{ "page": 1, "box": [94.6, 697.5, 108.2, 707] }, { "page": 1, "box": [72.4, 685.5, 94.9, 700.4] }] }
     ]
+  },
+  {
+    "id": "kept-soft-masked-image-when-written",
+    "spec": "7.3.8 Stream objects; 11.6.5.3 Soft-mask images",
+    "howItLeaks": "A save with garbage collection wrote an image whose dictionary refers to its soft mask as a bare dictionary, without its data, while anything held that dictionary (patch 0005): a kept image could vanish from the output, and the gate does not judge images outside its boxes",
+    "rule": "keep-redact",
+    "kind": null,
+    "fixture": "fixtures/image-spaces.pdf",
+    "value": null,
+    "mark": { "page": 1, "box": [100, 96, 164, 192] },
+    "markType": "Photo",
+    "expect": "clean",
+    "checks": [{ "check": "structure" }, { "check": "unchanged", "at": [300, 400, 428, 496] }, { "check": "rendered", "exceptions": [{ "page": 1, "box": [100, 600, 228, 696] }] }]
   }
 ]

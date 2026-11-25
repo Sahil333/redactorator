@@ -71,8 +71,8 @@ Importers: `engine/pdf` (see [../pdf/README.md](../pdf/README.md)),
 - The worker echoes `file` in every file reply, so the UI can drop a reply
   about a file the user has since replaced (comment in `messages.ts`).
 - The worker sends `applied` only when the output passed every check. Otherwise
-  it sends `error` with code `check-failed` (comment in
-  `messages.ts:PdfReply`; enforced in `engine/pdf/apply.ts`).
+  it sends `error` with a writer refusal's code and data, or `apply-failed`
+  (comment in `messages.ts:PdfReply`; enforced in `engine/pdf/apply.ts`).
 - `engineErrorCodes` is every `ReaderErrorCode` and `WriterErrorCode`, from the
   model's `readerErrorCodes` and `writerErrorCodes`, and `bad-message`.
 - **Boundary.** `.fallowrc.json` zone `pdf-protocol` may import only `model`.

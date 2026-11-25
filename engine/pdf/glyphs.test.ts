@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { pointBox, type Box } from "../model/geometry";
-import { missingGlyphs, movedGlyphs, textMoved, type PageGlyph } from "./glyphs";
+import { missingGlyphs, movedGlyphs, type PageGlyph } from "./glyphs";
 
 function box(x0: number, y0: number, x1: number, y1: number): Box {
   const made = pointBox(x0, y0, x1, y1);
@@ -26,34 +26,6 @@ const shiftedLine = line("Read the about it", -3.336);
 const the = box(original[5]?.box.x0 ?? 0, 79.1, original[7]?.box.x1 ?? 0, 95.6);
 const without = (letters: readonly PageGlyph[], gone: readonly number[]) => letters.filter((_, index) => !gone.includes(index));
 const withoutThe = without(original, [5, 6, 7]);
-
-describe("textMoved", () => {
-  test("is false when only the text under the box is gone", () => {
-    expect(textMoved(original, withoutThe, [the])).toBe(false);
-  });
-
-  test("is true when the rest of the line moved back by the first removed letter, as MuPDF 1.28.6 did", () => {
-    const moved = [...original.slice(0, 5), ...shiftedLine.slice(8)];
-    expect(textMoved(original, moved, [the])).toBe(true);
-  });
-
-  test("is true when a letter no box touches is gone", () => {
-    expect(textMoved(original, without(original, [5, 6, 7, 10]), [the])).toBe(true);
-  });
-
-  test("is false when a letter the box touches is gone too, or a space is", () => {
-    const reachingA = box(the.x0, the.y0, the.x1 + 4, the.y1);
-    expect(textMoved(original, without(original, [4, 5, 6, 7, 8, 9]), [reachingA])).toBe(false);
-  });
-
-  test("counts a letter drawn twice in one place twice", () => {
-    expect(textMoved([...original, ...original.slice(0, 1)], withoutThe, [the])).toBe(true);
-  });
-
-  test("ignores letters only added, like a box's printed type", () => {
-    expect(textMoved(original, [...withoutThe, ...line("[ADDRESS]", 30)], [the])).toBe(false);
-  });
-});
 
 describe("missingGlyphs and movedGlyphs", () => {
   test("find nothing when only the text under the box is gone", () => {

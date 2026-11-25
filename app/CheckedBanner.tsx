@@ -18,8 +18,9 @@ export function CheckedBanner({ markCount, file, downloadRef, onBack, onDownload
   return (
     <div className="sticky top-0 z-20 m-4 mb-0 flex flex-wrap items-center gap-3 rounded-md border border-pass/40 bg-pass-wash px-4 py-2.5 text-pass">
       <p id="checked-message" className="flex-1">
-        <strong className="font-semibold">Checked:</strong> no text is left under the{" "}
-        {markCount === 1 ? "mark" : `${markCount} marks`}, and the file's metadata is gone.{" "}
+        <strong className="font-semibold">Checked:</strong>{" "}
+        {markCount === 0 ? "nothing is marked" : `no text is left under the ${markCount === 1 ? "mark" : `${markCount} marks`}`}, and the file's
+        metadata is gone.{" "}
         {file.note}
       </p>
       <button

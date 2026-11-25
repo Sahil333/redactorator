@@ -18,7 +18,6 @@ export interface Editing {
   readonly appearance: Appearance;
   readonly onAppearance: (appearance: Appearance) => void;
   readonly applyRef: RefObject<HTMLButtonElement | null>;
-  readonly hasMarks: boolean;
   /** A new mark waits for its type, or the engine is at work: nothing can be applied or exported. */
   readonly busy: boolean;
   readonly onApply: () => void;
@@ -130,11 +129,11 @@ function EditingActions({ editing, labelling }: { readonly editing: Editing; rea
       <button
         ref={editing.applyRef}
         type="button"
-        disabled={!editing.hasMarks || editing.busy}
+        disabled={editing.busy}
         onClick={editing.onApply}
         className="rounded-md bg-ink px-3.5 py-1.5 text-paper hover:bg-ink/85 disabled:opacity-40"
       >
-        Apply and check
+        Preview
       </button>
     </>
   );

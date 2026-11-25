@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import type { ComponentProps, RefObject } from "react";
 import type { PageModel, PlacedImage } from "../engine/model/document";
 import type { PageIndex } from "../engine/model/geometry";
 import { CheckedBanner } from "./CheckedBanner";
@@ -43,6 +43,8 @@ export interface Review {
   /** The documents whose approval brought this one's new marks. */
   readonly newFrom: readonly string[];
   readonly approved: boolean;
+  /** Its marks that no longer match the page, which the user marks again. */
+  readonly lost: ReadonlySet<Mark["id"]>;
   readonly onKeepHere: (mark: Mark) => void;
   readonly onDownloaded: () => void;
 }
@@ -70,6 +72,8 @@ interface WorkspaceProps {
   readonly error: EngineError | undefined;
   /** Hears why a page could not be drawn or read. */
   readonly onFailure: (error: EngineError) => void;
+  /** Puts the error away, and with it a refused Preview's highlight. */
+  readonly onDismissError: () => void;
   readonly marks: Marks;
   readonly review: Review;
   /** The document's images a box can spread over; undefined until they are read. */
@@ -85,6 +89,13 @@ interface WorkspaceProps {
   readonly onWidths: (widths: PanelWidths) => void;
   readonly downloadRef: RefObject<HTMLButtonElement | null>;
   readonly onBack: () => void;
+}
+
+/** Where a refused Preview points, as its error's data gives it: boxes on one page. */
+function refusedBoxes(error: EngineError | undefined): ComponentProps<typeof PageList>["refused"] {
+  const page = error?.data?.page;
+  const boxes = error?.data?.boxes;
+  return typeof page === "number" && typeof boxes === "object" ? { page, boxes } : undefined;
 }
 
 /** The page across the middle of the view. */
@@ -105,6 +116,7 @@ export function Workspace(props: WorkspaceProps) {
   const shownMarks = output === undefined ? marks.marks : [];
   const zoom = useZoom(pages);
   const checked = checkedFiles[review.approved ? "cleaned" : "preview"];
+  const refused = output === undefined ? refusedBoxes(props.error) : undefined;
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       {props.showPages && (
@@ -132,6 +144,7 @@ export function Workspace(props: WorkspaceProps) {
         <DropZone
           ref={zoom.ref}
           error={errorText(props.error)}
+          {...(refused !== undefined && { onDismissError: props.onDismissError })}
           onFiles={props.onFiles}
           onScroll={(event) => props.onCurrentPage(pageInMiddle(event.currentTarget, pages))}
         >
@@ -176,6 +189,7 @@ export function Workspace(props: WorkspaceProps) {
               onPick={marks.add}
               onCancel={marks.cancel}
               onHighlight={marks.highlight}
+              refused={refused}
             />
           </PageScale>
         </DropZone>
@@ -203,6 +217,7 @@ export function Workspace(props: WorkspaceProps) {
         onRemove={marks.remove}
         onRetype={marks.retype}
         onKeepHere={review.onKeepHere}
+        lost={review.lost}
         {...(props.labelling && { onLink: marks.link })}
       />
     </div>

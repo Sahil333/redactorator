@@ -21,7 +21,9 @@ records that the [slices](../slices/README.md) reduce.
     the facade.
 - `apply.ts`
   - `applyOutput(view, client, dispatch)`: writes and checks the open
-    document's cleaned file through `PdfClient.apply`.
+    document's cleaned file through `PdfClient.apply`, passing a refusal's
+    code and data through. A document with a lost mark (`documentStatus`) is
+    refused as `mark-lost`, naming its first page, before the worker is asked.
 - `plan.ts`
   - `approvalOf(host)`: builds `Session["approval"]` (`plan`, `confirm`,
     `cancel`) plus `settled()`.

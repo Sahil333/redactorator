@@ -49,15 +49,23 @@ export const marks = (page: Page) => page.getByRole("complementary", { name: "Ma
 
 export const approveButton = (page: Page) => page.getByRole("banner").getByRole("button", { name: "Approve", exact: true });
 
-/** Approves the open document and, when it changes other documents, agrees to the heads-up. */
+/**
+ * Approves the open document, agreeing to the approval dialog whenever it opens: when the approval
+ * changes other documents it must, and holds `headsUp`; it also opens to list what preparing the
+ * document removed.
+ */
 export async function approve(page: Page, headsUp: RegExp | undefined): Promise<void> {
   await approveButton(page).click();
-  if (headsUp !== undefined) {
-    const dialog = page.getByRole("dialog", { name: /^Approve/ });
-    await expect(dialog).toContainText(headsUp);
+  const dialog = page.getByRole("dialog", { name: /^Approve/ });
+  const approved = page.getByRole("banner").getByText("Approved", { exact: true });
+  if (headsUp === undefined) await expect(dialog.or(approved)).toBeVisible();
+  else await expect(dialog).toContainText(headsUp);
+  if (await dialog.isVisible()) {
+    // A dialog that opens only to list what was removed says nothing about other places.
+    if (headsUp === undefined) await expect(dialog).not.toContainText(/hides/);
     await dialog.getByRole("button", { name: "Approve" }).click();
   }
-  await expect(page.getByRole("banner").getByText("Approved", { exact: true })).toBeVisible();
+  await expect(approved).toBeVisible();
 }
 
 /** Opens `file` from the explorer in its tab. */
@@ -312,7 +320,7 @@ export const downloadButton = (page: Page): Locator => page.getByRole("button", 
 
 /** Applies the marks, waits for the check to pass, and saves the cleaned file to a temporary file. */
 export async function applyAndDownload(page: Page): Promise<string> {
-  await page.getByRole("button", { name: "Apply and check" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText("Checked:")).toBeVisible();
   return saveFile(page, () => downloadButton(page).click());
 }
