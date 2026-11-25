@@ -24,6 +24,7 @@ import {
   downloadButton,
   dropFiles,
   inExplorer,
+  workingCopy,
 } from "./app";
 import { delayApplied, failRenderUntilApply, tamperApply } from "./fakes";
 import { judge } from "./oracle";
@@ -134,11 +135,15 @@ test("a box over a masked image blanks the image and its mask under the box", as
 
   const output = await applyAndDownload(page);
 
-  // A shape can live in the soft mask alone, so the mask is judged as well as the image.
-  await judge(maskedImagePdf, output, [
+  // A shape can live in the soft mask alone, so the mask is judged as well as the image. Preparing
+  // the file blanked the image's pixels its mask hides, so the pixels outside the box are judged
+  // against the working copy they were written from, and the page against the original.
+  await judge(await workingCopy(page, "masked-image", "masked-image.pdf"), output, [
     { check: "pixels", region: [100, 400, 228, 592] },
     { check: "pixels", region: [100, 400, 228, 592], mask: true },
   ]);
+  // The box is drawn with the mouse, so its edges fall within a point of the image's half.
+  await judge(maskedImagePdf, output, [{ check: "rendered", exceptions: [{ page: 1, box: [99, 399, 229, 593] }] }]);
 });
 
 test("two boxes side by side over one image blank the pixels under both", async ({ page }) => {

@@ -1,3 +1,4 @@
+import type { Box } from "../model/geometry";
 import type { ReaderErrorCode, WriterErrorCode } from "../model/errors";
 
 /** Codes the PDF-worker client gives on its own; the worker never sends them. The first five are where the wire's `bad-message` arose. */
@@ -58,12 +59,14 @@ export type ErrorCode =
   | "busy-adding"
   | "busy-approving"
   | "busy-applying"
-  | "no-plan";
+  | "no-plan"
+  // Documents are being prepared again for this build.
+  | "busy-updating";
 
 export interface EngineError {
   readonly code: ErrorCode;
-  /** Values the sentence names, such as a project's or a folder's name. */
-  readonly data?: Readonly<Record<string, string | number>>;
+  /** Values the sentence names, such as a project's or a folder's name, and where a refusal applies: a 0-based page and boxes on it. */
+  readonly data?: Readonly<Record<string, string | number | readonly Box[]>>;
   /** A sentence the PDF worker composed, passed through unchanged. */
   readonly message?: string;
 }

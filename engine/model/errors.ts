@@ -1,5 +1,9 @@
-/** Why the PDF reader could not open a document, or read or draw one of its pages. */
-export type ReaderErrorCode = "open-failed" | "encrypted" | "text-failed" | "render-failed";
+/** Why the PDF reader could not open, prepare or read a document, or draw one of its pages. */
+export const readerErrorCodes = ["open-failed", "encrypted", "text-failed", "render-failed", "unsupported-form", "prepare-failed"] as const;
+
+export type ReaderErrorCode = (typeof readerErrorCodes)[number];
 
 /** Why the PDF writer could not write a cleaned file, or the cleaned file failed its check. */
-export type WriterErrorCode = "apply-failed" | "check-failed";
+export const writerErrorCodes = ["apply-failed", "check-failed", "mark-lost", "extra-text-removed", "text-moved", "partly-covered-drawing"] as const;
+
+export type WriterErrorCode = (typeof writerErrorCodes)[number];

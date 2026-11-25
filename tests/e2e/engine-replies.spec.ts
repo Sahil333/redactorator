@@ -32,6 +32,24 @@ test("a request the engine could not read is reported with the engine's own sent
   await expect(page.getByLabel("Choose PDFs")).toBeEnabled();
 });
 
+test("an error whose data holds more than a page and boxes stops the engine, so no document text can reach the app", async ({ page }) => {
+  await replyWith(page, { type: "error", error: { code: "bad-message", message: "Unread.", data: { page: 0, text: "Jane Roe" } } });
+  await page.goto("/");
+
+  await expect(page.getByRole("alert")).toHaveText("The PDF engine sent something unexpected. Reload the page to try again.");
+  await expect(page.getByLabel("Choose PDFs")).toBeDisabled();
+});
+
+test("an error that says where it applies, with a page and boxes, is taken", async ({ page }) => {
+  const sentence = "The engine got a message it does not know. Reload the page to try again.";
+  const boxes = [{ x0: 72, y0: 79.1, x1: 123.4, y1: 95.6 }];
+  await replyWith(page, { type: "error", error: { code: "bad-message", message: sentence, data: { page: 0, boxes } } });
+  await page.goto("/");
+
+  await expect(page.getByRole("alert")).toHaveText(sentence);
+  await expect(page.getByLabel("Choose PDFs")).toBeEnabled();
+});
+
 test("an error the engine reports about no document goes once a document opens, and stays gone on the projects page", async ({ page }) => {
   const sentence = "The engine got a message it does not know. Reload the page to try again.";
   await errorAfterReady(page, sentence);

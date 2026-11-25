@@ -1,0 +1,53 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [7 0 R] /D << /ON [7 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R] >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 41 >>
+stream
+BT /F1 12 Tf 72 740 Td (Rule page) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /Annot /Subtype /FreeText /Rect [72 600 300 630] /F 4 /DA (/Helv 12 Tf 0 g) /OC 8 0 R /AP << /N 9 0 R >> >>
+endobj
+7 0 obj
+<< /Type /OCG /Name (On) >>
+endobj
+8 0 obj
+<< /Type /OCMD /VE [/Not 7 0 R] >>
+endobj
+9 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 228 30] /Resources << /Font << /F1 4 0 R >> >> /Length 38 >>
+stream
+BT /F1 12 Tf 4 10 Td (On a rule) Tj ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000119 00000 n 
+0000000176 00000 n 
+0000000318 00000 n 
+0000000415 00000 n 
+0000000507 00000 n 
+0000000639 00000 n 
+0000000682 00000 n 
+0000000732 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+908
+%%EOF

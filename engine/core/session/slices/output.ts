@@ -9,7 +9,10 @@ export interface OutputPart {
   readonly shown: DocumentHandle;
 }
 
-/** The latest cleaned file; another document opening, a new apply or Back to editing drops it. */
+/**
+ * The latest cleaned file; another document opening, a new apply, Back to editing, or preparing
+ * the documents again, which can change the working copy it was written from, drops it.
+ */
 export function output(part: OutputPart | undefined, change: SessionChange): OutputPart | undefined {
   switch (change.type) {
     case "applied":
@@ -17,6 +20,7 @@ export function output(part: OutputPart | undefined, change: SessionChange): Out
     case "opening":
     case "applyStarted":
     case "outputDiscarded":
+    case "updateStarted":
       return undefined;
     default:
       return part;

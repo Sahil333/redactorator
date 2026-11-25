@@ -32,6 +32,10 @@ def run(spec: dict) -> list[str]:
                 reasons += checks.pixels(source, output, tuple(check["region"]), check.get("mask", False), at)
             case "unchanged":
                 reasons += checks.unchanged(source, output, tuple(check["at"]))
+            case "structure":
+                reasons += checks.structure(output)
+            case "image-metadata":
+                reasons += checks.image_metadata(output)
             case "rendered":
                 reasons += checks.rendered(source, output, check.get("exceptions", []))
             case unknown:

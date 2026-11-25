@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { PageText, PlacedImage } from "../../model/document";
+import { readerTag, type PageText, type PlacedImage } from "../../model/document";
 import { isPageIndex, pointBox } from "../../model/geometry";
 import type { ImageAnchor } from "../../model/images";
 import type { Project } from "../../model/project";
@@ -61,13 +61,55 @@ describe("parseProject", () => {
 });
 
 describe("parseTexts", () => {
-  test("reads back each page's characters and boxes, to a hundredth of a point", () => {
-    const texts: PageText[] = [{ chars: [{ c: "D", box }, { c: "\n", box: undefined }] }];
-    expect(parseTexts(textsJson(texts), 1)).toEqual([{ chars: [{ c: "D", box: { x0: 72, y0: 99.12, x1: 98.46, y1: 115.6 } }, { c: "\n", box: undefined }] }]);
+  const tag = readerTag("pdf-3");
+  const texts: PageText[] = [{ chars: [{ c: "D", box }, { c: "\n", box: undefined }] }];
+  const rounded = [{ chars: [{ c: "D", box: { x0: 72, y0: 99.12, x1: 98.46, y1: 115.6 } }, { c: "\n", box: undefined }] }];
+
+  test("reads back each page's characters and boxes, to a hundredth of a point, with the reader tag and removed kinds", () => {
+    expect(parseTexts(textsJson(texts, tag, ["metadata", "form-data"]), 1)).toEqual({ pages: rounded, readerTag: tag, removed: ["metadata", "form-data"] });
+  });
+
+  test("reads a version 1 file, from before reader tags, for migrating marks", () => {
+    const versionOneTexts = JSON.stringify({ format: "redactorator-text", version: 1, pages: [{ chars: ["D", "\n"], boxes: [72, 99.12, 98.46, 115.6] }] });
+    expect(parseTexts(versionOneTexts, 1)).toEqual({ pages: rounded });
+  });
+
+  test("leaves a newer version alone, and calls a broken one damaged", () => {
+    expect(parseTexts(textsJson(texts, tag, []).replace('"version":2', '"version":3'), 1)).toBe("newer");
+    expect(parseTexts(textsJson(texts, tag, []).replace('"removed":[]', '"removed":["unknown-kind"]'), 1)).toBe("damaged");
+    expect(parseTexts("{", 1)).toBe("damaged");
   });
 
   test("calls a file damaged when its pages don't match the document's", () => {
-    expect(parseTexts(textsJson([{ chars: [] }]), 2)).toBe("damaged");
+    expect(parseTexts(textsJson([{ chars: [] }], tag, []), 2)).toBe("damaged");
+  });
+});
+
+describe("text pieces", () => {
+  const withPieces = (piece: Record<string, unknown>) =>
+    JSON.stringify({
+      format: "redactorator-project",
+      version: 3,
+      id: "p1",
+      name: "Letters",
+      created: "2026-11-21T00:00:00.000Z",
+      archived: false,
+      hidden: [],
+      documents: [
+        { id: "d1", file: "a.pdf", sha256: "00", pages: 1, review: "in-review", download: "none", shown: [], marks: [{ id: 1, type: "person", linkId: "", isNew: false, target: { kind: "text", text: "Jane", pieces: [piece] } }] },
+      ],
+    });
+  const pieceOf = (project: ReturnType<typeof parseProject>) => (typeof project === "string" ? project : project.documents[0]?.marks[0]?.target);
+
+  test("reads a piece stored without its letters as having none", () => {
+    expect(pieceOf(parseProject(withPieces({ page: 0, start: 5, end: 9, boxes: [box] })))).toMatchObject({ pieces: [{ text: "" }] });
+  });
+
+  test("reads back a piece's letters", () => {
+    const project = parseProject(withPieces({ page: 0, start: 5, end: 9, boxes: [box], text: "Jane" }));
+    if (typeof project === "string") throw new Error(project);
+    expect(pieceOf(project)).toMatchObject({ pieces: [{ text: "Jane" }] });
+    expect(parseProject(projectJson(project))).toEqual(project);
   });
 });
 

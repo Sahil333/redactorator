@@ -29,6 +29,8 @@ const sentences: Partial<Record<ErrorCode, (data: (key: string) => string) => st
   "import-newer": () => "That project was saved by a newer version of Redactorator. Reload the page to get it, then import the project again.",
   "import-failed": () => "That project could not be copied in. Check that the disk has space, then import it again.",
   "not-pdf": () => "This is not a PDF.",
+  "unsupported-form": () => "This PDF is an XFA form, which can't be cleaned here. Save it as an ordinary PDF in the app that made it, then add it again.",
+  "prepare-failed": () => "This PDF can't be prepared for cleaning here.",
   "unreadable-file": () => "This file could not be read. Choose it again.",
   "add-save-failed": () => "This file could not be saved in the project. Check that the disk has space, then add it again.",
   "add-search-failed": () =>

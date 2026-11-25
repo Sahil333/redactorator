@@ -130,7 +130,7 @@ function pastRunning(
 }
 
 /** A text mark's part on one page, before its boxes and text are worked out. */
-export type TextPieceRange = Omit<TextPiece, "boxes">;
+export type TextPieceRange = Omit<TextPiece, "boxes" | "text">;
 
 /**
  * The selection from `first` to `last` as one range per page, with line and block ends trimmed
@@ -159,8 +159,9 @@ export function textTarget(texts: Texts, pieces: readonly TextPieceRange[]): Tex
     if (text === undefined) return "page-text-missing";
     const boxes = rangeBoxes(text, start, end);
     if (boxes.length === 0) continue;
-    boxed.push({ page, start, end, boxes });
-    parts.push(rangeText(text, start, end));
+    const letters = rangeText(text, start, end);
+    boxed.push({ page, start, end, boxes, text: letters });
+    parts.push(letters);
   }
   const [one, ...more] = boxed;
   return one === undefined ? "empty-target" : { kind: "text", text: parts.join(" "), pieces: [one, ...more] };

@@ -1,0 +1,894 @@
+{
+  "FileTrailer": {
+    "keep": [
+      "Size",
+      "Root",
+      "ID",
+      "Encrypt"
+    ],
+    "notWalked": [
+      "Encrypt"
+    ],
+    "kinds": {
+      "Info": "metadata"
+    }
+  },
+  "Catalog": {
+    "keep": [
+      "Type",
+      "Pages",
+      "Version"
+    ],
+    "kinds": {
+      "Metadata": "metadata",
+      "Outlines": "bookmarks",
+      "Dests": "links",
+      "PageLabels": "page-labels",
+      "Threads": "page-labels",
+      "OpenAction": "scripts-actions",
+      "AA": "scripts-actions",
+      "URI": "scripts-actions",
+      "AcroForm": null,
+      "StructTreeRoot": "accessibility-tags",
+      "MarkInfo": "accessibility-tags",
+      "Perms": "signatures",
+      "DSS": "signatures",
+      "AF": "attachments",
+      "Collection": "attachments",
+      "OCProperties": null
+    }
+  },
+  "PageTreeNodeRoot": {
+    "keep": [
+      "Type",
+      "Kids",
+      "Count",
+      "Resources",
+      "MediaBox",
+      "CropBox",
+      "Rotate"
+    ]
+  },
+  "PageTreeNode": {
+    "keep": [
+      "Type",
+      "Parent",
+      "Kids",
+      "Count",
+      "Resources",
+      "MediaBox",
+      "CropBox",
+      "Rotate"
+    ],
+    "notWalked": [
+      "Parent"
+    ]
+  },
+  "PageObject": {
+    "keep": [
+      "Type",
+      "Parent",
+      "Resources",
+      "MediaBox",
+      "CropBox",
+      "Rotate",
+      "Contents",
+      "Group",
+      "UserUnit"
+    ],
+    "notWalked": [
+      "Parent"
+    ],
+    "kinds": {
+      "Annots": null,
+      "Thumb": "thumbnails",
+      "Metadata": "metadata",
+      "StructParents": "accessibility-tags",
+      "AA": "scripts-actions",
+      "LastModified": "metadata",
+      "B": "page-labels",
+      "AF": "attachments"
+    }
+  },
+  "Resource": {
+    "keep": [
+      "ExtGState",
+      "ColorSpace",
+      "Pattern",
+      "Shading",
+      "XObject",
+      "Font",
+      "ProcSet"
+    ],
+    "kinds": {
+      "Properties": null
+    }
+  },
+  "XObjectImage": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "Width",
+      "Height",
+      "ColorSpace",
+      "BitsPerComponent",
+      "Intent",
+      "ImageMask",
+      "Mask",
+      "Decode",
+      "Interpolate",
+      "SMask",
+      "SMaskInData"
+    ],
+    "kinds": {
+      "Metadata": "image-metadata",
+      "StructParent": "accessibility-tags",
+      "AF": "attachments"
+    }
+  },
+  "XObjectImageMask": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "Width",
+      "Height",
+      "BitsPerComponent",
+      "Intent",
+      "ImageMask",
+      "Decode",
+      "Interpolate",
+      "SMask",
+      "SMaskInData"
+    ],
+    "kinds": {
+      "Metadata": "image-metadata",
+      "StructParent": "accessibility-tags",
+      "AF": "attachments"
+    }
+  },
+  "XObjectImageSoftMask": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "Width",
+      "Height",
+      "ColorSpace",
+      "BitsPerComponent",
+      "Intent",
+      "ImageMask",
+      "Decode",
+      "Interpolate",
+      "Matte"
+    ],
+    "kinds": {
+      "Metadata": "image-metadata",
+      "AF": "attachments"
+    }
+  },
+  "XObjectFormType1": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "FormType",
+      "BBox",
+      "Matrix",
+      "Resources",
+      "Group"
+    ],
+    "kinds": {
+      "Metadata": "metadata",
+      "LastModified": "metadata",
+      "StructParent": "accessibility-tags",
+      "StructParents": "accessibility-tags",
+      "AF": "attachments"
+    }
+  },
+  "GroupAttributes": {
+    "keep": [
+      "Type",
+      "S",
+      "CS",
+      "I",
+      "K"
+    ]
+  },
+  "Stream": {
+    "keep": []
+  },
+  "FontType1": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "BaseFont",
+      "FirstChar",
+      "LastChar",
+      "Widths",
+      "FontDescriptor",
+      "Encoding",
+      "ToUnicode"
+    ]
+  },
+  "FontTrueType": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "BaseFont",
+      "FirstChar",
+      "LastChar",
+      "Widths",
+      "FontDescriptor",
+      "Encoding",
+      "ToUnicode"
+    ]
+  },
+  "FontMultipleMaster": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "BaseFont",
+      "FirstChar",
+      "LastChar",
+      "Widths",
+      "FontDescriptor",
+      "Encoding",
+      "ToUnicode"
+    ]
+  },
+  "FontType3": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "FontBBox",
+      "FontMatrix",
+      "CharProcs",
+      "Encoding",
+      "FirstChar",
+      "LastChar",
+      "Widths",
+      "FontDescriptor",
+      "Resources",
+      "ToUnicode"
+    ]
+  },
+  "FontType0": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "BaseFont",
+      "Encoding",
+      "DescendantFonts",
+      "ToUnicode"
+    ]
+  },
+  "FontCIDType0": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "BaseFont",
+      "CIDSystemInfo",
+      "FontDescriptor",
+      "DW",
+      "W",
+      "DW2",
+      "W2",
+      "CIDToGIDMap",
+      "ToUnicode"
+    ]
+  },
+  "FontCIDType2": {
+    "keep": [
+      "Type",
+      "Subtype",
+      "BaseFont",
+      "CIDSystemInfo",
+      "FontDescriptor",
+      "DW",
+      "W",
+      "DW2",
+      "W2",
+      "CIDToGIDMap",
+      "ToUnicode"
+    ]
+  },
+  "FontDescriptorType1": {
+    "keep": [
+      "Type",
+      "FontName",
+      "FontFamily",
+      "FontStretch",
+      "FontWeight",
+      "Flags",
+      "FontBBox",
+      "ItalicAngle",
+      "Ascent",
+      "Descent",
+      "Leading",
+      "CapHeight",
+      "XHeight",
+      "StemV",
+      "StemH",
+      "AvgWidth",
+      "MaxWidth",
+      "MissingWidth",
+      "FontFile",
+      "FontFile3",
+      "CharSet"
+    ]
+  },
+  "FontDescriptorTrueType": {
+    "keep": [
+      "Type",
+      "FontName",
+      "FontFamily",
+      "FontStretch",
+      "FontWeight",
+      "Flags",
+      "FontBBox",
+      "ItalicAngle",
+      "Ascent",
+      "Descent",
+      "Leading",
+      "CapHeight",
+      "XHeight",
+      "StemV",
+      "StemH",
+      "AvgWidth",
+      "MaxWidth",
+      "MissingWidth",
+      "FontFile",
+      "FontFile2",
+      "FontFile3"
+    ]
+  },
+  "FontDescriptorType3": {
+    "keep": [
+      "Type",
+      "FontName",
+      "FontFamily",
+      "FontStretch",
+      "FontWeight",
+      "Flags",
+      "FontBBox",
+      "ItalicAngle",
+      "Ascent",
+      "Descent",
+      "Leading",
+      "CapHeight",
+      "XHeight",
+      "StemV",
+      "StemH",
+      "AvgWidth",
+      "MaxWidth",
+      "MissingWidth"
+    ]
+  },
+  "FontDescriptorCIDType0": {
+    "keep": [
+      "Type",
+      "FontName",
+      "FontFamily",
+      "FontStretch",
+      "FontWeight",
+      "Flags",
+      "FontBBox",
+      "ItalicAngle",
+      "Ascent",
+      "Descent",
+      "Leading",
+      "CapHeight",
+      "XHeight",
+      "StemV",
+      "StemH",
+      "AvgWidth",
+      "MaxWidth",
+      "MissingWidth",
+      "FontFile",
+      "FontFile3",
+      "Style",
+      "FD",
+      "CIDSet"
+    ]
+  },
+  "FontDescriptorCIDType2": {
+    "keep": [
+      "Type",
+      "FontName",
+      "FontFamily",
+      "FontStretch",
+      "FontWeight",
+      "Flags",
+      "FontBBox",
+      "ItalicAngle",
+      "Ascent",
+      "Descent",
+      "Leading",
+      "CapHeight",
+      "XHeight",
+      "StemV",
+      "StemH",
+      "AvgWidth",
+      "MaxWidth",
+      "MissingWidth",
+      "FontFile",
+      "FontFile2",
+      "FontFile3",
+      "Style",
+      "FD",
+      "CIDSet"
+    ]
+  },
+  "FontFile": {
+    "keep": [
+      "Length1",
+      "Length2",
+      "Length3",
+      "Subtype"
+    ],
+    "kinds": {
+      "Metadata": "metadata"
+    }
+  },
+  "FontFile2": {
+    "keep": [
+      "Length1",
+      "Length2",
+      "Length3",
+      "Subtype"
+    ],
+    "kinds": {
+      "Metadata": "metadata"
+    }
+  },
+  "FontFile3Type1": {
+    "keep": [
+      "Length1",
+      "Length2",
+      "Length3",
+      "Subtype"
+    ],
+    "kinds": {
+      "Metadata": "metadata"
+    }
+  },
+  "FontFile3CIDType0": {
+    "keep": [
+      "Length1",
+      "Length2",
+      "Length3",
+      "Subtype"
+    ],
+    "kinds": {
+      "Metadata": "metadata"
+    }
+  },
+  "FontFile3OpenType": {
+    "keep": [
+      "Length1",
+      "Length2",
+      "Length3",
+      "Subtype"
+    ],
+    "kinds": {
+      "Metadata": "metadata"
+    }
+  },
+  "FontFileType1": {
+    "keep": [
+      "Length1",
+      "Length2",
+      "Length3",
+      "Subtype"
+    ],
+    "kinds": {
+      "Metadata": "metadata"
+    }
+  },
+  "Encoding": {
+    "keep": [
+      "Type",
+      "BaseEncoding",
+      "Differences"
+    ]
+  },
+  "CMapStream": {
+    "keep": [
+      "Type",
+      "CMapName",
+      "CIDSystemInfo",
+      "WMode",
+      "UseCMap"
+    ]
+  },
+  "CIDSystemInfo": {
+    "keep": [
+      "Registry",
+      "Ordering",
+      "Supplement"
+    ]
+  },
+  "ShadingType1": {
+    "keep": [
+      "Domain",
+      "Matrix",
+      "Function",
+      "ShadingType",
+      "ColorSpace",
+      "Background",
+      "BBox",
+      "AntiAlias"
+    ]
+  },
+  "ShadingType2": {
+    "keep": [
+      "Coords",
+      "Domain",
+      "Function",
+      "Extend",
+      "ShadingType",
+      "ColorSpace",
+      "Background",
+      "BBox",
+      "AntiAlias"
+    ]
+  },
+  "ShadingType3": {
+    "keep": [
+      "Coords",
+      "Domain",
+      "Function",
+      "Extend",
+      "ShadingType",
+      "ColorSpace",
+      "Background",
+      "BBox",
+      "AntiAlias"
+    ]
+  },
+  "ShadingType4": {
+    "keep": [
+      "BitsPerCoordinate",
+      "BitsPerComponent",
+      "BitsPerFlag",
+      "Decode",
+      "Function",
+      "ShadingType",
+      "ColorSpace",
+      "Background",
+      "BBox",
+      "AntiAlias"
+    ]
+  },
+  "ShadingType5": {
+    "keep": [
+      "BitsPerCoordinate",
+      "BitsPerComponent",
+      "VerticesPerRow",
+      "Decode",
+      "Function",
+      "ShadingType",
+      "ColorSpace",
+      "Background",
+      "BBox",
+      "AntiAlias"
+    ]
+  },
+  "ShadingType6": {
+    "keep": [
+      "BitsPerCoordinate",
+      "BitsPerComponent",
+      "BitsPerFlag",
+      "Decode",
+      "Function",
+      "ShadingType",
+      "ColorSpace",
+      "Background",
+      "BBox",
+      "AntiAlias"
+    ]
+  },
+  "ShadingType7": {
+    "keep": [
+      "BitsPerCoordinate",
+      "BitsPerComponent",
+      "BitsPerFlag",
+      "Decode",
+      "Function",
+      "ShadingType",
+      "ColorSpace",
+      "Background",
+      "BBox",
+      "AntiAlias"
+    ]
+  },
+  "FunctionType0": {
+    "keep": [
+      "FunctionType",
+      "Domain",
+      "Range",
+      "Size",
+      "BitsPerSample",
+      "Order",
+      "Encode",
+      "Decode"
+    ]
+  },
+  "FunctionType2": {
+    "keep": [
+      "FunctionType",
+      "Domain",
+      "Range",
+      "C0",
+      "C1",
+      "N"
+    ]
+  },
+  "FunctionType3": {
+    "keep": [
+      "FunctionType",
+      "Domain",
+      "Range",
+      "Functions",
+      "Bounds",
+      "Encode"
+    ]
+  },
+  "FunctionType4": {
+    "keep": [
+      "FunctionType",
+      "Domain",
+      "Range"
+    ]
+  },
+  "FilterCCITTFaxDecode": {
+    "keep": [
+      "K",
+      "EndOfLine",
+      "EncodedByteAlign",
+      "Columns",
+      "Rows",
+      "EndOfBlock",
+      "BlackIs1",
+      "DamagedRowsBeforeError"
+    ]
+  },
+  "FilterDCTDecode": {
+    "keep": [
+      "ColorTransform"
+    ]
+  },
+  "FilterFlateDecode": {
+    "keep": [
+      "Predictor",
+      "Colors",
+      "BitsPerComponent",
+      "Columns"
+    ]
+  },
+  "FilterJBIG2Decode": {
+    "keep": [
+      "JBIG2Globals"
+    ]
+  },
+  "FilterLZWDecode": {
+    "keep": [
+      "Predictor",
+      "Colors",
+      "BitsPerComponent",
+      "Columns",
+      "EarlyChange"
+    ]
+  },
+  "CIDFontDescriptorMetrics": {
+    "keep": [
+      "Type",
+      "FontName",
+      "Flags",
+      "FontBBox",
+      "ItalicAngle",
+      "Ascent",
+      "Descent",
+      "Leading",
+      "CapHeight",
+      "XHeight",
+      "StemV",
+      "StemH",
+      "AvgWidth",
+      "MaxWidth",
+      "MissingWidth",
+      "CharSet"
+    ]
+  },
+  "CalGrayDict": {
+    "keep": [
+      "WhitePoint",
+      "BlackPoint",
+      "Gamma"
+    ]
+  },
+  "CalRGBDict": {
+    "keep": [
+      "WhitePoint",
+      "BlackPoint",
+      "Gamma",
+      "Matrix"
+    ]
+  },
+  "LabDict": {
+    "keep": [
+      "WhitePoint",
+      "BlackPoint",
+      "Range"
+    ]
+  },
+  "DeviceNDict": {
+    "keep": [
+      "Subtype",
+      "Colorants",
+      "Process"
+    ]
+  },
+  "ICCProfileStream": {
+    "keep": [
+      "N",
+      "Alternate",
+      "Range"
+    ],
+    "kinds": {
+      "Metadata": "metadata"
+    }
+  },
+  "PatternType1": {
+    "keep": [
+      "Type",
+      "PatternType",
+      "PaintType",
+      "TilingType",
+      "BBox",
+      "XStep",
+      "YStep",
+      "Resources",
+      "Matrix"
+    ]
+  },
+  "PatternType2": {
+    "keep": [
+      "Type",
+      "PatternType",
+      "Shading",
+      "Matrix"
+    ]
+  },
+  "StyleDict": {
+    "keep": [
+      "Panose"
+    ]
+  },
+  "ToUnicodeCMapStream": {
+    "keep": [
+      "Type",
+      "CMapName",
+      "CIDSystemInfo",
+      "WMode",
+      "UseCMap"
+    ]
+  },
+  "GraphicsStateParameter": {
+    "keep": [
+      "Type",
+      "LW",
+      "LC",
+      "LJ",
+      "ML",
+      "D",
+      "RI",
+      "OP",
+      "op",
+      "OPM",
+      "Font",
+      "BG",
+      "BG2",
+      "UCR",
+      "UCR2",
+      "TR",
+      "TR2",
+      "HT",
+      "FL",
+      "SM",
+      "SA",
+      "BM",
+      "SMask",
+      "CA",
+      "ca",
+      "AIS",
+      "TK",
+      "UseBlackPtComp"
+    ]
+  },
+  "XObjectFormPS": {
+    "delete": true
+  },
+  "XObjectFormPSpassthrough": {
+    "delete": true
+  },
+  "FilterCrypt": {
+    "refuse": true
+  },
+  "HalftoneType1": {
+    "keep": [
+      "Type",
+      "HalftoneType",
+      "Frequency",
+      "Angle",
+      "SpotFunction",
+      "AccurateScreens",
+      "TransferFunction"
+    ]
+  },
+  "HalftoneType6": {
+    "keep": [
+      "Type",
+      "HalftoneType",
+      "Width",
+      "Height",
+      "TransferFunction"
+    ]
+  },
+  "HalftoneType10": {
+    "keep": [
+      "Type",
+      "HalftoneType",
+      "Xsquare",
+      "Ysquare",
+      "TransferFunction"
+    ]
+  },
+  "HalftoneType16": {
+    "keep": [
+      "Type",
+      "HalftoneType",
+      "Width",
+      "Height",
+      "Width2",
+      "Height2",
+      "TransferFunction"
+    ]
+  },
+  "SoftMaskAlpha": {
+    "keep": [
+      "Type",
+      "S",
+      "G",
+      "BC",
+      "TR"
+    ]
+  },
+  "SoftMaskLuminosity": {
+    "keep": [
+      "Type",
+      "S",
+      "G",
+      "BC",
+      "TR"
+    ]
+  },
+  "DeviceNProcess": {
+    "keep": [
+      "ColorSpace",
+      "Components"
+    ]
+  },
+  "ColorSpaceMap": {
+    "keep": [
+      "DefaultGray",
+      "DefaultRGB",
+      "DefaultCMYK"
+    ]
+  },
+  "HalftoneType5": {
+    "keep": [
+      "Type",
+      "HalftoneType",
+      "Default"
+    ]
+  }
+}

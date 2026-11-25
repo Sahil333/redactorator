@@ -1,0 +1,42 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> /Pattern << /P1 << /Type /Pattern /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 612 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >> /ExtGState << /SMask << /Type /Mask /S /Luminosity /G 6 0 R >> >> >> >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<<  /Length 84 >>
+stream
+/Pattern cs /P1 scn 72 500 200 200 re f
+BT /F1 12 Tf 72 740 Td (Shading page) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Group << /S /Transparency /CS /DeviceGray >> /Resources << /Font << /F1 4 0 R >> >> /Length 93 >>
+stream
+/Span << /ActualText (4400 9913) >> BDC 1 g BT /F1 12 Tf 72 600 Td (Mask 4400 9914) Tj ET EMC
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000509 00000 n 
+0000000606 00000 n 
+0000000741 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1019
+%%EOF

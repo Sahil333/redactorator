@@ -122,6 +122,8 @@ The app has three screens:
   from a document".
 - `projectsFolder.ts`: IndexedDB holds only the picked folder handle.
   `withHandles` closes the database after each use.
+- `useDocumentInEngine` asks again for a document whose open was refused with
+  `busy-updating`, once the update lets it open.
 - `errors.ts:errorText` returns the worker's own `error.message` unchanged when
   it has one. Otherwise it uses the app's fixed sentence for `error.code`, which
   fills in only `name`, `doing` and `file` from `error.data`. A code with no

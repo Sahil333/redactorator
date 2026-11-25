@@ -4,8 +4,9 @@ import type { DocumentHandle } from "../../../api/state";
 import type { PageText } from "../../../model/document";
 import type { PageIndex } from "../../../model/geometry";
 import type { DocumentId } from "../../../model/project";
+import { READER_TAG } from "../../../pdf-protocol/messages";
 import type { PdfClient } from "../../pdf-client/client";
-import { readOriginal } from "../../stored/projects";
+import { findOriginal, readWorking } from "../../stored/projects";
 import type { SessionChange } from "../changes";
 import type { SessionView } from "../gate";
 import { validOutput } from "../selectors";
@@ -21,9 +22,13 @@ interface ViewerHost {
 
 export const staleHandle: Result<never> = { ok: false, error: { code: "stale-handle" } };
 
+const busyUpdating: Result<never> = { ok: false, error: { code: "busy-updating" } };
+
 /**
- * The open document: opening it in the PDF worker, and its pages' images and text. Each page's
- * text is fetched once while its document is open, and kept in the state for `marks.add`.
+ * The open document: opening its working copy in the PDF worker, and its pages' images and text.
+ * Each page's text is fetched once while its document is open, and kept in the state for
+ * `marks.add`. The user's own file is never opened: a document whose working copy is missing is
+ * prepared again first.
  */
 export function viewerOf({ source, view, allowed, dispatch }: ViewerHost): Session["viewer"] {
   const { store, folder, client } = source;
@@ -49,11 +54,21 @@ export function viewerOf({ source, view, allowed, dispatch }: ViewerHost): Sessi
       const record = at.value.parts.record.present.project.documents.find(({ id }) => id === document);
       dispatch({ type: "opening", document });
       if (record === undefined) return staleHandle;
-      let bytes: Uint8Array<ArrayBuffer>;
+      const failed = source.failed(document);
+      let bytes: Uint8Array<ArrayBuffer> | undefined;
+      let original: boolean;
       try {
-        bytes = await readOriginal(store, folder, record);
+        bytes = failed ? undefined : await readWorking(store, folder, READER_TAG, record);
+        original = bytes !== undefined || (await findOriginal(store, folder, record)) !== undefined;
       } catch {
-        return { ok: false, error: { code: "original-missing", data: { file: record.file } } };
+        original = false;
+      }
+      if (!original) return { ok: false, error: { code: "original-missing", data: { file: record.file } } };
+      // Its stale copy is never opened: one that could not be prepared again stays shut.
+      if (failed) return { ok: false, error: { code: "prepare-failed" } };
+      if (bytes === undefined) {
+        source.unavailable();
+        return busyUpdating;
       }
       if (!isLatest(asked)) return staleHandle;
       const model = await client.open(bytes);

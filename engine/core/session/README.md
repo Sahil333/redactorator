@@ -61,6 +61,14 @@ parts into the published `SessionState`.
 - `history`, `open`, `apply` and `approve` are refused while an apply runs or
   documents are added (`gate.ts:oneOperation`, `busy`); `documents.add` has its
   own codes (`gate.ts:addRefused`).
+- While documents are prepared again for this build, `add`, `mark`, `history`,
+  `open`, `apply`, `approve`, `confirm`, `addDocuments` and `markDownloaded`
+  are refused with `busy-updating` (`gate.ts:waitsForUpdate`).
+- When the Session becomes the open one, `begin` reads each document's
+  prepared files in the tag folder, places its marks again on that text, and
+  starts the update when the project was just migrated or any document's
+  files are missing or damaged (`facade.ts:begin`). Closing waits for the
+  update.
 - `history`, `apply` and `approve` need the PDF worker started; a mark needs
   only the page text the Session holds and is refused only while the worker is
   starting; `documents.add` is refused with `worker-not-ready` once the worker

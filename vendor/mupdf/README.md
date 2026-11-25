@@ -1,18 +1,21 @@
 # MuPDF.js, patched
 
 The app uses this build of MuPDF.js 1.28.6 instead of the npm package. It is the official
-1.28.6 source with three patches:
+1.28.6 source with four patches:
 - two fixes to how redaction keeps the text around a removed word in place. Without them,
   removing text can move the rest of its line, so the cleaned file's layout changes and the
   next word can slide under the redaction box;
 - three save options that preparation uses to clean a file before marking (Phase 3,
-  `docs/designs/pdf-leak-suite.md` part 5).
+  `docs/designs/pdf-leak-suite.md` part 5);
+- a fix to the content filter, which lost a text-state change made where no text followed
+  before a form XObject, so the form's text moved.
 
 | Patch | Source | Fixes |
 |---|---|---|
 | `patches/0001-…` | Artifex commit 37d283e0 (Bug 709904), in MuPDF after 1.28.6 | Text after a removal in horizontally scaled text (`Tz`) lands too far along the line |
 | `patches/0002-…` | Ours, not yet in MuPDF | Text after a removal moves back by the width of the first removed character. Happens whenever removal starts after the beginning of a string: in `TJ` arrays, and in `Tj` strings when one character is removed |
 | `patches/0003-…` | Ours, not yet in MuPDF | Adds the save options `drop-hidden-oc` (drop content on layers that are off, and the layer markers), `drop-mc-properties` (a `BDC` with properties other than a layer becomes a `BMC`, a `DP` an `MP`) and `blank-unshown-pixels` (blank image pixels outside the page or every clip, in place, so shared images stay shared). Each runs the sanitize filter. Also fixes layer rules (OCMDs) with `/P /AllOn` or `/AnyOff`, which MuPDF judged wrongly, both when drawing and when dropping |
+| `patches/0004-…` | Ours, not yet in MuPDF | The sanitize filter sends text state (`Tc`, `Tw`, `Tz`, `Tr`, `Ts`) only inside a text object, so a change made in an empty `BT`/`ET` before a form is lost, and the form's text is drawn with the text state sent before it (slice 2 Probe Findings). It now sends pending text state before a form |
 
 The second bug is in `filter_string_in_segments` in `source/pdf/pdf-op-filter.c`: after
 sending the text before a removed character, it records the end of the sent text as the
@@ -32,8 +35,9 @@ https://github.com/Sahil333/mupdf. For patch 0003 it holds a feature request
 (`0003-feature-request.md`), the pull request text (`0003-pull-request.md`) and
 `0003-repro.mjs`, which builds synthetic files and prints PASS or FAIL for each option; run
 it by hand with `node upstream/0003-repro.mjs` (it uses this folder's build unless given
-the path to another `mupdf.js`). Patch 0003 has not been rebased onto master. None of these
-has been submitted yet.
+the path to another `mupdf.js`). Patch 0003 has not been rebased onto master. For patch 0004
+it holds a bug report (`0004-bug-report.md`) and `0004-repro.mjs`, which prints PASS or FAIL.
+None of these has been submitted yet.
 
 ## Rebuilding
 

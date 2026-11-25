@@ -32,7 +32,8 @@ function editsOf(project: Project, id: DocumentId): Edits {
 /**
  * Wraps `inner` with per-document undo and redo. `undoable` names the document an undoable record
  * changes. Undo and redo reach `inner` as a `restored` record, which it applies with its own rules.
- * An approval can't be undone, so it ends the history of every document it changed.
+ * An approval can't be undone, so it ends the history of every document it changed; placing a
+ * document's marks again ends its history too.
  */
 export function history<P extends { readonly project: Project }>(inner: Slice<P>, undoable: (change: SessionChange) => DocumentId | undefined): Slice<HistoryPart<P>> {
   function step(part: HistoryPart<P>, document: DocumentId, direction: "undo" | "redo"): HistoryPart<P> {
@@ -47,9 +48,10 @@ export function history<P extends { readonly project: Project }>(inner: Slice<P>
   return (part, change) => {
     if (change.type === "undo" || change.type === "redo") return step(part, change.document, change.type);
     const present = inner(part.present, change);
-    if (change.type === "approved") {
+    if (change.type === "approved" || change.type === "reanchored") {
+      // Snapshots from before would bring back marks at offsets this build no longer reads.
       const steps = new Map(part.steps);
-      for (const document of change.changedDocuments) steps.delete(document);
+      for (const document of change.type === "approved" ? change.changedDocuments : [change.document]) steps.delete(document);
       return { present, steps };
     }
     const document = undoable(change);

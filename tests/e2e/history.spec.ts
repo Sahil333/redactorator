@@ -22,8 +22,9 @@ import {
   show,
   storedJson,
   twoPagePdf,
+  workingCopyName,
 } from "./app";
-import { delayApplied, holdApprovalSearch, holdInspection, holdRead } from "./fakes";
+import { delayApplied, holdApprovalSearch, holdPreparation, holdRead } from "./fakes";
 
 const undoButton = (page: Page) => page.getByRole("button", { name: "Undo" });
 const redoButton = (page: Page) => page.getByRole("button", { name: "Redo" });
@@ -65,7 +66,7 @@ test("undo and redo mark a downloaded document as changed since its download, an
 
 test("undoing Don't hide here brings the value back, and marking the value again stops keeping it visible", async ({ page }) => {
   const keepHere = page.getByRole("button", { name: "Don't hide Jane Roe on page 1 here" });
-  const storedProject = () => storedJson(page, "one-word/.redactorator/project.json");
+  const storedProject = () => storedJson(page, "one-word/.redactorator/pdf-3/project.json");
   const shown = ["documents", "0", "shown"];
   await openApp(page);
   await openPdf(page, oneWordPdf);
@@ -112,7 +113,8 @@ test("undo works on a document's marks before its pages have opened", async ({ p
   await markText(page, 1, aJaneRoe, "Person");
   await show(page, "letter-b.pdf");
   await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
-  const release = await holdRead(page, "letter-a.pdf", 1);
+  // What opening reads is the document's working copy.
+  const release = await holdRead(page, await workingCopyName(page, "letter-a", "letter-a.pdf"), 1);
 
   await show(page, "letter-a.pdf");
   await expect(undoButton(page)).toBeEnabled();
@@ -156,8 +158,8 @@ test("undo waits while documents are being added", async ({ page }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf);
   await saved(page);
-  // Held from here on: the next file's inspection, which keeps the add under way.
-  const release = await holdInspection(page);
+  // Held from here on: the next file's preparation, which keeps the add under way.
+  const release = await holdPreparation(page);
   await page.reload();
   await markText(page, 1, janeRoe, "Person");
   await expect(undoButton(page)).toBeEnabled();

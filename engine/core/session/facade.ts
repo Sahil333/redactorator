@@ -15,6 +15,7 @@ import { adderOf } from "./effects/add";
 import { applyOutput } from "./effects/apply";
 import { staleHandle, viewerOf } from "./effects/open";
 import { approvalOf } from "./effects/plan";
+import { anchorDocument, preparedFilesOf, updaterOf } from "./effects/reprepare";
 import { saver } from "./effects/save";
 import { gate, type SessionView } from "./gate";
 import { canStep, validOutput } from "./selectors";
@@ -26,6 +27,8 @@ export interface OpenSession {
   readonly store: Store;
   readonly folder: string;
   readonly parts: SessionParts;
+  /** Called once the Session is the open one: reads each document's prepared files, and prepares again those that need it. */
+  begin(): void;
 }
 
 /**
@@ -36,7 +39,7 @@ export interface SessionHost {
   state(): { readonly worker: EngineState["worker"]; readonly settings: Settings; readonly session: OpenSession | undefined };
   dispatch(from: Session, change: SessionChange, ...effects: (() => void)[]): void;
   readonly client: PdfClient;
-  /** Reads chosen files and has the PDF worker inspect them. */
+  /** Reads chosen files and has the PDF worker prepare them. */
   intake(files: readonly IncomingFile[]): Promise<Intake>;
   /** Adds a type the user typed to the settings, once. */
   addCustomType(name: string): void;
@@ -63,9 +66,15 @@ function targetOf(texts: Texts, handle: DocumentHandle, input: TargetInput): Mar
 
 /**
  * A Session over `opening.project`, holding `hold` on it until it closes. Closing saves, lets the
- * lock go, then runs `closed`, the Library's part.
+ * lock go, then runs `closed`, the Library's part. `migrated`: the project was just copied into
+ * this build's tag folder, so every document is prepared again.
  */
-export function openSession(host: SessionHost, opening: { readonly store: Store; readonly folder: string; readonly project: Project }, hold: LockHold, onClosed: () => void): OpenSession {
+export function openSession(
+  host: SessionHost,
+  opening: { readonly store: Store; readonly folder: string; readonly project: Project; readonly migrated: boolean },
+  hold: LockHold,
+  onClosed: () => void,
+): OpenSession {
   const { store, folder } = opening;
   /** The gate's view of this Session, or undefined once it is closed. */
   function view(): SessionView | undefined {
@@ -100,9 +109,47 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
     if (name !== undefined) host.addCustomType(name);
   }
 
-  const source = { store, folder, client: host.client };
+  const updater = updaterOf({
+    store,
+    folder,
+    client: host.client,
+    view,
+    dispatch,
+    change,
+    flush: saving.flush,
+    // The open document's working copy was made again, or could not be: the worker's copy is
+    // stale, and is let go. The app opens it again, and shows why when it can't be.
+    updated(remade) {
+      const open = view()?.parts.viewer.handle;
+      if (open !== undefined && remade.has(open.document)) dispatch({ type: "opening", document: open.document });
+    },
+  });
+  const source = {
+    store,
+    folder,
+    client: host.client,
+    failed: (document: DocumentId) => view()?.parts.documents.get(document)?.failed !== undefined,
+    unavailable: () => void updater.update(),
+  };
   const approval = approvalOf({ source, view, allowed, dispatch, change });
   const adder = adderOf({ ...source, intake: host.intake, allowed, dispatch, change });
+  const viewer = viewerOf({ source, view, allowed, dispatch });
+
+  /**
+   * Places each document's marks on the text its prepared files hold, and starts the update when
+   * the project was just migrated or any document's files are missing or damaged. Checking on every
+   * open also finishes an update a crash cut short.
+   */
+  async function begin(): Promise<void> {
+    let needed = opening.migrated;
+    for (const document of opening.project.documents) {
+      const files = await preparedFilesOf(store, folder, document).catch(() => undefined);
+      const latest = view()?.parts.record.present.project.documents.find(({ id }) => id === document.id);
+      if (files === undefined) needed = true;
+      else if (latest !== undefined) anchorDocument({ dispatch, change }, latest, files, false);
+    }
+    if (needed && view() !== undefined) await updater.update();
+  }
 
   const step = (direction: "undo" | "redo") => (document: DocumentId) => {
     const at = allowed("history", document);
@@ -151,12 +198,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
         return done;
       },
     },
-    viewer: viewerOf({
-      source,
-      view,
-      allowed,
-      dispatch,
-    }),
+    viewer,
     output: {
       apply() {
         const at = allowed("apply");
@@ -192,6 +234,7 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
       // An add or an approval being worked out lands first; one waiting for its heads-up is cancelled.
       await adder.settled();
       await approval.settled();
+      await updater.settled();
       if (view()?.parts.operation.operation === "confirming") dispatch({ type: "approvalCancelled" });
       if (!(await saving.flush())) {
         dispatch({ type: "closeFailed" });
@@ -207,5 +250,6 @@ export function openSession(host: SessionHost, opening: { readonly store: Store;
     store,
     folder,
     parts: firstParts(opening.project),
+    begin: () => void begin(),
   };
 }

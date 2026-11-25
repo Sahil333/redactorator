@@ -10,7 +10,7 @@ import { documentReadings, findPlaces, type ReadingSource } from "./readings";
 
 /** What approving uses: the Session's state and gate, its project's readings and the PDF worker, and how changes land. */
 interface ApprovalHost {
-  readonly source: ReadingSource & { readonly client: Pick<PdfClient, "inspect" | "match"> };
+  readonly source: ReadingSource & { readonly client: Pick<PdfClient, "match"> };
   view(): SessionView | undefined;
   allowed(command: "approve" | "confirm", document?: DocumentId): Result<SessionView>;
   dispatch(change: SessionChange, ...effects: (() => void)[]): void;

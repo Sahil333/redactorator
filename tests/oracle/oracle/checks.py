@@ -7,17 +7,23 @@ are always read the same way, so a check never depends on the app's box conventi
 
 import io
 import re
+import zlib
 from collections.abc import Iterator
 
+from pdfminer.ascii85 import ascii85decode, asciihexdecode
 from pdfminer.high_level import extract_pages, extract_text
+from pdfminer.lzw import lzwdecode
 from pdfminer.layout import LTChar, LTComponent, LTCurve, LTFigure, LTImage, LTLayoutContainer, LTPage
 from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdfparser import PDFParser
-from pdfminer.pdftypes import resolve1
+from pdfminer.pdftypes import PDFStream, resolve1
+from pdfminer.psparser import PSLiteral
+from pdfminer.runlength import rldecode
 import pypdfium2
 from PIL import Image, ImageChops
 
 from . import raw
+from .structure import FULL_NAMES, structure  # noqa: F401  (structure: a check, run by name from __main__)
 
 Box = tuple[float, float, float, float]
 TOLERANCE = 0.5
@@ -234,8 +240,10 @@ def pixels(source: bytes, output: bytes, region: Box, mask: bool = False, at: Bo
 
 
 def renders(pdf: bytes) -> list[Image.Image]:
-    """Each page as PDFium draws it for printing, annotations included, at 72 dpi."""
+    """Each page as PDFium draws it for printing, annotations and form fields included, at 72 dpi."""
     document = pypdfium2.PdfDocument(pdf)
+    # Without its form environment PDFium draws no form field.
+    document.init_forms()
     return [page.render(scale=1, draw_annots=True, optimize_mode="print").to_pil().convert("RGB") for page in document]
 
 
@@ -274,3 +282,162 @@ def unchanged(source: bytes, output: bytes, at: Box) -> list[str]:
     width, height = before.size
     changed = sum(differs(before.getpixel((x, y)), after.getpixel((x, y))) for y in range(height) for x in range(width))
     return [f"{changed} pixels of the image at {at} changed"] if changed else []
+
+
+IMAGE_FILTERS = ("DCTDecode", "JPXDecode")
+
+
+# The lossless filters that can sit before an image filter, undone with pdfminer's decoders
+# (review answer 5). Flate's predictor is not undone: a predicted JPEG is judged unreadable.
+UNDO = {"FlateDecode": zlib.decompress, "LZWDecode": lzwdecode, "ASCII85Decode": ascii85decode,
+        "ASCIIHexDecode": asciihexdecode, "RunLengthDecode": rldecode}
+
+
+def image_streams(pdf: bytes) -> Iterator[tuple[int, str, bytes | None]]:
+    """Every JPEG or JPEG 2000 image stream in the file, by object number: its image filter and its
+    encoded bytes, with the lossless filters before it undone; None for the bytes when another
+    filter follows the image filter, or one before it is not lossless, so they can't be read as an image."""
+    document = PDFDocument(PDFParser(io.BytesIO(pdf)))
+    seen = set()
+    for xref in document.xrefs:
+        for number in xref.get_objids():
+            if number in seen:
+                continue
+            seen.add(number)
+            try:
+                stream = document.getobj(number)
+            except Exception:
+                continue
+            if not isinstance(stream, PDFStream):
+                continue
+            # MuPDF reads an inline image's abbreviated /F on any stream too.
+            filters = resolve1(stream.attrs.get("Filter", stream.attrs.get("F")))
+            if not isinstance(filters, (list, PSLiteral)):
+                filters = None
+            names = [resolve1(f).name for f in (filters if isinstance(filters, list) else [filters] if filters else [])]
+            names = [FULL_NAMES.get(name, name) for name in names if isinstance(name, str)]
+            found = [name for name in names if name in IMAGE_FILTERS]
+            if not found:
+                continue
+            if names[-1] not in IMAGE_FILTERS:
+                yield number, found[0], None
+                continue
+            data = stream.rawdata
+            for name in names[:-1]:
+                if name not in UNDO:
+                    yield number, names[-1], None
+                    break
+                data = UNDO[name](data)
+            else:
+                yield number, names[-1], data
+
+
+def jpeg_metadata(data: bytes) -> list[str]:
+    """What a JPEG holds besides its image: APPn segments other than Adobe's APP14, comments, and bytes after its end."""
+    found = []
+    at = 2
+    while at + 2 <= len(data):
+        if data[at] != 0xFF:
+            return found + ["its markers can't be walked"]
+        marker = data[at + 1]
+        if marker == 0xFF:
+            at += 1
+            continue
+        if marker == 0xD9:
+            if at + 2 < len(data):
+                found.append(f"{len(data) - at - 2} bytes after its end")
+            return found
+        if marker == 0x01 or 0xD0 <= marker <= 0xD7:
+            at += 2
+            continue
+        length = int.from_bytes(data[at + 2 : at + 4], "big")
+        body = data[at + 4 : at + 2 + length]
+        # Adobe's APP14 draws the image only as its 12 bytes: "Adobe", a version, two flags, a transform.
+        if 0xE0 <= marker <= 0xEF:
+            if not (marker == 0xEE and body.startswith(b"Adobe") and length == 14):
+                found.append(f"an APP{marker - 0xE0} segment")
+        elif marker == 0xFE:
+            found.append("a comment segment")
+        elif 0xF0 <= marker <= 0xFD:
+            found.append(f"a JPG{marker - 0xF0} segment")
+        elif not (0xC0 <= marker <= 0xCF and marker != 0xC8 or 0xDA <= marker <= 0xDF):
+            found.append(f"an unknown marker 0x{marker:02X}")
+        at += 2 + length
+        if marker == 0xDA:
+            while at < len(data) and not (data[at] == 0xFF and data[at + 1 : at + 2] not in (b"\x00", *(bytes([m]) for m in range(0xD0, 0xD8)))):
+                at += 1
+    return found + ["no end-of-image marker"]
+
+
+def codestream_comments(data: bytes) -> list[str]:
+    """Comment (COM) marker segments in a J2K codestream's main header and each tile-part's header."""
+    found, at = [], 2
+    while at + 4 <= len(data):
+        marker = int.from_bytes(data[at : at + 2], "big")
+        if marker == 0xFFD9:
+            break
+        if marker == 0xFF90:
+            # A tile-part: Psot counts from SOT; its header runs to SOD, then data to its end.
+            psot = int.from_bytes(data[at + 6 : at + 10], "big")
+            end = len(data) - 2 if psot == 0 else at + psot
+            inner = at + 12
+            while inner + 4 <= end and int.from_bytes(data[inner : inner + 2], "big") != 0xFF93:
+                if int.from_bytes(data[inner : inner + 2], "big") == 0xFF64:
+                    found.append("a codestream comment")
+                inner += 2 + int.from_bytes(data[inner + 2 : inner + 4], "big")
+            at = end
+            continue
+        if marker == 0xFF64:
+            found.append("a codestream comment")
+        at += 2 + int.from_bytes(data[at + 2 : at + 4], "big")
+    if int.from_bytes(data[at : at + 2], "big") == 0xFFD9 and len(data) > at + 2:
+        found.append(f"{len(data) - at - 2} bytes after its end of codestream")
+    return found
+
+
+JP2_KEPT = {b"jP  ", b"ftyp", b"jp2h", b"jp2c"}
+JP2H_KEPT = {b"ihdr", b"colr", b"bpcc", b"pclr", b"cmap", b"cdef"}
+
+
+def boxes(data: bytes) -> Iterator[tuple[bytes, bytes]]:
+    at = 0
+    while at + 8 <= len(data):
+        size, kind = int.from_bytes(data[at : at + 4], "big"), data[at + 4 : at + 8]
+        start = at + 8
+        if size == 1:
+            size, start = int.from_bytes(data[at + 8 : at + 16], "big"), at + 16
+        end = len(data) if size == 0 else at + size
+        # A box shorter than its own header can't be walked past; what follows is not read.
+        if end < start:
+            return
+        yield kind, data[start:end]
+        at = end
+
+
+def jpx_metadata(data: bytes) -> list[str]:
+    """What a JPEG 2000 image holds besides its image: boxes other than those that draw it, and codestream comments."""
+    if data.startswith(b"\xff\x4f"):
+        return codestream_comments(data)
+    found = []
+    if sum(1 for kind, _ in boxes(data) if kind == b"jp2c") > 1:
+        found.append("a second 'jp2c' box")
+    for kind, body in boxes(data):
+        if kind not in JP2_KEPT:
+            found.append(f"a {kind.decode('latin-1')!r} box")
+        elif kind == b"jp2h":
+            found += [f"a {inner.decode('latin-1')!r} box in its header" for inner, _ in boxes(body) if inner not in JP2H_KEPT]
+        elif kind == b"jp2c":
+            found += codestream_comments(body)
+    return found
+
+
+def image_metadata(output: bytes) -> list[str]:
+    """No JPEG or JPEG 2000 image in the output holds metadata in its own data."""
+    reasons = []
+    for number, kind, data in image_streams(output):
+        if data is None:
+            reasons.append(f"image object {number} has a filter after {kind}, or one before it that is not lossless, so its image data can't be judged")
+            continue
+        found = jpeg_metadata(data) if kind == "DCTDecode" else jpx_metadata(data)
+        reasons += [f"image object {number} holds {each}" for each in found]
+    return reasons

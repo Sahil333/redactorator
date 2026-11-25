@@ -1,7 +1,7 @@
 import * as mupdf from "mupdf";
 import type { DocumentModel, PageModel } from "../model/document";
 import { isPageIndex, isPoints } from "../model/geometry";
-import type { PdfError } from "../pdf-protocol/messages";
+import type { ReaderErrorCode } from "../model/errors";
 
 export function documentModel(document: mupdf.Document): DocumentModel | undefined {
   const pages: PageModel[] = [];
@@ -24,7 +24,9 @@ export function documentModel(document: mupdf.Document): DocumentModel | undefin
 }
 
 /** Opens a PDF the engine can work on, or says why it can't. */
-export function load(bytes: ArrayBuffer): { readonly document: mupdf.PDFDocument; readonly model: DocumentModel } | PdfError {
+export function load(
+  bytes: ArrayBuffer,
+): { readonly document: mupdf.PDFDocument; readonly model: DocumentModel } | { readonly code: Extract<ReaderErrorCode, "encrypted" | "open-failed">; readonly message: string } {
   let document: mupdf.Document | undefined;
   try {
     document = mupdf.Document.openDocument(bytes, "application/pdf");

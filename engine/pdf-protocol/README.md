@@ -15,19 +15,27 @@ Importers: `engine/pdf` (see [../pdf/README.md](../pdf/README.md)),
 `messages.ts`:
 
 - Branded numbers, and the guard for each: `FileNumber` / `isFileNumber`,
-  `InspectionNumber` / `isInspectionNumber`, `MatchNumber` / `isMatchNumber`.
+  `PreparationNumber` / `isPreparationNumber`, `MatchNumber` / `isMatchNumber`.
   Each guard accepts only a positive integer.
-- `PdfRequest`: one of `inspect` (`inspection`, `bytes`), `match` (`match`,
+- `READER_TAG` (`"pdf-3"`): how this build prepares and reads PDFs, its MuPDF
+  build included. It changes on any change to preparation, to reading, or to
+  `vendor/mupdf`'s patches or `SHA256SUMS`. The core reads it from here, so
+  the core and the worker share one constant.
+- `PdfRequest`: one of `prepare` (`preparation`, `bytes`), `match` (`match`,
   `keys`, `documents` as each page's characters), `open` (`file`, `bytes`),
   `render` (`file`, `source`, `page`, `scale`), `text` (`file`, `page`), or
   `apply` (`file`, `edits`, `appearance`).
-- `PdfReply`: one of `ready`, `inspected`, `matched`, `refused`, `opened`,
+- `PdfReply`: one of `ready` (`readerTag`), `prepared` (`preparation`,
+  `preparedBytes`, `reading`, `removed`), `matched`, `refused`, `opened`,
   `rendered`, `text`, `applied` (`bytes`, `output`), or `error`
   (`file: FileNumber | undefined`).
 - `engineErrorCodes`: `open-failed`, `encrypted`, `render-failed`,
-  `text-failed`, `apply-failed`, `check-failed`, `bad-message`.
-- `PdfError { code, message }`. `DocumentFound` extends `Found` with
-  `document` and `page`.
+  `text-failed`, `apply-failed`, `check-failed`, `unsupported-form`,
+  `prepare-failed`, `mark-lost`, `extra-text-removed`, `text-moved`,
+  `partly-covered-drawing`, `bad-message`.
+- `PdfError { code, message?, data? }`, where `PdfErrorData` is
+  `{ page?, boxes? }`. `DocumentFound` extends `Found` with `document` and
+  `page`.
 
 `parse.ts`:
 
@@ -41,9 +49,10 @@ Importers: `engine/pdf` (see [../pdf/README.md](../pdf/README.md)),
   `parseAll`, which drops the whole message when one element fails
   (`parse.ts`).
 - **What each message must carry.**
-  - `inspect` and `match` carry no `file`. Every other request needs a valid
+  - `prepare` and `match` carry no `file`. Every other request needs a valid
     `FileNumber` (`parsePdfRequest`).
-  - The `bytes` of `inspect`, `open` and `applied` must be an `ArrayBuffer`.
+  - The `bytes` of `prepare`, `open` and `applied`, and `prepared`'s
+    `preparedBytes`, must be an `ArrayBuffer`.
   - `render.scale` must be a positive number. `source` must be `"original"`
     or `"output"` (`isSource`).
 - **Reply shape.**
@@ -51,8 +60,12 @@ Importers: `engine/pdf` (see [../pdf/README.md](../pdf/README.md)),
     `Uint8ClampedArray` backed by an `ArrayBuffer` whose length is
     `width * height * 4` (`parsePixels`).
   - Each `matched.found` entry needs `start < end` (`parseFound`).
-  - An error's `code` must be one of `engineErrorCodes`
-    (`parseEngineError`).
+  - An error's `code` must be one of `engineErrorCodes`, its `message` absent
+    or a string, and its `data` absent or holding only a `page` and `boxes`,
+    so no document text can ride along (`parseEngineError`).
+  - `ready` must carry a reader tag; the client stops a worker whose tag is
+    not `READER_TAG`.
+  - Each `prepared.removed` entry must be a `RemovalKind`.
   - `error.file` is either `undefined` (the worker could not read the request)
     or a valid `FileNumber`.
 - The worker echoes `file` in every file reply, so the UI can drop a reply
@@ -60,9 +73,8 @@ Importers: `engine/pdf` (see [../pdf/README.md](../pdf/README.md)),
 - The worker sends `applied` only when the output passed every check. Otherwise
   it sends `error` with code `check-failed` (comment in
   `messages.ts:PdfReply`; enforced in `engine/pdf/apply.ts`).
-- `engineErrorCodes` must stay a subset of
-  `ReaderErrorCode | WriterErrorCode | "bad-message"` (the `satisfies` clause in
-  `messages.ts`).
+- `engineErrorCodes` is every `ReaderErrorCode` and `WriterErrorCode`, from the
+  model's `readerErrorCodes` and `writerErrorCodes`, and `bad-message`.
 - **Boundary.** `.fallowrc.json` zone `pdf-protocol` may import only `model`.
 
 ## Side Effects

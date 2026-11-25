@@ -21,8 +21,10 @@ write project folders.
     not be used. It is shown to the user.
   - `parseProject(text)` and `projectJson(project)`: format
     `redactorator-project`, version 3.
-  - `parseTexts(text, pages)` and `textsJson(texts)`: format
-    `redactorator-text`, version 1.
+  - `parseTexts(text, pages)` and `textsJson(texts, readerTag, removed)`:
+    format `redactorator-text`, version 2, `{ readerTag, removed, pages }`.
+    `parseTexts` returns `StoredTexts`, `{ pages, readerTag?, removed? }`;
+    version 1, with neither, is still read, to migrate marks from it.
   - `parseImages(text, pages)` and `imagesJson(images)`: format
     `redactorator-images`, version 1.
   - `parseSettings(text)` and `settingsJson(settings)`: format
@@ -41,6 +43,11 @@ write project folders.
   anchor is optional on read, and such boxes are anchored when their document
   is next approved (`project.ts:optionalAnchor`,
   `../../model/spread.ts:anchored`).
+- The project format stays version 3 in Phase 3. A text piece gains an
+  optional `text`, its letters; one stored without it reads as `""`, which is
+  unknown, so the piece is lost until `migratePieces` fills it
+  (`project.ts:parsePiece`). Only builds that write reader-tag folders write
+  it, and older builds never read those folders.
 - A record that fails any field check makes the whole file `"damaged"`
   (`parseProject`, `parseDocument`, `parseSettings`).
 - Stored text must have one entry per page, and its boxes must account for

@@ -1,9 +1,12 @@
-// One test per entry in tests/oracle/leak-vectors.json that makes a mark. Entries that make
-// none are what preparation alone must clean; preparation-saves.spec.ts runs them until slice 2
-// runs preparation in the app.
+// The entries in tests/oracle/leak-vectors.json. One that makes a mark is one test: the fixture is
+// added, marked, written and judged. Those that make none are what preparation alone must clean,
+// so each fixture's are one test that judges the working copy preparation stored: what the app
+// shows, marks and writes from, and what a document with no marks downloads as. Each also checks
+// that preparing it recorded the entry's kind, which the app reports as removed.
+import { basename } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import vectors from "../oracle/leak-vectors.json" with { type: "json" };
-import { applyAndDownload, drawBox, fixturePath, markText, openApp, openPdf, type PointBox } from "./app";
+import { applyAndDownload, drawBox, fixturePath, markText, openApp, openPdf, removedKinds, saved, workingCopy, type PointBox } from "./app";
 import { test } from "./coverage";
 import { judgeListed } from "./oracle";
 
@@ -27,6 +30,30 @@ for (const vector of vectors) {
 
     const output = await applyAndDownload(page);
     await judgeListed(fixture, output, vector.checks);
+  });
+}
+
+const unmarked = Map.groupBy(
+  vectors.filter((vector) => vector.mark === null),
+  (vector) => vector.fixture,
+);
+
+for (const [fixture, entries] of unmarked) {
+  test(`preparing ${fixture} cleans it: ${entries.map((entry) => entry.id).join(", ")}`, async ({ page }) => {
+    const path = fixturePath(fixture);
+    await openApp(page);
+    await openPdf(page, path);
+    await saved(page);
+    const file = basename(path);
+    const folder = file.replace(/\.pdf$/, "");
+    const working = await workingCopy(page, folder, file);
+    const kinds = await removedKinds(page, folder, file);
+    for (const entry of entries) {
+      await test.step(entry.id, async () => {
+        await judgeListed(path, working, entry.checks);
+        if (entry.kind !== null) expect(kinds).toContain(entry.kind);
+      });
+    }
   });
 }
 

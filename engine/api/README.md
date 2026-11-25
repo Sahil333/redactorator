@@ -56,8 +56,12 @@ limit this folder to importing [engine/model](../model/README.md) and
   until the first list lands), `settings`, `creating`, and the `can` gate for
   the Library's commands.
 - `Problem` and `ProjectSummary` (readable or `unreadable: "damaged" | "newer"`).
-- `SessionState` holds `project`, `folder`, the `save` status, `operation`,
-  `approval`, the `open` and `output` handles, `can`, `reach` and `newFrom`.
+- `SessionState` holds `project`, `folder`, the `save` status, `operation`
+  (including `"updating"`, while documents are prepared again for this
+  build), `approval`, the `open` and `output` handles, `can`, `reach`,
+  `newFrom`, and `documentStatus`: per document, its removed kinds, the ids of
+  its lost marks, and the code it failed to prepare again with, if it did.
+- `DocumentStatus`.
 - `DocumentHandle` and `ApprovalPlan`.
 
 ### `errors.ts`
@@ -69,10 +73,12 @@ limit this folder to importing [engine/model](../model/README.md) and
   - the Library, add-file, save and approval codes;
   - `original-missing`, when the open document's original is not in the
     project's folder;
+  - `busy-updating`, while documents are prepared again;
   - the refusal codes that the app never shows.
 - `PdfClientErrorCode`: `worker-stopped`, `worker-not-running`,
   `unexpected-reply`, `unreadable-reply`, `unknown-request`, `stale-handle`.
-- `EngineError` has `code`, and optionally `data` and `message`.
+- `EngineError` has `code`, and optionally `data` (values its sentence names,
+  and where a refusal applies: a 0-based `page` and `boxes`) and `message`.
 - `Result<T>` is `{ ok: true, value }` or `{ ok: false, error }`.
 - `Refusal` is a file that was not added, with the reason.
 
@@ -88,7 +94,7 @@ These are contracts stated in the type docs. The implementation in
   exception is `flush()`, which resolves to `false` when a change did not land.
   The app maps each code, with its `data`, to a sentence. `message` carries a
   sentence that the PDF worker composed, unchanged (`errors.ts:EngineError`).
-- Adding, approving and applying run one at a time
+- Adding, approving, applying and updating documents run one at a time
   (`state.ts:SessionState.operation`).
 - Viewer results (pixels, page text, images) never enter the state
   (`facade.ts:Session.viewer`).

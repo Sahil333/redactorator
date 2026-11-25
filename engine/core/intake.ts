@@ -1,6 +1,7 @@
 import type { Refusal } from "../api/errors";
 import type { IncomingFile } from "../api/facade";
 import { newDocumentId } from "../model/project";
+import { sha256 } from "./hash";
 import type { PdfClient } from "./pdf-client/client";
 import type { NewDocument } from "./stored/projects";
 
@@ -15,12 +16,7 @@ const isPdf = (file: IncomingFile) => file.type === "application/pdf" || /\.pdf$
 // A folder's own files, such as .DS_Store, are not documents the user chose.
 const isHidden = (file: IncomingFile) => file.name.startsWith(".");
 
-async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-/** Reads each chosen file and has the PDF worker inspect it, in the order a folder lists them. */
+/** Reads each chosen file and has the PDF worker prepare it, in the order a folder lists them. It stores nothing. */
 export async function intake(files: readonly IncomingFile[], client: PdfClient): Promise<Intake> {
   const added: NewDocument[] = [];
   const refused: Refusal[] = [];
@@ -37,9 +33,9 @@ export async function intake(files: readonly IncomingFile[], client: PdfClient):
       refused.push({ file: file.name, error: { code: "unreadable-file" } });
       continue;
     }
-    const inspection = await client.inspect(bytes);
-    if ("code" in inspection) refused.push({ file: file.name, error: inspection });
-    else added.push({ id: newDocumentId(), file: file.name, bytes, sha256: await sha256(bytes), reading: inspection.reading });
+    const prepared = await client.prepare(bytes);
+    if ("code" in prepared) refused.push({ file: file.name, error: prepared });
+    else added.push({ ...prepared, id: newDocumentId(), file: file.name, bytes, sha256: await sha256(bytes) });
   }
   return { added, refused };
 }

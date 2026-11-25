@@ -1,23 +1,24 @@
-import type { Pixels, Source } from "../model/document";
-import { isPageIndex } from "../model/geometry";
+import { isReaderTag, type Pixels, type Source } from "../model/document";
+import { isPageIndex, parseBox } from "../model/geometry";
 import { isOffset, isPositiveNumber, isRecord, isText, parseAll } from "../model/guards";
-import { parseAppearance, parseDocumentModel, parseEdit, parsePageText, parseReading } from "../model/parse";
+import { parseAppearance, parseDocumentModel, parseEdit, parsePageText, parseReading, parseRemovalKind } from "../model/parse";
 import {
   engineErrorCodes,
   isFileNumber,
-  isInspectionNumber,
   isMatchNumber,
+  isPreparationNumber,
   type DocumentFound,
   type FileNumber,
   type PdfError,
+  type PdfErrorData,
   type PdfReply,
   type PdfRequest,
 } from "./messages";
 
 const isSource = (value: unknown): value is Source => value === "original" || value === "output";
 
-function parseInspectRequest({ inspection, bytes }: Record<string, unknown>): PdfRequest | undefined {
-  return isInspectionNumber(inspection) && bytes instanceof ArrayBuffer ? { type: "inspect", inspection, bytes } : undefined;
+function parsePrepareRequest({ preparation, bytes }: Record<string, unknown>): PdfRequest | undefined {
+  return isPreparationNumber(preparation) && bytes instanceof ArrayBuffer ? { type: "prepare", preparation, bytes } : undefined;
 }
 
 function parseMatchRequest({ match, keys, documents }: Record<string, unknown>): PdfRequest | undefined {
@@ -29,7 +30,7 @@ function parseMatchRequest({ match, keys, documents }: Record<string, unknown>):
 }
 
 export function parsePdfRequest(data: unknown): PdfRequest | undefined {
-  if (isRecord(data) && data.type === "inspect") return parseInspectRequest(data);
+  if (isRecord(data) && data.type === "prepare") return parsePrepareRequest(data);
   if (isRecord(data) && data.type === "match") return parseMatchRequest(data);
   if (!isRecord(data) || !isFileNumber(data.file)) return undefined;
   const { file } = data;
@@ -60,10 +61,23 @@ function parseFound(value: unknown): DocumentFound | undefined {
     : undefined;
 }
 
+const DATA_KEYS = new Set(["page", "boxes"]);
+
+/** A refusal's data: only a page and boxes, so no document text can ride along. */
+function parseErrorData(value: unknown): PdfErrorData | undefined {
+  if (!isRecord(value) || Object.keys(value).some((key) => !DATA_KEYS.has(key))) return undefined;
+  const page = value.page === undefined || isPageIndex(value.page) ? value.page : null;
+  const boxes = value.boxes === undefined ? undefined : (parseAll(value.boxes, parseBox) ?? null);
+  if (page === null || boxes === null) return undefined;
+  return { ...(page === undefined ? {} : { page }), ...(boxes === undefined ? {} : { boxes }) };
+}
+
 function parseEngineError(value: unknown): PdfError | undefined {
-  if (!isRecord(value) || typeof value.message !== "string") return undefined;
+  if (!isRecord(value) || (value.message !== undefined && typeof value.message !== "string")) return undefined;
   const code = engineErrorCodes.find((known) => known === value.code);
-  return code && { code, message: value.message };
+  const data = value.data === undefined ? undefined : parseErrorData(value.data);
+  if (code === undefined || (value.data !== undefined && data === undefined)) return undefined;
+  return { code, ...(value.message === undefined ? {} : { message: value.message }), ...(data === undefined ? {} : { data }) };
 }
 
 const isPixelCount = (value: unknown): value is number => isPositiveNumber(value) && Number.isInteger(value);
@@ -107,30 +121,39 @@ function parseFileMessage(data: Record<string, unknown>, file: FileNumber): PdfR
   }
 }
 
-/** An answer to an inspection: `inspected` or `refused`. */
-function parseInspectionMessage(data: Record<string, unknown>): PdfReply | undefined {
-  const { inspection } = data;
-  if (!isInspectionNumber(inspection)) return undefined;
-  if (data.type === "inspected") {
+/** An answer to a preparation: `prepared` or `refused`. */
+function parsePreparationMessage(data: Record<string, unknown>): PdfReply | undefined {
+  const { preparation, preparedBytes } = data;
+  if (!isPreparationNumber(preparation)) return undefined;
+  if (data.type === "prepared") {
     const reading = parseReading(data.reading);
-    return reading && { type: "inspected", inspection, reading };
+    const removed = parseAll(data.removed, parseRemovalKind);
+    return reading && removed && preparedBytes instanceof ArrayBuffer ? { type: "prepared", preparation, preparedBytes, reading, removed } : undefined;
   }
   const error = parseEngineError(data.error);
-  return error && { type: "refused", inspection, error };
+  return error && { type: "refused", preparation, error };
+}
+
+/** A reply that names no file it is about: `ready`, `matched`, or an `error`, which may name one. */
+function parseEngineMessage(data: Record<string, unknown>): PdfReply | undefined {
+  const { file } = data;
+  switch (data.type) {
+    case "ready":
+      return isReaderTag(data.readerTag) ? { type: "ready", readerTag: data.readerTag } : undefined;
+    case "matched": {
+      const found = parseAll(data.found, parseFound);
+      return found && isMatchNumber(data.match) ? { type: "matched", match: data.match, found } : undefined;
+    }
+    default: {
+      const error = parseEngineError(data.error);
+      return error && (file === undefined || isFileNumber(file)) ? { type: "error", file, error } : undefined;
+    }
+  }
 }
 
 export function parsePdfReply(data: unknown): PdfReply | undefined {
   if (!isRecord(data)) return undefined;
-  const { file } = data;
-  if (data.type === "ready") return { type: "ready" };
-  if (data.type === "inspected" || data.type === "refused") return parseInspectionMessage(data);
-  if (data.type === "matched") {
-    const found = parseAll(data.found, parseFound);
-    return found && isMatchNumber(data.match) ? { type: "matched", match: data.match, found } : undefined;
-  }
-  if (data.type === "error") {
-    const error = parseEngineError(data.error);
-    return error && (file === undefined || isFileNumber(file)) ? { type: "error", file, error } : undefined;
-  }
-  return isFileNumber(file) ? parseFileMessage(data, file) : undefined;
+  if (data.type === "ready" || data.type === "matched" || data.type === "error") return parseEngineMessage(data);
+  if (data.type === "prepared" || data.type === "refused") return parsePreparationMessage(data);
+  return isFileNumber(data.file) ? parseFileMessage(data, data.file) : undefined;
 }

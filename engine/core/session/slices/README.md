@@ -15,7 +15,7 @@ and the facade do that.
 - `index.ts`
   - `SessionParts`: `record: HistoryPart<MarksPart>`, `operation: OperationPart`,
     `viewer: ViewerPart`, `output: OutputPart | undefined`,
-    `approval: ApprovalPart | undefined`.
+    `approval: ApprovalPart | undefined`, `documents: DocumentsPart`.
   - `firstParts(project)`: the parts of a freshly opened Session.
   - `session(parts, change)`: the combined reducer; returns `parts` itself when
     every slice returns its part unchanged.
@@ -44,6 +44,10 @@ and the facade do that.
   - `ApprovalPart`: the `plan` waiting for its heads-up, the record it was
     worked out `from`, and the `project` record it makes.
   - `approval(part, change)`.
+- `documents.ts`
+  - `DocumentsPart`: per document, its removed kinds, lost marks and failed
+    preparation, set by `documentPrepared` and `preparationFailed`.
+  - `firstDocuments`, `documents(part, change)`.
 
 ## Invariants
 
@@ -63,8 +67,16 @@ and the facade do that.
 - Undo and redo reach the wrapped slice only as a `restored` change
   (`history.ts:step`). Restoring keeps each mark's current `linkId`
   (`marks.ts:restored`).
-- `approved` removes the undo and redo history of every document it changed
-  (`history.ts:history`).
+- `approved` removes the undo and redo history of every document it changed,
+  and `reanchored` that of its document, as the snapshots hold offsets this
+  build no longer reads (`history.ts:history`).
+- `reanchored` replaces a document's marks without counting an edit or
+  changing its download state; an approved document whose marks or working
+  copy changed goes back to `in-review` (`marks.ts:reanchored`). It changes
+  the project record, so it is saved (`operation.ts:changesRecord`).
+- `updateStarted` and `updateFinished` set and clear the operation
+  `"updating"`; `updateStarted` also drops the output, whose working copy may
+  be made again (`operation.ts`, `output.ts`).
 - An `edit` sets the document's `review` to `"in-review"` and its `download` to
   `"changed"` unless it is `"none"`; a mark on a value drops that value from the
   document's kept-visible `shown` list (`marks.ts:withEdits`). A `restored`

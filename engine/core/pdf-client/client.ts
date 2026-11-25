@@ -1,31 +1,27 @@
-import type { Appearance, DocumentModel, Edit, PageText, Pixels, Reading, Source } from "../../model/document";
+import type { Appearance, DocumentModel, Edit, PageText, Pixels, Source } from "../../model/document";
 import type { PageIndex } from "../../model/geometry";
 import {
   isFileNumber,
-  isInspectionNumber,
   isMatchNumber,
+  isPreparationNumber,
+  READER_TAG,
   type DocumentFound,
   type FileNumber,
-  type InspectionNumber,
   type MatchNumber,
+  type PreparationNumber,
   type PdfError,
   type PdfReply,
   type PdfRequest,
 } from "../../pdf-protocol/messages";
 import { parsePdfReply } from "../../pdf-protocol/parse";
 import type { WorkerChannel } from "../ports";
+import type { PreparedFiles } from "../stored/projects";
 import type { ClientError, ClientErrorCode } from "./errors";
 import { notRunning, Waiting } from "./waiting";
 
 export interface WorkerStatus {
   readonly state: "starting" | "ready" | "applying" | "stopped";
   readonly error?: ClientError;
-}
-
-/** A newly added PDF as the worker read it. */
-interface Inspected {
-  readonly reading: Reading;
-  readonly pages: number;
 }
 
 /** A cleaned file that passed the worker's check. */
@@ -38,7 +34,8 @@ interface Applied {
 export interface PdfClient {
   /** Calls `listener` now with the current status, then on each change, until the returned function is called. */
   onStatus(listener: (status: WorkerStatus) => void): () => void;
-  inspect(bytes: Uint8Array): Promise<Inspected | ClientError>;
+  /** Makes the file's working copy and reads it; the caller's bytes are left as they were. */
+  prepare(bytes: Uint8Array): Promise<PreparedFiles | ClientError>;
   /** Every place each key is in each document's text. */
   match(keys: readonly string[], documents: readonly { readonly texts: readonly PageText[] }[]): Promise<readonly DocumentFound[] | ClientError>;
   open(bytes: Uint8Array): Promise<DocumentModel | ClientError>;
@@ -67,7 +64,7 @@ export function pdfClient(channel: WorkerChannel): PdfClient {
   // The worker listens only once MuPDF has loaded; anything sent before it says so would be lost.
   let held: [PdfRequest, ArrayBuffer[]][] | undefined = [];
   let latestFile = 0;
-  const inspections = new Waiting<InspectionNumber, Inspected>(isInspectionNumber);
+  const preparations = new Waiting<PreparationNumber, PreparedFiles>(isPreparationNumber);
   const matches = new Waiting<MatchNumber, readonly DocumentFound[]>(isMatchNumber);
   // Oldest first. The worker answers in the order it is asked, so the oldest that fits an answer is the one it answers.
   const asked: FileRequest[] = [];
@@ -86,7 +83,7 @@ export function pdfClient(channel: WorkerChannel): PdfClient {
     channel.terminate();
     const error: ClientError = { code };
     setStatus({ state: "stopped", error });
-    inspections.stop(error);
+    preparations.stop(error);
     matches.stop(error);
     for (const request of asked.splice(0)) request.settle(error);
   }
@@ -156,21 +153,23 @@ export function pdfClient(channel: WorkerChannel): PdfClient {
   }
 
   /** The worker could not read a request, so it cannot say which one failed. */
-  function unknownRequest(message: string) {
+  function unknownRequest(message: string | undefined) {
     const state = status.state === "applying" ? "ready" : status.state;
-    setStatus({ state, error: { code: "unknown-request", message } });
+    setStatus({ state, error: { code: "unknown-request", ...(message === undefined ? {} : { message }) } });
   }
 
   function receive(reply: PdfReply) {
     switch (reply.type) {
       case "ready":
-        ready();
+        // A worker of another build would read and prepare documents otherwise than this one stores them.
+        if (reply.readerTag === READER_TAG) ready();
+        else stop("unexpected-reply");
         break;
-      case "inspected":
-        inspections.answer(reply.inspection, { reading: reply.reading, pages: reply.reading.texts.length });
+      case "prepared":
+        preparations.answer(reply.preparation, { preparedBytes: new Uint8Array(reply.preparedBytes), reading: reply.reading, removed: reply.removed });
         break;
       case "refused":
-        inspections.answer(reply.inspection, reply.error);
+        preparations.answer(reply.preparation, reply.error);
         break;
       case "matched":
         matches.answer(reply.match, reply.found);
@@ -200,10 +199,10 @@ export function pdfClient(channel: WorkerChannel): PdfClient {
         listeners.delete(listener);
       };
     },
-    inspect(bytes) {
+    prepare(bytes) {
       // Sent as a copy, so the caller's array is not detached.
       const copy = bytes.slice().buffer;
-      return inspections.ask((inspection) => post({ type: "inspect", inspection, bytes: copy }, [copy]));
+      return preparations.ask((preparation) => post({ type: "prepare", preparation, bytes: copy }, [copy]));
     },
     match(keys, documents) {
       const pages = documents.map(({ texts }) => texts.map((text) => text.chars.map((char) => char.c)));

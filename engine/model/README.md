@@ -37,19 +37,25 @@ available are the ones declared in `engine/globals.ts`.
 - `PageChar` and `PageText`. A character's index in `PageText.chars` is its offset.
 - `PlacedImage` (page, placement `matrix`, `aspect`, 64-bit difference-hash `fingerprint`).
 - `Reading` (each page's text plus the images, as stored for a project).
-- `Edit` (a text range or a box, with a label).
-- `Source` (`"original"` or `"output"`).
+- `Edit` (a text range with the letters it was made on, or a box, with a label).
+- `Source` (`"original"`, the document's working copy, or `"output"`).
+- `ReaderTag` (a format's name and a number, like `pdf-3`), `isReaderTag` and
+  `readerTag`.
+- `RemovalKind` and `removalKinds`: what preparing a document removed, by
+  kind, never what or how much.
 - `Pixels` (RGBA bytes).
 
 ### Error codes (`errors.ts`)
 
-- `ReaderErrorCode`: `open-failed`, `encrypted`, `text-failed`, `render-failed`.
-- `WriterErrorCode`: `apply-failed`, `check-failed`.
+- `ReaderErrorCode`: `open-failed`, `encrypted`, `text-failed`, `render-failed`,
+  `unsupported-form`, `prepare-failed`.
+- `WriterErrorCode`: `apply-failed`, `check-failed`, `mark-lost`,
+  `extra-text-removed`, `text-moved`, `partly-covered-drawing`.
 
 ### Parsers (`parse.ts`)
 
 - `parseEdit`, `parseAppearance`, `parseDocumentModel`, `parsePageText`,
-  `parsePlacedImage`, `parseReading`, `isFingerprint`. Each returns the typed
+  `parsePlacedImage`, `parseReading`, `parseRemovalKind`, `isFingerprint`. Each returns the typed
   value, or `undefined` when the input does not fit.
 
 ### Page text helpers (`pageText.ts`)
@@ -64,13 +70,29 @@ available are the ones declared in `engine/globals.ts`.
 - `selectionPieces(texts, first, last)` returns a range per page, or `"page-text-missing"`.
   Line and block ends are trimmed from either side of each range.
 - `textTarget(texts, pieces)` returns a `TextTarget`, `"page-text-missing"` or `"empty-target"`.
+  Each piece gets its letters, read with `rangeText`; `TextPieceRange` has
+  neither boxes nor letters, so the app never supplies them.
+
+### Keeping marks on their letters (`textAnchor.ts`)
+
+- A text piece's letters and boxes are its identity; its offsets only point at
+  them in the text as this build reads it.
+- `lostPieces(target, texts)`: the pieces whose `rangeText` at their offsets is
+  not their letters, or that have none.
+- `reanchor(target, texts)`: each lost piece placed again, or `"lost"`. Among
+  the characters whose centres fall inside the piece's boxes, from the first to
+  the last, the one range that reads as its letters is its new offsets; with
+  none, or more than one, the mark is lost. There is no tolerance constant.
+- `migratePieces(target, oldTexts)`: fills the letters of pieces stored before
+  pieces kept them: a one-piece mark's are the mark's text, the others' are
+  read at their offsets in the older build's text, or left empty, so lost.
 
 ### Marks and mark types
 
 - `markTypes.ts`: `MarkType`, `MarkTypeOption`, `builtInMarkTypes` (read from
   the schema's `$defs.entityType.oneOf`), `customMarkType`, `customTypeName`,
   `markTypeLabel`.
-- `marks.ts`: `TextPiece`, `MarkTarget`, `TextTarget`, `Mark`, `nextId`,
+- `marks.ts`: `TextPiece` (with `text`, its letters), `MarkTarget`, `TextTarget`, `Mark`, `nextId`,
   `markKey`, `itemKey`, `markPages`, `boxesOn`, `firstPage`, `markName`,
   `toEdits`.
 

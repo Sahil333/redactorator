@@ -2,8 +2,10 @@ import * as mupdf from "mupdf";
 import type { Appearance, Edit } from "../../model/document";
 import type { Box, PageIndex } from "../../model/geometry";
 import { rangeBoxes } from "../../model/pageText";
+import { around } from "../geometry";
+import { centre, glyphsOf, inside, overlap, type PageGlyph } from "../glyphs";
 import { readText, withPage } from "../text";
-import { CheckFailed, openPdf, type Redaction } from "./common";
+import { CHECK_OPTIONS, CheckFailed, openPdf, type Redaction } from "./common";
 
 // The label font is Helvetica in WinAnsiEncoding, which matches Latin-1 on these code points.
 const inWinAnsi = (c: string) => {
@@ -23,17 +25,52 @@ function textAreas({ text, ink }: ReturnType<typeof readText>, edit: Extract<Edi
   return boxes.map((box, line) => ({ box, textArea: bands[line] ?? box }));
 }
 
+/**
+ * A text mark's box, trimmed above and below so that it covers none of the letters it leaves. On
+ * lines set closer than their font's height, a line's full height reaches into the next line's
+ * letters, and a box drawn over them would hide letters the file still holds. It is never trimmed
+ * into the marked letters' own ink band: where their ink truly meets another line's, the check
+ * still refuses.
+ */
+function trimmed({ box, textArea }: { box: Box; textArea: Box }, kept: readonly PageGlyph[]): Box {
+  let { y0, y1 }: { y0: number; y1: number } = box;
+  for (const { body } of kept) {
+    const middle = (body.y0 + body.y1) / 2;
+    // A letter on the marked line itself is beside the box, not above or below it.
+    if (!overlap(box, body) || (middle > textArea.y0 && middle < textArea.y1)) continue;
+    if (middle <= textArea.y0) y0 = Math.max(y0, body.y1);
+    else y1 = Math.min(y1, body.y0);
+  }
+  return around([
+    [box.x0, Math.min(y0, textArea.y0)],
+    [box.x1, Math.max(y1, textArea.y1)],
+  ]);
+}
+
+/** A page's redactions with each text mark's box trimmed clear of the letters no box removes. */
+function trimmedOnPage(original: mupdf.Document, page: PageIndex, redactions: readonly Redaction[], fromText: ReadonlySet<Redaction>): Redaction[] {
+  if (!redactions.some((redaction) => fromText.has(redaction))) return [...redactions];
+  const kept = withPage(original, page, (each) => glyphsOf(each, CHECK_OPTIONS)).filter(
+    (glyph) => glyph.c.trim() !== "" && !redactions.some(({ textArea }) => inside(textArea, centre(glyph.body))),
+  );
+  return redactions.map((redaction) => (fromText.has(redaction) ? { ...redaction, box: trimmed(redaction, kept) } : redaction));
+}
+
 /** Each page's redaction boxes, with text edits turned into one box per line from the original's own text. */
 export function redactionsByPage(original: mupdf.Document, edits: readonly Edit[]): Map<PageIndex, Redaction[]> {
   const byPage = new Map<PageIndex, Redaction[]>();
+  const fromText = new Set<Redaction>();
   for (const edit of edits) {
     if (edit.page >= original.countPages()) throw new Error("An edit names a page the file does not have");
     const areas = edit.kind === "box" ? [{ box: edit.box, textArea: edit.box }] : textAreas(withPage(original, edit.page, readText), edit);
     const list = byPage.get(edit.page) ?? [];
     const printed = `[${[...edit.label.toUpperCase()].map((c) => (inWinAnsi(c) ? c : "?")).join("")}]`;
-    list.push(...areas.map((area) => ({ ...area, printed })));
+    const made = areas.map((area) => ({ ...area, printed }));
+    if (edit.kind === "text") for (const each of made) fromText.add(each);
+    list.push(...made);
     byPage.set(edit.page, list);
   }
+  for (const [page, list] of byPage) byPage.set(page, trimmedOnPage(original, page, list, fromText));
   return byPage;
 }
 

@@ -55,10 +55,11 @@ engine/pdf/worker.ts (Web Worker, MuPDF) ◄────────────
 - tools: [./tools/README.md](./tools/README.md) - Python developer tools. `tools/dataset` validates ground-truth files.
 - tests/e2e - The Playwright browser tests, one per behaviour a user sees. They call the outside checker through `tests/e2e/oracle.ts`.
 - tests/oracle: [./tests/oracle/README.md](./tests/oracle/README.md) - The outside checker that judges written outputs. It shares no code with the app or MuPDF.
-- fixtures - Synthetic test PDFs, written by `tests/oracle/make_fixtures.py`, and `fixtures/golden/`: storage an earlier build wrote, with the records expected after reading it, used by `tests/e2e/golden.spec.ts` to prove old projects still open.
+- fixtures - Synthetic test PDFs, written by `tests/oracle/make_fixtures.py`, and `fixtures/golden/`: storage this build and the build before reader tags (`pre-phase-3/`) wrote, with the records expected after reading each, used by `tests/e2e/golden.spec.ts` and `tests/e2e/anchoring.spec.ts` to prove old projects still open, with their marks on their words.
 - dataset: [./dataset/README.md](./dataset/README.md) - The ground-truth schema and dataset notes.
 - docs - Copies of the live PRD, HLD and Implementation Plan (not edited here), and `docs/designs/`, design documents written in this repo.
 - vendor/mupdf: [./vendor/mupdf/README.md](./vendor/mupdf/README.md) - The vendored MuPDF WebAssembly package (third-party).
+- vendor/arlington: [./vendor/arlington/README.md](./vendor/arlington/README.md) - The PDF Association's Arlington PDF Model at one pinned commit (third-party, Apache 2.0): build-time data the allowlist's role table is generated from, never read at run time.
 
 ## Global Invariants
 
@@ -66,6 +67,15 @@ engine/pdf/worker.ts (Web Worker, MuPDF) ◄────────────
   calls `fetch`, `XMLHttpRequest`, `sendBeacon`, `WebSocket` or `EventSource`.
   The only requests are for the app's own bundled files, such as the font
   `app/main.tsx` imports. The CSP above limits connections to `'self'`.
+- Every PDF is prepared once, when it is added and again only when the reader
+  tag (`engine/pdf-protocol/messages.ts:READER_TAG`) changes, into a working
+  copy that keeps only what a reader sees on screen or in print
+  (`engine/pdf/prepare/`). The app shows, reads, marks and writes from the
+  working copy; the user's file is never changed, and a file preparation
+  can't clean is refused with a reason.
+- Stored files are only ever added: each reader tag has a folder of its own in
+  a project's `.redactorator/`, so an older build still opens the project as it
+  last saw it (`engine/core/stored/projects.ts`).
 - Redaction deletes text and blanks image pixels before it covers.
   `engine/pdf/write/redact.ts:redact` removes the glyphs under each mark
   (judged on each text mark's ink band, or on a drawn box) and sets image

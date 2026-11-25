@@ -30,7 +30,7 @@ one may import (see Invariants).
   - [model](./model/README.md): the shared data model and functions over it (geometry, text, marks, matching, images, projects, spreading, ground truth). All are pure except `newDocumentId`, which calls `crypto.randomUUID()`.
   - [storage](./storage/README.md): the `Store` port, the only route to project storage.
   - [pdf-protocol](./pdf-protocol/README.md): the request and reply messages between the core and the PDF worker, and their parsers.
-  - [pdf](./pdf/README.md): the PDF worker (MuPDF). Inspect, match, open, render, text and apply.
+  - [pdf](./pdf/README.md): the PDF worker (MuPDF). Prepare, match, open, render, text and apply.
   - [host-browser](./host-browser/README.md): `createBrowserEngine`, which fills the core's ports with browser APIs.
 
 ## Invariants

@@ -1,25 +1,10 @@
 import * as mupdf from "mupdf";
 import type { Appearance } from "../../model/document";
 import type { Box, PageIndex } from "../../model/geometry";
-import { around, bodyOf, quadCorners, transform } from "../geometry";
-import { centre, inside, overlap, textMoved, type PageGlyph, type Point } from "../glyphs";
+import { around, transform, type Point } from "../geometry";
+import { centre, glyphsOf, inside, overlap, textMoved, type PageGlyph } from "../glyphs";
 import { withPage } from "../text";
-import { CheckFailed, type Redaction } from "./common";
-
-function glyphsOf(page: mupdf.Page): PageGlyph[] {
-  const text = page.toStructuredText("preserve-whitespace");
-  const found: PageGlyph[] = [];
-  try {
-    text.walk({
-      onChar(c, origin, _font, size, quad) {
-        found.push({ c, box: around(quadCorners(quad)), body: bodyOf(origin, size, quad) });
-      },
-    });
-  } finally {
-    text.destroy();
-  }
-  return found;
-}
+import { CHECK_OPTIONS, CheckFailed, type Redaction } from "./common";
 
 /**
  * Text left on a page under its redaction boxes. Only our own labels may be there: each
@@ -135,9 +120,9 @@ export function check(original: mupdf.PDFDocument, output: mupdf.PDFDocument, by
     throw new CheckFailed("The cleaned file still has metadata.");
   }
   for (const [index, redactions] of byPage) {
-    const cleaned = withPage(output, index, glyphsOf);
+    const cleaned = withPage(output, index, (page) => glyphsOf(page, CHECK_OPTIONS));
     const textAreas = redactions.map(({ textArea }) => textArea);
-    if (textMoved(withPage(original, index, glyphsOf), cleaned, textAreas)) {
+    if (textMoved(withPage(original, index, (page) => glyphsOf(page, CHECK_OPTIONS)), cleaned, textAreas)) {
       throw new CheckFailed(`Other text on page ${index + 1} would move in the cleaned file.`);
     }
     if (textUnderBoxes(cleaned, redactions, appearance)) {

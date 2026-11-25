@@ -1,4 +1,4 @@
-import type { Appearance, DocumentModel, Edit, PageChar, PageModel, PageText, PlacedImage, Reading } from "./document";
+import { removalKinds, type Appearance, type DocumentModel, type Edit, type PageChar, type PageModel, type PageText, type PlacedImage, type Reading, type RemovalKind } from "./document";
 import { isMatrix, isPageIndex, isPoints, parseBox } from "./geometry";
 import { isOffset, isPositiveNumber, isRecord, parseAll } from "./guards";
 
@@ -7,8 +7,8 @@ const isColour = (value: unknown): value is string => typeof value === "string" 
 export function parseEdit(value: unknown): Edit | undefined {
   if (!isRecord(value) || !isPageIndex(value.page) || typeof value.label !== "string") return undefined;
   const { page, label } = value;
-  if (value.kind === "text" && isOffset(value.start) && isOffset(value.end) && value.start < value.end) {
-    return { kind: "text", page, start: value.start, end: value.end, label };
+  if (value.kind === "text" && isOffset(value.start) && isOffset(value.end) && value.start < value.end && typeof value.text === "string") {
+    return { kind: "text", page, start: value.start, end: value.end, text: value.text, label };
   }
   const box = value.kind === "box" ? parseBox(value.box) : undefined;
   return box && { kind: "box", page, box, label };
@@ -60,3 +60,5 @@ export function parseReading(value: unknown): Reading | undefined {
   const images = parseAll(value.images, parsePlacedImage);
   return first && images && { texts: [first, ...rest], images };
 }
+
+export const parseRemovalKind = (value: unknown): RemovalKind | undefined => removalKinds.find((kind) => kind === value);

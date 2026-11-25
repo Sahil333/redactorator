@@ -1,4 +1,5 @@
 import type { ErrorCode, Result } from "../../../api/errors";
+import { READER_TAG } from "../../../pdf-protocol/messages";
 import type { Store } from "../../../storage/store";
 import { importProject } from "../../stored/projects";
 import type { LibraryHost } from "../host";
@@ -15,7 +16,7 @@ const notImported: Record<NonNullable<Awaited<ReturnType<typeof importProject>>>
 export async function importInto(host: LibraryHost, from: Store, into: Store): Promise<Result<void>> {
   let code: ErrorCode | undefined;
   try {
-    const why = await importProject(from, into);
+    const why = await importProject(from, into, READER_TAG);
     code = why && notImported[why];
   } catch {
     code = "import-failed";
