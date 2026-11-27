@@ -25,7 +25,5 @@ many file types. Nothing a user loads ever leaves the browser.
 - Browser integration tests first; unit tests only where a bug shows they help.
 - Plan before code for changes to the redaction engine.
 - Never assume. If a requirement or behaviour is unclear, stop and ask the owner.
-- Write only the code the task needs: no speculative features, options or
-  abstractions. Components that each own one responsibility are intended
-  design, not speculation.
+- Use abstractions where necessary and, especially at the start of the phases of the implementation-plan until MVP/V1. For smaller changes in the codebases you don't need to create abstractions.
 - Each agent works in its own git worktree.
