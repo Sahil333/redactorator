@@ -44,6 +44,8 @@ const formPdf = new URL("../../fixtures/form.pdf", import.meta.url).pathname;
 // More words of letter-a.pdf, from tests/oracle/README.md, in the app's box convention.
 const aAccount: PointBox = [72, 99.1, 128.7, 115.6];
 const aRoe: PointBox = [72, 119.1, 94.0, 135.6];
+// letter-b.pdf's line "Her account 1234-5678 was closed, and 1234.5678 too.", from Helvetica's widths.
+const bAccountLine: PointBox = [72, 99.1, 370.2, 115.6];
 // Across logo-a.pdf's logo's lower right corner, less than half of it on the logo.
 const offLogo: PointBox = [330, 250, 530, 350];
 // Where logo-b.pdf draws each image, in user space (tests/oracle/README.md).
@@ -141,6 +143,32 @@ test("approving a document hides its values in another, however they are written
     // The line above the hidden "Roe" sits closer than the letters are tall, and stays whole.
     { check: "present", text: "The form was signed by" },
     { check: "metadata" },
+  ]);
+});
+
+test("a value inside a wider mark gets a mark of its own there, so approving that document keeps the value hidden in the others", async ({ page }) => {
+  await openLetters(page);
+  await markText(page, 1, aAccount, "Financial account");
+  await show(page, "letter-b.pdf");
+  // Both places of the account in letter-b.pdf lie inside this mark.
+  await markText(page, 1, bAccountLine, "Other");
+
+  await show(page, "letter-a.pdf");
+  await approve(page, /hides 2 places in letter-b\.pdf/);
+  await show(page, "letter-b.pdf");
+  await expect(marks(page)).toHaveText([/^Her account 1234-5678/, /^New1234-5678.*2 places, page 1/]);
+
+  await approve(page, undefined);
+  await judge(letterB, await applyAndDownload(page), [
+    { check: "absent", values: ["1234-5678", "1234.5678", "Her account"] },
+    { check: "present", text: "She lives on Monroe Street." },
+  ]);
+  await page.getByRole("button", { name: "Back to editing" }).click();
+  await show(page, "letter-a.pdf");
+  await expect(marks(page)).toHaveText([/1234 5678/]);
+  await judge(letterA, await applyAndDownload(page), [
+    { check: "absent", values: ["1234 5678"] },
+    { check: "present", text: "is the account she named." },
   ]);
 });
 
