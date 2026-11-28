@@ -55,13 +55,26 @@ records that the [slices](../slices/README.md) reduce.
   - `saver({ store, folder, latest, dispatch })`: returns `flush()` and
     `changed()` for one Session's project record.
 - `detect.ts`
-  - `detectionOf(host)`: builds `Session["detection"]` (`run`, `stop`). Until
-    the detection worker exists, both refuse with `detector-not-started`
-    once the gate allows them; `run` first refuses with `no-profile` when
-    neither the project nor the call names a profile.
+  - `detectionOf(host)`: builds `Session["detection"]` (`run`, `stop`) plus
+    `end()`. `run` refuses with `no-profile` when neither the project nor the
+    call names a profile, then reads the document's stored page texts: missing
+    or damaged ones start the update and refuse with `busy-updating`, and with
+    the original gone too it refuses with `original-missing`. It asks the gate
+    again, then dispatches `runStarted`, sends the pages through
+    `DetectionClient.run`, dispatches `pageSearched` as each answers and
+    `runEnded` with the run's record, and hands the run to `host.ended`.
+    `stop` ends the worker when a run is on that document. `end()` ends the
+    worker and resolves once a run in progress has ended, for `close`.
 - `findings.ts`
-  - `findingsOf(host)`: builds `Session["findings"]`. Until a run can end with
-    hits, every command refuses with `no-findings` once the gate allows it.
+  - `findingsOf(host)`: builds `Session["findings"]` plus `ended(document,
+    record, hits)` and `landed(change)`. `ended` runs the resolver on a run's
+    hits and opens a findings review (`findingsOpened`), or, when nothing is
+    left to offer and the run did not fail, sets the `nothing-found` notice.
+    `landed` runs the resolver again on an open findings review after
+    `approved`, `documentPrepared` or `reanchored` changed its document's
+    marks, and ends it (`findingsClosed`) when no finding is left. Ticking,
+    choosing, edges, confirm, close and notices still refuse with
+    `no-findings` once the gate allows them.
 - `profile.ts`
   - `profileOf(host)`: builds `Session["profile"]`. `set` dispatches
     `profileSet` through `change`, so the project is saved.
@@ -105,8 +118,12 @@ records that the [slices](../slices/README.md) reduce.
   every chosen file and adds none (`add.ts:run`, `add-search-failed`,
   `add-save-failed`). Any other failure, such as `intake` rejecting, also
   refuses every chosen file with `add-save-failed` (`add.ts:adderOf`).
-- An approval plan counts no found values yet (`unmarkedFindings: 0`), since
-  no findings review can be open (`plan.ts:run`).
+- An approval plan counts no found values yet (`unmarkedFindings: 0`)
+  (`plan.ts:run`).
+- A run's hits are held in memory until it ends; the pages that answered keep
+  theirs however it ends, and the others are its `notSearched`
+  (`detect.ts:search`). A run the Session's closing stopped opens no findings
+  review (`findings.ts:ended`).
 - Project saves run one after another, so an older project never lands after
   a newer one; changes made during a save are saved together next, and a failed
   save is retried by the next change or flush (`save.ts:saver`, `writing`,

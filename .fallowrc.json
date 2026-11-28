@@ -8,7 +8,16 @@
   // Implementation Plan, section 1. V1 removes this entry.
   "overrides": [
     {
-      "files": ["engine/model/detection.ts", "engine/model/identifiers.ts", "engine/model/findings.ts"],
+      "files": [
+        "engine/model/detection.ts",
+        "engine/model/identifiers.ts",
+        "engine/model/findings.ts",
+        "engine/model/resolver.ts",
+        "engine/core/session/effects/detect.ts",
+        "engine/core/session/effects/findings.ts",
+        "engine/core/session/slices/detection.ts",
+        "engine/core/session/slices/findings.ts"
+      ],
       "rules": {
         "unused-files": "warn",
         "unused-exports": "warn",
