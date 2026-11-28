@@ -154,6 +154,10 @@ rotation and crop applied):
 | `refused-jpeg-without-end.pdf` | 612 × 792 | A JPEG with no end-of-image marker; preparation refuses it |
 | `refused-codestream-without-end.pdf` | 612 × 792 | A J2K codestream with no end-of-codestream marker; preparation refuses it |
 | `refused-jp2-without-codestream.pdf` | 612 × 792 | A JP2 file with no `jp2c` box, which MuPDF can't read; preparation refuses it at step 5 |
+| `auto-card.pdf` | 612 × 792 | Auto mode's first fixture, in 12 pt Helvetica at x 72: "Statement for June 2026", "Card number 4111 1111 1111 1111", a card number that passes the Luhn check, and "Reference 4111 1111 1111 1112", a near-miss that fails it |
+| `auto-offset.pdf` | 612 × 792 | "Paid to 𝐀 ﬁrm, card 4000 0000 0000 0002 in full": the font's `ToUnicode` map gives code 0x80 as U+1D400, stored as two UTF-16 units, and code 0x83 as the ligature U+FB01, both before the card number. MuPDF's JavaScript reads U+1D400 as one unit, U+D400, and the ligature as `f` and `i` |
+| `auto-shapes.pdf` | 612 × 792, two pages | Page 1: two card numbers that touch, `4222222222222220/4555555555555550`; and `4333 3333` ending one line and `3333 3339` starting the next, which no rule finds, since a line end is no separator. Page 2: 300 different card numbers, `4000 0000 0000 0010` on, six to a 7 pt line, with ", " between them |
+| `auto-pages.pdf` | 612 × 792, twelve pages | "Statement page N" on each page, and a different card number on pages 1, 5 and 12: `4666 6666 6666 6669`, `4777 7777 7777 7778` and `4888 8888 8888 8887` |
 
 ## Leak vectors
 

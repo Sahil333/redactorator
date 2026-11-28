@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { PlacedImage } from "../engine/model/document";
 import { anchorOf } from "../engine/model/images";
 import { firstPage, itemKey, markKey, markName, markPages, type Mark } from "../engine/model/marks";
-import { pagesLabel } from "./marks";
+import { pagesLabel, pagesList, plural } from "./marks";
 import { markTypeLabel, type MarkTypeOption } from "../engine/model/markTypes";
 import { PageLink } from "./PageLink";
 import type { HiddenValue } from "../engine/model/project";
@@ -58,15 +58,11 @@ function itemsOf(marks: readonly Mark[]): Item[] {
   return [...byKey.values()];
 }
 
-const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`;
-
 /** "page 2", "pages 2–3" for one mark across pages, or "3 places, pages 1 and 4". */
 function placesLabel([first, ...rest]: Item): string {
   if (rest.length === 0) return pagesLabel(first.target);
   const pages = [...new Set([first, ...rest].flatMap((mark) => markPages(mark.target)))].toSorted((a, b) => a - b).map((page) => page + 1);
-  const last = pages.pop();
-  const list = pages.length === 0 ? `page ${last}` : `pages ${pages.join(", ")} and ${last}`;
-  return `${rest.length + 1} places, ${list}`;
+  return `${rest.length + 1} places, ${pagesList(pages)}`;
 }
 
 function ViewPicker({ view, onView, newCount }: { readonly view: View; readonly onView: (view: View) => void; readonly newCount: number }) {

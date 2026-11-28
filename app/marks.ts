@@ -19,3 +19,11 @@ export function pagesLabel(target: MarkTarget): string {
   const last = target.kind === "text" ? (target.pieces.at(-1)?.page ?? 0) + 1 : first;
   return last === first ? `page ${first}` : `pages ${first}–${last}`;
 }
+
+export const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`;
+
+/** "page 4", or "pages 1, 2 and 4", for page numbers in order. */
+export function pagesList(pages: readonly number[]): string {
+  const last = pages.at(-1);
+  return pages.length < 2 ? `page ${last}` : `pages ${pages.slice(0, -1).join(", ")} and ${last}`;
+}

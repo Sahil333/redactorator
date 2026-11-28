@@ -4,31 +4,6 @@
   "health": {
     "coverage": "coverage/coverage-final.json"
   },
-  // Phase 4 audit exemption: docs/designs/auto-mode.md, Detailed
-  // Implementation Plan, section 1. V1 removes this entry.
-  "overrides": [
-    {
-      "files": [
-        "engine/model/detection.ts",
-        "engine/model/identifiers.ts",
-        "engine/model/findings.ts",
-        "engine/model/resolver.ts",
-        "engine/core/session/effects/detect.ts",
-        "engine/core/session/effects/findings.ts",
-        "engine/core/session/slices/detection.ts",
-        "engine/core/session/slices/findings.ts",
-        "engine/model/textView.ts",
-        "engine/detect-protocol/**",
-        "engine/detect/**",
-        "engine/core/detect-client/client.ts"
-      ],
-      "rules": {
-        "unused-files": "warn",
-        "unused-exports": "warn",
-        "complexity-crap": "warn"
-      }
-    }
-  ],
   // The same exemption for a new export in an existing file: P0's pack compiler reads it.
   "ignoreExports": [{ "file": "engine/model/match.ts", "exports": ["joinerClass"] }],
   "boundaries": {

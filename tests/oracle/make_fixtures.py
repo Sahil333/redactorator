@@ -1552,6 +1552,80 @@ REFUSED = {
     "jp2-without-codestream": jp2_without_codestream,
 }
 
+# The auto-*.pdf files: payment card numbers for Auto mode's tests (docs/designs/auto-mode.md,
+# slice V1). Every number is made up and passes the Luhn check; a near-miss fails it.
+def luhn_digit(body: str) -> str:
+    """The digit that makes `body` followed by it pass the Luhn check."""
+    total = sum(int(d) if i % 2 else (2 * int(d) - 9 if int(d) > 4 else 2 * int(d)) for i, d in enumerate(reversed(body)))
+    return str(-total % 10)
+
+
+def card_number(body: str) -> str:
+    """`body` with its check digit, in groups of four."""
+    digits = body + luhn_digit(body)
+    return " ".join(digits[at : at + 4] for at in range(0, len(digits), 4))
+
+
+def pages_pdf(contents: list[str], font: str = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+              extra: list[bytes] | None = None) -> bytes:
+    """Letter-size pages of text in `font`, object 3: catalog, pages, font, `extra`, then each page and its content."""
+    first = 4 + len(extra or [])
+    kids = " ".join(f"{first + 2 * i} 0 R" for i in range(len(contents)))
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", f"<< /Type /Pages /Kids [{kids}] /Count {len(contents)} >>".encode(), font.encode(), *(extra or [])]
+    for i, content in enumerate(contents):
+        objects += [f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents {first + 2 * i + 1} 0 R >>".encode(),
+                    stream("", content.encode())]
+    return write_pdf(objects, "/Root 1 0 R")
+
+
+# auto-card.pdf: one card number, and a near-miss one digit away from it.
+AUTO_CARD = card_number("411111111111111")
+AUTO_NEAR_MISS = AUTO_CARD[:-1] + str((int(AUTO_CARD[-1]) + 1) % 10)
+
+
+def auto_card() -> bytes:
+    return pages_pdf([line(72, 700, 12, "Statement for June 2026") + line(72, 670, 12, f"Card number {AUTO_CARD}")
+                      + line(72, 640, 12, f"Reference {AUTO_NEAR_MISS}")])
+
+
+# auto-offset.pdf: a card number after a character stored as two UTF-16 units (U+1D400, drawn
+# with code 0x80) and the ligature "fi" (U+FB01, code 0x83), both given by the font's ToUnicode map.
+AUTO_OFFSET_CARD = card_number("400000000000000")
+AUTO_OFFSET_UNICODE = (b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /AutoOffset def "
+                       b"1 begincodespacerange <00> <FF> endcodespacerange 1 beginbfrange <20> <7E> <0020> endbfrange "
+                       b"2 beginbfchar <80> <D835DC00> <83> <FB01> endbfchar endcmap CMapName currentdict /CMap defineresource pop end end")
+
+
+def auto_offset() -> bytes:
+    return pages_pdf([line(72, 700, 12, f"Paid to \\200 \\203rm, card {AUTO_OFFSET_CARD} in full")],
+                     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /ToUnicode 4 0 R >>",
+                     [stream("", AUTO_OFFSET_UNICODE)])
+
+
+# auto-shapes.pdf: on page 1, two card numbers that touch, with only a slash between them, and one
+# that runs across a line end; on page 2, 300 different card numbers, six to a line.
+AUTO_TOUCHING = (card_number("422222222222222"), card_number("455555555555555"))
+AUTO_ACROSS_LINES = card_number("433333333333333")
+AUTO_HUNDREDS = [card_number(f"4{i:014d}") for i in range(1, 301)]
+
+
+def auto_shapes() -> bytes:
+    across = AUTO_ACROSS_LINES.split(" ")
+    first = (line(72, 700, 12, f"Cards on file {AUTO_TOUCHING[0].replace(' ', '')}/{AUTO_TOUCHING[1].replace(' ', '')} today")
+             + line(72, 670, 12, f"Paid with card {' '.join(across[:2])}") + line(72, 655, 12, f"{' '.join(across[2:])} on 3 May"))
+    rows = [", ".join(AUTO_HUNDREDS[at : at + 6]) for at in range(0, len(AUTO_HUNDREDS), 6)]
+    return pages_pdf([first, "".join(line(36, 760 - 14 * i, 7, row) for i, row in enumerate(rows))])
+
+
+# auto-pages.pdf: twelve pages, with a different card number on pages 1, 5 and 12.
+AUTO_PAGE_CARDS = {1: card_number("466666666666666"), 5: card_number("477777777777777"), 12: card_number("488888888888888")}
+
+
+def auto_pages() -> bytes:
+    return pages_pdf([line(72, 700, 12, f"Statement page {n}") + (line(72, 670, 12, f"Card {AUTO_PAGE_CARDS[n]}") if n in AUTO_PAGE_CARDS else "")
+                      for n in range(1, 13)])
+
+
 if __name__ == "__main__":
     for name, build in [("one-word", one_word), ("image", image), ("rotated-cropped", rotated_cropped),
                         ("encrypted", encrypted), ("cross-page", cross_page), ("masked-image", masked_image),
@@ -1576,6 +1650,7 @@ if __name__ == "__main__":
                         ("data-after-end-filters", data_after_end_filters), ("name-trees", name_trees),
                         ("grey-array-soft-mask", grey_array_soft_mask), ("wrong-type-value", wrong_type_value),
                         ("jpx-parameters", jpx_parameters), ("postscript-left", postscript_left),
+                        ("auto-card", auto_card), ("auto-offset", auto_offset), ("auto-shapes", auto_shapes), ("auto-pages", auto_pages),
                         *[(f"refused-{name}", build) for name, build in REFUSED.items()]]:
         (FIXTURES / f"{name}.pdf").write_bytes(build())
         print(f"wrote fixtures/{name}.pdf")

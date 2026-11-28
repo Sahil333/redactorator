@@ -55,4 +55,5 @@ stops the client.
 
 ## Verification
 
-- Run: `pnpm test`. No browser test reaches the client until slice V1.
+- Run: `pnpm test`. `tests/e2e/auto-run.spec.ts` drives the client from the
+  app, with the real worker and with a fake one that never answers a page.

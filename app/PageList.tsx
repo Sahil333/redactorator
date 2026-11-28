@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from "react";
 import type { PageModel, PageText } from "../engine/model/document";
+import type { Finding } from "../engine/model/findings";
 import type { Box, PageIndex } from "../engine/model/geometry";
 import { markPages, type Mark, type MarkTarget } from "../engine/model/marks";
 import type { Pending, Tool } from "./marks";
@@ -14,6 +15,8 @@ interface PageListProps {
   readonly images: ReadonlyMap<PageIndex, ImageData>;
   readonly texts: ReadonlyMap<PageIndex, PageText>;
   readonly marks: readonly Mark[];
+  /** The open findings review's values, drawn apart from the marks; undefined while none is open. */
+  readonly findings: readonly Finding[] | undefined;
   readonly pending: Pending | undefined;
   readonly highlighted: Mark["id"] | undefined;
   /** Undefined while the pages take no marks: in the preview, or while the engine is busy. */
@@ -71,6 +74,7 @@ export function PageList(props: PageListProps) {
           page={page}
           image={images.get(page.index)}
           marks={marks.filter((mark) => markPages(mark.target).includes(page.index))}
+          found={{ text: texts.get(page.index), places: props.findings?.flatMap(({ places }) => places.filter((place) => place.page === page.index)) ?? [] }}
           pending={pending}
           highlighted={highlighted}
           tool={tool}

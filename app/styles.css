@@ -56,7 +56,7 @@
   }
 }
 
-/* A row's menu opens under its ⋯ button, the popover's implicit anchor. */
+/* A menu opens under its ⋯ button, the popover's implicit anchor. */
 @supports (position-area: bottom) {
   .row-menu {
     position-area: bottom span-left;

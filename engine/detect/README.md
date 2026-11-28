@@ -40,8 +40,9 @@ expression over the page as written, with a value group, an optional
 - `validators/`: `shared.ts:luhn`, `universal.ts:card` (14 to 19 digits that
   pass Luhn), and `index.ts:validators`, the registry by name, with the
   `Validator` type.
-- `packs/generated/`: `universal.json`, one rule (the payment card), and
-  `index.ts:compiledPacks`, the packs by id. Both are written by hand until
+- `packs/generated/`: `universal.json`, one rule (the payment card), an empty
+  pack for each country and industry, so a run with any profile loads, and
+  `index.ts:compiledPacks`, the packs by id. All are written by hand until
   slice P0's compiler writes them.
 
 ## Invariants
@@ -91,5 +92,6 @@ expression over the page as written, with a value group, an optional
 
 - Run: `pnpm test`. It includes `tsc -p engine/detect`,
   `tsc -p engine/detect/tsconfig.worker.json`, and the unit tests
-  `regexEngine.test.ts` and `patternRecognizer.test.ts`. No browser test
-  reaches the worker until slice V1.
+  `regexEngine.test.ts` and `patternRecognizer.test.ts`. The browser tests
+  `tests/e2e/auto-run.spec.ts` and `tests/e2e/network.spec.ts` run the worker
+  from the app.

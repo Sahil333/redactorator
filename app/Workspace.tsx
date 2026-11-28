@@ -16,8 +16,9 @@ import { Splitter } from "./Splitter";
 import { Thumbnails, thumbnailsWidth } from "./Thumbnails";
 import type { EngineError } from "../engine/api/errors";
 import type { Session } from "../engine/api/facade";
-import type { DocumentHandle } from "../engine/api/state";
+import type { DocumentDetection, DocumentHandle } from "../engine/api/state";
 import { errorText } from "./errors";
+import { FindingsPanel } from "./FindingsPanel";
 import { usePageImages } from "./usePageImages";
 import { useZoom } from "./useZoom";
 import { ZoomControls } from "./ZoomControls";
@@ -75,6 +76,8 @@ interface WorkspaceProps {
   /** Puts the error away, and with it a refused Preview's highlight. */
   readonly onDismissError: () => void;
   readonly marks: Marks;
+  /** The document's open findings review, shown in the marks panel's place. */
+  readonly findings: DocumentDetection["findings"];
   readonly review: Review;
   /** The document's images a box can spread over; undefined until they are read. */
   readonly images: readonly PlacedImage[] | undefined;
@@ -179,6 +182,7 @@ export function Workspace(props: WorkspaceProps) {
               images={viewer.images[source]}
               texts={viewer.texts}
               marks={shownMarks}
+              findings={output === undefined ? props.findings?.findings : undefined}
               pending={marks.pending}
               highlighted={marks.highlighted}
               tool={editing ? props.tool : undefined}
@@ -195,31 +199,38 @@ export function Workspace(props: WorkspaceProps) {
         </DropZone>
         <ZoomControls zoom={zoom} />
       </div>
-      <Splitter
-        label="Resize the marks panel"
-        panel={MARKS_PANEL_ID}
-        width={widths.marks}
-        limits={marksPanelWidth}
-        grows={-1}
-        onResize={(width) => onWidths({ ...widths, marks: width })}
-      />
-      <MarksPanel
-        id={MARKS_PANEL_ID}
-        width={widths.marks}
-        marks={marks.marks}
-        canMark={props.canMark}
-        hidden={review.hidden}
-        reach={review.reach}
-        images={props.images}
-        typeOptions={marks.typeOptions}
-        highlighted={marks.highlighted}
-        onHighlight={marks.highlight}
-        onRemove={marks.remove}
-        onRetype={marks.retype}
-        onKeepHere={review.onKeepHere}
-        lost={review.lost}
-        {...(props.labelling && { onLink: marks.link })}
-      />
+      <SidePanel {...props} />
     </div>
+  );
+}
+
+/** The marks panel at the right, or the findings panel in its place while a findings review is open, and the splitter that resizes it. */
+function SidePanel({ marks, review, findings, widths, onWidths, canMark, images, labelling }: WorkspaceProps) {
+  const label = findings === undefined ? "Resize the marks panel" : "Resize the found values panel";
+  return (
+    <>
+      <Splitter label={label} panel={MARKS_PANEL_ID} width={widths.marks} limits={marksPanelWidth} grows={-1} onResize={(width) => onWidths({ ...widths, marks: width })} />
+      {findings === undefined ? (
+        <MarksPanel
+          id={MARKS_PANEL_ID}
+          width={widths.marks}
+          marks={marks.marks}
+          canMark={canMark}
+          hidden={review.hidden}
+          reach={review.reach}
+          images={images}
+          typeOptions={marks.typeOptions}
+          highlighted={marks.highlighted}
+          onHighlight={marks.highlight}
+          onRemove={marks.remove}
+          onRetype={marks.retype}
+          onKeepHere={review.onKeepHere}
+          lost={review.lost}
+          {...(labelling && { onLink: marks.link })}
+        />
+      ) : (
+        <FindingsPanel id={MARKS_PANEL_ID} width={widths.marks} review={findings} />
+      )}
+    </>
   );
 }
