@@ -54,10 +54,10 @@ available are the ones declared in `engine/globals.ts`.
 - `DetectionErrorCode`: `detector-not-started`, `recognizer-failed`,
   `detector-failed`, why a run of Auto mode ended as failed.
 
-### Auto mode (`findings.ts`, `detection.ts`, `identifiers.ts`)
+### Auto mode (`findings.ts`, `detection.ts`, `identifiers.ts`, `resolver.ts`)
 
-The contracts of docs/designs/auto-mode.md, Technical Plan, section 3. Nothing
-uses them yet.
+The contracts of docs/designs/auto-mode.md, Technical Plan, section 3, and the
+resolver.
 
 - `findings.ts`: `EvidenceKind`, `EvidenceLevel`, `Evidence`, `Hit`,
   `FindingPlace`, `Candidate`, `Finding`, and `FindingChange`, what the user
@@ -68,6 +68,16 @@ uses them yet.
   loads, `universal` always first), and `RunRecord`.
 - `identifiers.ts`: `identifierPacks`, each of the 65 identifier type ids and
   its pack.
+- `resolver.ts`: `resolve({ hits, marks, rejected, changes })`, the findings
+  of one ended run, in the six steps of the design. A hit is left out where a
+  text mark of its own key overlaps it, and when its key is rejected. Hits on
+  one span are one finding's candidates, one per identifier, the default
+  first: the stronger evidence, then the pack order, then the order of the
+  hits (the order of the rules). Places that share a key are one finding. The
+  user's changes apply by key; findings whose values became one are joined,
+  and a place where the value as changed is marked is left out. Strongest
+  evidence first, then by first place. It reads no page text. The caller
+  passes the marks without the lost ones.
 
 ### Parsers (`parse.ts`)
 

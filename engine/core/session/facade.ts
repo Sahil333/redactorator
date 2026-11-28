@@ -103,7 +103,8 @@ export function openSession(
     const code = gate(now, command, document);
     return code === undefined ? { ok: true, value: now } : { ok: false, error: { code } };
   }
-  const dispatch = (change: SessionChange, ...effects: (() => void)[]) => host.dispatch(session, change, ...effects);
+  // A record that changes a document's marks from outside its findings review resolves that review again.
+  const dispatch = (change: SessionChange, ...effects: (() => void)[]) => host.dispatch(session, change, ...effects, () => findings.landed(change));
   const saving = saver({ store, folder, latest: () => view()?.parts.record.present.project, dispatch });
   /** Dispatches a change to the project record, which saves it. */
   const change = (record: SessionChange) => dispatch(record, saving.changed);
@@ -149,8 +150,8 @@ export function openSession(
   const approval = approvalOf({ source, view, allowed, dispatch, change });
   const adder = adderOf({ ...source, intake: host.intake, allowed, dispatch, change });
   const viewer = viewerOf({ source, view, allowed, dispatch });
-  const detection = detectionOf({ source, view, allowed, dispatch, change, client: host.detection });
-  const findings = findingsOf({ source, view, allowed, dispatch, change });
+  const findings = findingsOf({ view, allowed, dispatch });
+  const detection = detectionOf({ source, allowed, dispatch, client: host.detection, ended: findings.ended });
   const profile = profileOf({ allowed, change });
 
   /**
@@ -218,8 +219,15 @@ export function openSession(
       },
     },
     viewer,
-    detection,
-    findings,
+    detection: { run: detection.run, stop: detection.stop },
+    findings: {
+      setTicked: findings.setTicked,
+      choose: findings.choose,
+      setEdges: findings.setEdges,
+      confirm: findings.confirm,
+      close: findings.close,
+      dismissNotice: findings.dismissNotice,
+    },
     profile,
     output: {
       apply() {
@@ -253,6 +261,8 @@ export function openSession(
       const at = allowed("close");
       if (!at.ok) return at;
       dispatch({ type: "closeStarted" });
+      // A run is stopped, and its hits lost, as on a reload.
+      await detection.end();
       // An add or an approval being worked out lands first; one waiting for its heads-up is cancelled.
       await adder.settled();
       await approval.settled();

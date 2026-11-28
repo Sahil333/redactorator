@@ -73,7 +73,13 @@ parts into the published `SessionState`.
   `findings` command but `dismissNotice` is refused with `no-findings`
   (`gate.ts:detecting`).
 - `detection.run` is refused with `no-profile` when the project has no profile
-  and the run names none (`effects/detect.ts`).
+  and the run names none, and asks the gate again once the stored page texts
+  are read (`effects/detect.ts`).
+- Every record the Session dispatches also tells the findings review, which
+  resolves an open review again when the record changed its document's marks
+  (`facade.ts:openSession`, `dispatch`).
+- Closing stops a run and ends the detection worker first; the run's hits are
+  lost (`facade.ts:close`).
 - While documents are prepared again for this build, `add`, `mark`, `history`,
   `open`, `apply`, `approve`, `confirm`, `addDocuments` and `markDownloaded`
   and Auto mode's commands are refused with `busy-updating`

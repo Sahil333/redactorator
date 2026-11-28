@@ -103,8 +103,8 @@ export interface Session {
   };
   /** Auto mode's run on one document; one run at a time in a project. */
   readonly detection: {
-    /** Starts a run; `profile` replaces the project's for this run only. */
-    run(document: DocumentId, profile?: Profile): Result<void>;
+    /** Starts a run, once the document's stored page texts are read; `profile` replaces the project's for this run only. */
+    run(document: DocumentId, profile?: Profile): Promise<Result<void>>;
     /** Ends the run; the pages already searched keep their hits. */
     stop(document: DocumentId): Result<void>;
   };

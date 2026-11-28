@@ -84,7 +84,7 @@ export type SessionChange =
   | { readonly type: "pageSearched"; readonly document: DocumentId; readonly page: PageIndex; readonly hits: readonly Hit[]; readonly errors: number }
   /** The run ended, finished, stopped or failed: what it did. */
   | { readonly type: "runEnded"; readonly document: DocumentId; readonly record: RunRecord }
-  /** A findings review opened on an ended run's hits, or on those stored, with the user's stored changes by finding key. */
+  /** A findings review opened on an ended run's hits, or on those stored, with the user's stored changes by finding key and the resolver's findings. */
   | {
       readonly type: "findingsOpened";
       readonly document: DocumentId;
@@ -92,6 +92,7 @@ export type SessionChange =
       readonly hits: readonly Hit[];
       readonly notSearched: readonly PageIndex[];
       readonly changes: ReadonlyMap<string, FindingChange>;
+      readonly findings: readonly Finding[];
     }
   /** The user changed the finding `key`. */
   | { readonly type: "findingChanged"; readonly document: DocumentId; readonly key: string; readonly change: FindingChange }

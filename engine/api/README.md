@@ -38,7 +38,9 @@ limit this folder to importing [engine/model](../model/README.md) and
   - `documents`: `add`, `markDownloaded`
   - `viewer`: `open`, `render`, `pageText`, `images`
   - `detection`: `run` (with an optional profile for this run only) and
-    `stop`, per document: Auto mode's run
+    `stop`, per document: Auto mode's run. `run` resolves once the run has
+    started, or with its refusal, after the document's stored page texts are
+    read
   - `findings`: `setTicked`, `choose`, `setEdges`, `confirm`, `close` and
     `dismissNotice`, per document and finding key: its findings review
   - `profile`: `set`, the countries and industries Auto mode looks for
