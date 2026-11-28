@@ -121,9 +121,11 @@ reused. The table that maps each goal to its test is in the Verification Plan.
     generated PDF per pack. A browser test fails on any planted value that is
     missed or any planted near-miss that is found, and lists the other
     findings.
-*   **G2.** Every rule has positive examples and near-misses, records the
-    source of its format, and is written only once that format is verified
-    against the body that issues the identifier.
+*   **G2.** Every rule has positive examples and near-misses, and records
+    the source of its format and of its check: the issuer's page, a published
+    standard, or an existing public resource such as Microsoft Purview's
+    documentation, Presidio or python-stdnum. A fact recalled with no source
+    is not enough to write a rule.
 *   **G3.** The packs cover the 65 identifiers: one pack per country, one per
     industry, and one that every run uses.
 *   **G4.** Pattern findings for a 100-page fixture arrive within 60 seconds
@@ -209,9 +211,13 @@ reused. The table that maps each goal to its test is in the Verification Plan.
     28 Nov 2026). A later addition.
 *   **A time limit on a rule, a page or a run** (author, 28 Nov 2026). The
     user stops a run that takes too long.
-*   **Labels that are column headers of a table** (author, 28 Nov 2026). A
-    value under a header such as "Account No" is found only if a rule does
-    not need the label. How to read table columns is a separate discussion.
+*   **Reading a page's layout** (author, 28 Nov 2026). This phase takes the
+    page text as the reader gives it and does the plain thing with it. It does
+    not pair a label with a value by row or by column, does not join a value
+    that wraps onto the next line, and does not read a value written one
+    character to a box. Reading layout, most likely with a model, is a
+    research area for later. Until then a value in such a layout is found
+    only if its rule needs no label and the value is unbroken.
 *   **A notice of what Auto mode did not search for** (brief S29). A run that
     ends early still says which pages it did not reach.
 *   **Scanned pages and formats other than PDF.**
@@ -248,20 +254,10 @@ reused. The table that maps each goal to its test is in the Verification Plan.
 
 ## Open Questions
 
-The design decisions are in the Technical Plan, section 10. These points are
-still open. The first three are settled by measurement in slice C0; the last
-two wait for the author.
+The design decisions are in the Technical Plan, section 10, and slice C0's
+measurements are under "C0 results and rules left out". Two points wait for
+the author:
 
-*   **Labels on the same row.** A spike on a flattened form, and on a table
-    whose labels sit in the same row as their values, decides whether "label
-    within N characters" is enough, or a rule also needs "label on the same
-    row", worked out from the characters' boxes. If it does, the rule gains a
-    field and the `page` message carries boxes.
-*   **The slow-pattern checker.** C0 compares the available tools and decides
-    whether a pattern the tool cannot judge fails the pack build.
-*   **A line end inside an identifier.** C0 measures how often an identifier
-    is broken across lines and decides whether a separator may be followed by
-    a line end.
 *   **IMEI's pack.** It is in `legal`, as the author approved with the first
     draft. The first design review proposed moving it to `universal`. It
     stays in `legal` unless the author moves it before slice PX starts.
@@ -269,14 +265,6 @@ two wait for the author.
     unit test files, because no screen exists yet to test through. Each is an
     exception to "browser tests first"; they are written as listed unless the
     author strikes one.
-
-Slice C0 also takes these measurements and checks, whose results are written
-into "C0 results and rules left out": the 100-page run on both builds (G4);
-approving a document with about 5,000 marks; the check-digit facts the
-author's workbook marks "from memory"; whether the ABHA number has a check
-digit; the disagreements between sources on the UTR and the voter ID; an
-official list of UPI handles; whether the keyword lists of Microsoft Purview
-may be copied.
 
 ## Critical User Journeys (CUJs)
 
@@ -405,8 +393,8 @@ may be copied.
 
 *Goals: G2, G3. Plan: section 6.*
 
-*   **Given**: a new identifier whose format is verified against the body
-    that issues it.
+*   **Given**: a new identifier whose format has a source that can be
+    recorded.
 *   **When**: the maintainer adds its id and name to the type list, its pack
     to `engine/model/identifiers.ts`, and the rule, its positive and negative
     examples and its source to the pack.
@@ -666,7 +654,7 @@ compiled rules, written by the compiler), `rules`.
 | Direction | Message | Fields |
 | --- | --- | --- |
 | to the worker | `load` | `run` (a number), `packs` (pack ids) |
-| to the worker | `page` | `run`, `page`, `chars`. If slice C0 finds that a rule needs "label on the same row", also each character's box |
+| to the worker | `page` | `run`, `page`, `chars` |
 | from the worker | `ready` | `run`, each loaded pack's id and version |
 | from the worker | `hits` | `run`, `page`, `hits`, `errors` (how many values met an error in a check) |
 | from the worker | `failed` | `run`, `code` (`recognizer-failed` when the packs could not be loaded) |
@@ -1106,17 +1094,21 @@ pack to a run. One pack, `universal`, is in every run and is not a choice.
 *   **Order of the packs,** used only to break a tie between two identifiers
     with equal evidence for the same span: `universal`, `us`, `uk`, `in`,
     `ca`, `au`, `finance`, `legal`, `medical`.
-*   **Lists** are committed snapshots with a source and a date (bank codes,
-    UPI handles, court case-type codes). A list raises a hit to `checked`; a
-    value missing from the list keeps its other evidence.
+*   **Lists** are committed snapshots (bank codes, UPI handles, court
+    case-type codes). Each records its source, its date and the terms it was
+    published under. A list or a set of labels that is publicly readable is
+    used even where its terms do not grant copying; the author settles
+    licensing later, once the product has customers (28 Nov 2026). A list
+    raises a hit to `checked`; a value missing from the list keeps its other
+    evidence.
 *   **Loading.** The compiled packs and lists are part of the worker's
     script. The worker uses the packs the `load` message names. Nothing is
     fetched because of a matched value, since that fetch would signal a
     finding.
 *   **The pack build** runs in `pnpm test:tools`. It checks every pattern for
     slow shapes after the named pieces are expanded, and has a negative
-    control: a known slow pattern must fail. Whether a pattern the checker
-    cannot judge fails the build is settled in slice C0.
+    control: a known slow pattern must fail. The checker is `scslre`, chosen
+    in slice C0; a pattern it cannot parse fails the build.
 *   **Order of work.** The identifiers with a checksum first, then label
     rules, then formats that differ by state or province. Of the 65
     identifiers, 24 have a check digit or checksum, and this phase checks 23
@@ -1294,8 +1286,9 @@ Alternatives Considered; each alternative's heading names its decision.
     so a rule that misses one fails its pack's browser test.
 *   An identifier broken across a line end is not found: "one separator" does
     not include a line end, as the matcher's joiners do not join across
-    lines. Slice C0 measures how often this happens in statements and forms
-    and decides whether a separator may be followed by a line end (Risks).
+    lines. Slice C0 measured this and kept line ends out: allowing them joined
+    about five pairs of separate numbers for each broken value they repaired
+    (Risks and Mitigations).
 
 **What follows from D14**
 
@@ -1977,6 +1970,30 @@ of the Technical Plan, that the alternative lost to.
     again, ticked, and reversing the earlier choice is the user's call, as it
     is for a "Don't hide here" value (D15).
 
+### After slice C0
+
+#### 73. Writing a rule only once its format is verified at the body that issues it (G2 as first written)
+
+*   **Pros**: Every rule rests on the authority for its identifier.
+*   **Cons**: Many official sites refuse automated reading, and several
+    issuers do not publish their check method. Slice C0 could verify 20 of the
+    65 identifiers that way, which would leave out Aadhaar, GSTIN and every
+    passport rule.
+*   **Reason for Rejection**: Rejected by author. It was the drafter's
+    wording, not a decision. The rules build on the existing public pattern
+    and validator resources, with the source recorded (G2).
+
+#### 74. Pairing a label with its value by row, worked out from character boxes
+
+*   **Pros**: In a table drawn column by column it paired all eight labels
+    with their values in slice C0's trial, where distance in reading order
+    paired none.
+*   **Cons**: It is a hand-built rule about page layout, the first of several
+    the same problem would ask for: columns, wrapped values, one character
+    to a box.
+*   **Reason for Rejection**: Rejected by author for this phase: reading
+    layout is a harder problem, to be researched later with models.
+
 ## Risks and Mitigations
 
 Each line gives the risk and either what reduces it or that its cost is
@@ -1985,8 +2002,8 @@ accepted. A missed value is the worst error, so those come first.
 | Risk | What reduces it, or the accepted cost |
 | --- | --- |
 | A rule misses a way of writing an identifier | Every fixture plants each number written in seven ways; the pack test fails on a miss (G1). Rules and keys share one set of separators |
-| An identifier broken across a line end is not found | Measured and decided in slice C0. Until then: accepted |
-| A value under a table's column header is missed, because its rule needs a label and the header is far away in reading order | Accepted for this phase (Non-Goals). C0's spike covers labels beside a value and in the same row |
+| An identifier broken across a line end is not found | Measured in slice C0: 21% of the identifiers in a narrow statement column, and every value written one character to a box. Accepted for this phase by the author; reading layout is a research area for later |
+| A value whose label sits in another block is missed: a table drawn column by column, or a column header | Measured in slice C0: no label was found for any value of such a table. Accepted for this phase by the author (Non-Goals) |
 | The user leaves a country or industry out of the profile, and its identifiers are not searched | A new project has no profile; the first run asks, and the chooser lists what each choice adds. A wrong choice still misses: accepted |
 | Found values stay in the file because the user closed the panel, approved with the panel open, or downloaded during a findings review | Close and the approval dialog state the number of found values that stay. The panel says that found values are removed only once confirmed. Accepted by the author |
 | A pattern runs for minutes on one page | The pack build fails on slow shapes, with a negative control. The run shows its page; Stop keeps the findings of earlier pages and says which pages were not searched. Those pages stay unsearched until the rule is fixed: accepted |
@@ -2001,7 +2018,8 @@ accepted. A missed value is the worst error, so those come first.
 | A reader change, or a replaced original file, drops an open findings review with its unticks and edits | A stored notice tells the user why and offers a run. Accepted by the author |
 | An older build opens a project and saves it | Its parser keeps only the fields it knows, so the profile and the rejected values are dropped and nothing tells the user. Accepted while the author is the only user (D2) |
 | The four medical rules and the court case rule have United States formats, yet run for any country when their industry is chosen | A few extra findings on a non-US file, all needing a label. Accepted until those packs gain other countries' rules |
-| An identifier's format cannot be verified against the body that issues it | The rule is left out and listed under "C0 results and rules left out" |
+| An identifier has no source for its format | The rule is left out and listed under "C0 results and rules left out" |
+| A shipped list or set of labels was copied from a source whose terms do not grant copying | Each list records its source and its terms, so it can be licensed or replaced later. Accepted by the author until the product has customers |
 | The type list grows from 14 names to 73 | The picker groups them and filters as the user types (slice U1). The benchmark work must accept the longer list |
 | The undo of a findings review is lost on reload, on approval, and when another document's approval spreads marks in | It is how every undo step works today. Stated in CUJ 6 |
 
@@ -2109,7 +2127,8 @@ the review found and what the design now says.
     and storage, and one undo covering both stages.
 *   **Patterns a user writes,** on their own design.
 *   **Search and mark.**
-*   **Labels that are column headers.**
+*   **Reading layout with a model:** labels paired by row and by column,
+    values wrapped across lines, and values written one character to a box.
 *   **Pseudonymisation where marks overlap:** replace the union of their text
     and keep each mark as it is.
 *   **A notice of what Auto mode did not search for,** which could include
@@ -2233,16 +2252,17 @@ that verdict. The slices before V1 add code that nothing uses yet and that no
 browser test reaches, on purpose. So:
 
 *   `.fallowrc.json` gains a block, marked with a comment naming this
-    section: `ignoreExports` entries for the listed files, and an `overrides`
-    entry that lowers the health findings of the listed files to a warning.
+    section: an `overrides` entry that sets the rules `unused-files`,
+    `unused-exports` and `complexity-crap` to `warn` for the listed files.
 *   C1, W1 and E1 each add their own files to that block. The files are named
     in each slice's table.
 *   V1 removes the block. From V1 on every file is imported by the app and
     reached by `auto-run.spec.ts`.
 *   The tool entries are different: nothing imports them, ever, because they
-    are run from the command line. P0 lists them under `entry`, to stay.
-*   Slice C0 confirms these keys by running the audit on a branch with one
-    unused file, one untested function and one tool entry.
+    are run from the command line. P0 lists them under `supportEntry`, to
+    stay.
+*   Slice C0 found these keys by running the audit on stub files (C0's
+    results, item 6).
 
 ### 2. Decisions fixed here so that no slice has to make them
 
@@ -2381,8 +2401,8 @@ rules:
 *   **How a label matches.** A label is compared with the page text after
     both pass through `normalise`, so case and spacing do not matter. It must
     lie on the stated side of the value, within `distance` characters of the
-    text view, and in the same block. If slice C0 finds that "same row" is
-    needed, the rule gains `labelRow: true`.
+    text view, and in the same block. There is no rule for "same row" or "same
+    column" in this phase (Non-Goals).
 *   **Examples** live in the YAML and are not written to the compiled JSON.
     The fixture generator reads the YAML.
 *   **The version** of a pack is the first 12 hex digits of the SHA-256 of
@@ -2483,7 +2503,7 @@ No application code. It changes only this document.
 | Work | What it settles |
 | --- | --- |
 | Write trial patterns for the 23 identifiers with a validator and run them, with their checks, over a 100-page text in a Chrome worker, on the production build and on the instrumented build | The production time against G4, and the limit of the speed test |
-| Try label rules on `fixtures/form.pdf` and on a table whose labels sit in the same row as their values | Whether a rule needs `labelRow`, and so whether the `page` message carries boxes. C1 and P0 follow the answer |
+| Try label rules on `fixtures/form.pdf` and on a table whose labels sit in the same row as their values | Whether distance in reading order is enough to pair a label with its value. The author then decided against a rule by rows for this phase (Non-Goals) |
 | Compare slow-pattern checkers on a known slow pattern and on the trial patterns | The tool the pack compiler uses, and whether "cannot judge" fails the build |
 | Count identifiers broken across a line end in a generated statement and a form | Whether a separator may be followed by a line end |
 | Measure approving a document with about 5,000 marks | If it takes longer than 5 seconds, a slice to speed it up is added before P0 |
@@ -2858,16 +2878,16 @@ Browser tests first.
 | --- | --- | --- |
 | `tests/e2e/packs.spec.ts`, `bundle.spec.ts` | Create | The tests above |
 | `tools/packs/compile.ts` | Create | The compiler of section 2: YAML to JSON; each pack's version; the index of packs and lists; `--check`; the field, schema, validator and list checks; `RegExp` compilation; the named pieces; the refusal of `format` alone for a digits-only pattern |
-| `tools/packs/slow.ts` | Create | The slow-pattern check chosen in C0, with its negative control |
+| `tools/packs/slow.ts` | Create | The slow-pattern check, built on `scslre`, with its negative control |
 | `tools/packs/README.md` | Create | How to add a rule |
 | `tools/tsconfig.json`, `tools/vite.config.ts` | Create | As written in section 2 |
 | `tests/oracle/make_pack_fixtures.py` | Create | Reads the YAML with PyYAML; lays out each rule's examples as a PDF with labels, each number written in the seven ways, using `make_fixtures.py`'s PDF helpers; writes the truth file; `--check` |
 | `tests/oracle/pyproject.toml`, `uv.lock` | Modify | PyYAML and python-stdnum, each pinned to one version |
 | `tests/oracle/tests/test_make_pack_fixtures.py` | Create | The generator's tests |
 | `tools/README.md`, `tests/oracle/README.md` | Modify | The new tools |
-| `package.json`, `pnpm-lock.yaml` | Modify | `yaml` and the slow-pattern checker as development dependencies; the scripts of section 2 |
+| `package.json`, `pnpm-lock.yaml` | Modify | `yaml` and `scslre` as development dependencies; the scripts of section 2 |
 | `.gitignore` | Modify | `tools/.build/` |
-| `.fallowrc.json` | Modify | Zone `tools` and its rule; `tools/packs/compile.ts` under `entry` |
+| `.fallowrc.json` | Modify | Zone `tools` and its rule; `tools/**/*.ts` under `supportEntry` |
 | `engine/detect/packs/src/universal.yaml`, `in.yaml`, `us.yaml` | Create | The seven first rules |
 | `engine/detect/packs/src/uk.yaml`, `ca.yaml`, `au.yaml`, `finance.yaml`, `legal.yaml`, `medical.yaml` | Create | Placeholders with no rules, so the compiled index is complete from here on |
 | `engine/detect/packs/lists/in-bank-codes.yaml` | Create | The list the IFSC rule needs |
@@ -2891,10 +2911,10 @@ passes.
 Six slices with the same shape. Each waits only for P0. Browser test first:
 the slice adds its rules' examples, runs `pnpm packs`, and
 `tests/e2e/packs.spec.ts` fails until the rules are written. A rule is written
-only when its format is verified against the body that issues the identifier,
-by C0 for the facts C0 lists and otherwise in the slice, and recorded in the
-rule's `verified` field. A rule left out is listed under "C0 results and rules
-left out".
+only when its format and its check have a source (goal G2): the one C0's
+results give for the identifier, or one the slice finds and records in the
+rule's `source` and `verified` fields. A rule left out is listed under "C0
+results and rules left out".
 
 | Slice | Pack sources (Fill) | Validators (Fill) | Lists (Fill) |
 | --- | --- | --- | --- |
@@ -2941,7 +2961,6 @@ error on a difference.
 | `tools/detect/README.md` | Create | How to run it on a project's stored text |
 | `tools/detect/fixtures/card.text.json`, `card.hits.jsonl` | Create | The stored page text of `fixtures/auto-card.pdf`, which is synthetic, and the one hit expected. If slice PX adds a rule that finds more on that page, PX regenerates the second file |
 | `tools/vite.config.ts` | Modify | The entry `detect`, built from `tools/detect/run.ts` to `tools/.build/detect.mjs` |
-| `.fallowrc.json` | Modify | `tools/detect/run.ts` under `entry` |
 | `package.json` | Modify | `test:tools`, as section 2 lists |
 
 The tool writes hits, not findings: it does not run the resolver and has no
