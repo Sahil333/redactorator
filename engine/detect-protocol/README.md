@@ -29,6 +29,9 @@ Importers: `engine/detect/handler.ts`, `engine/detect/messages.ts` and
 
 - `parseDetectRequest(data: unknown): DetectRequest | undefined`
 - `parseDetectReply(data: unknown): DetectReply | undefined`
+- `parseLoadedPack(value: unknown): LoadedPack | undefined` and
+  `evidenceLevels`, which `engine/detect/recognizer.ts` also reads a compiled
+  pack with.
 
 ## Invariants
 

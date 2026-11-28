@@ -20,13 +20,16 @@ const strength: Readonly<Record<EvidenceLevel, number>> = { checked: 3, labelled
 const checksum: Evidence = { kind: "checksum", level: "checked" };
 const format: Evidence = { kind: "format", level: "format" };
 
+const emptyBox = pointBox(0, 0, 0, 0);
+
 /**
- * The page's characters as a page text, for `rangeText`, so a hit's text is read as a mark's is.
- * The page message carries no boxes, and `rangeText` reads a box only to tell a line end, which
- * has none, from the rest, so each other character gets an empty one.
+ * The page's characters as a page text. It exists so a hit's text is read by `rangeText`, the
+ * function a mark's text is read by. The page message carries no boxes; by its contract an entry
+ * is "\n" exactly where the stored character has no box. `rangeText` reads a box only to tell
+ * those apart, so every other entry gets an empty box and the text read is the same.
  */
 function pageTextOf(chars: readonly string[]): PageText {
-  const box = pointBox(0, 0, 0, 0);
+  const box = emptyBox;
   if (box === undefined) throw new Error("An empty box could not be made");
   return { chars: chars.map((c): PageChar => (c === "\n" ? { c, box: undefined } : { c, box })) };
 }

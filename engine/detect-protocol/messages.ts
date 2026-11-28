@@ -17,6 +17,7 @@ export type DetectRequest =
 
 export interface LoadedPack {
   readonly id: PackId;
+  /** The first 12 hex digits of the SHA-256 of its compiled rules. */
   readonly version: string;
 }
 

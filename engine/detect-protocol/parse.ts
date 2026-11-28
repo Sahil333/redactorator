@@ -1,11 +1,8 @@
 import { packOrder, type PackId } from "../model/detection";
-import type { Evidence, EvidenceKind, EvidenceLevel, Hit } from "../model/findings";
+import { evidenceKinds, evidenceLevels, type Evidence, type Hit } from "../model/findings";
 import { isPageIndex } from "../model/geometry";
-import { isOffset, isRecord, isText, parseAll } from "../model/guards";
+import { isName, isOffset, isRecord, isText, parseAll } from "../model/guards";
 import { isRunNumber, type DetectReply, type DetectRequest, type LoadedPack } from "./messages";
-
-const evidenceKinds: readonly EvidenceKind[] = ["checksum", "list", "label", "companion", "format", "model"];
-const evidenceLevels: readonly EvidenceLevel[] = ["checked", "labelled", "format"];
 
 const packIdOf = (value: unknown): PackId | undefined => packOrder.find((id) => id === value);
 
@@ -34,7 +31,6 @@ function parseEvidence(value: unknown): Evidence | undefined {
   return { kind, level, ...(value.label === undefined ? {} : { label: value.label }) };
 }
 
-const isName = (value: unknown): value is string => isText(value) && value !== "";
 
 function parseHit(value: unknown): Hit | undefined {
   if (!isRecord(value)) return undefined;
@@ -45,7 +41,7 @@ function parseHit(value: unknown): Hit | undefined {
     : undefined;
 }
 
-function parseLoadedPack(value: unknown): LoadedPack | undefined {
+export function parseLoadedPack(value: unknown): LoadedPack | undefined {
   if (!isRecord(value)) return undefined;
   const id = packIdOf(value.id);
   return id !== undefined && isText(value.version) && /^[0-9a-f]{12}$/.test(value.version) ? { id, version: value.version } : undefined;

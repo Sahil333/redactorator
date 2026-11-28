@@ -27,6 +27,11 @@ stops the client.
 
 ## Invariants
 
+- **What `pages[].chars` holds.** Entry i is the stored `PageText`'s
+  character i: `"\n"` where that character has no box, its `c` otherwise.
+  The worker reads `"\n"` as a character with no box, so a hit's `text` is
+  what `rangeText` reads on the stored page.
+
 - A run's failure is its result, never a thrown error:
   - the worker cannot start (`start` throws, or the channel reports an error
     before the worker ever answered): `detector-not-started`;

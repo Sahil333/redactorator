@@ -3,10 +3,12 @@
 import type { PageIndex } from "./geometry";
 import type { MarkType } from "./markTypes";
 
-export type EvidenceKind = "checksum" | "list" | "label" | "companion" | "format" | "model";
+export const evidenceKinds = ["checksum", "list", "label", "companion", "format", "model"] as const;
+export type EvidenceKind = (typeof evidenceKinds)[number];
 
 /** `checked` is the strongest, `format` the weakest. */
-export type EvidenceLevel = "checked" | "labelled" | "format";
+export const evidenceLevels = ["checked", "labelled", "format"] as const;
+export type EvidenceLevel = (typeof evidenceLevels)[number];
 
 export interface Evidence {
   readonly kind: EvidenceKind;

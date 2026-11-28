@@ -15,19 +15,27 @@ function packsOf(ids: readonly PackId[]): Pack[] | undefined {
   return packs.every((pack) => pack !== undefined) ? packs : undefined;
 }
 
-function load(run: RunNumber, ids: readonly PackId[]): void {
-  loaded = undefined;
-  const packs = packsOf(ids);
+/** A recognizer with the packs loaded, or undefined when a pack is missing, damaged or does not compile. */
+function recognizerOf(packs: readonly Pack[] | undefined): Recognizer | undefined {
+  if (packs === undefined) return undefined;
   const recognizer = patternRecognizer(jsRegexEngine, validators);
   try {
-    if (packs === undefined) throw new Error("A pack is missing or damaged");
     recognizer.load(packs);
   } catch {
-    post({ type: "failed", run, code: "recognizer-failed" });
-    return;
+    return undefined;
   }
-  loaded = { run, recognizer };
-  post({ type: "ready", run, packs: packs.map(({ id, version }) => ({ id, version })) });
+  return recognizer;
+}
+
+function load(run: RunNumber, ids: readonly PackId[]): void {
+  const packs = packsOf(ids);
+  const recognizer = recognizerOf(packs);
+  loaded = recognizer && { run, recognizer };
+  post(
+    packs === undefined || recognizer === undefined
+      ? { type: "failed", run, code: "recognizer-failed" }
+      : { type: "ready", run, packs: packs.map(({ id, version }) => ({ id, version })) },
+  );
 }
 
 /**

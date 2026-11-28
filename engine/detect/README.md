@@ -50,7 +50,9 @@ expression over the page as written, with a value group, an optional
   each string position back to its character, so a character of two UTF-16
   units before a value does not shift the hit (`patternRecognizer.ts`).
 - **A hit's text is read with `rangeText`**, the function a mark's text is
-  read with (`patternRecognizer.ts:pageTextOf`).
+  read with (`patternRecognizer.ts:pageTextOf`). A `page` message's entry is
+  `"\n"` exactly where the stored character has no box (the client's
+  contract), so the text matches what `rangeText` reads on the stored page.
 - **A validator sees the value's letters and digits only**, and looks nothing
   up. One that throws costs that value only: it is counted in the page's
   `errors` and the value is not offered (`patternRecognizer.ts:evidenceOf`).

@@ -4,8 +4,7 @@
 import { charRange, mapText, type TextView } from "./textView";
 
 const isSpace = (c: string) => c.trim() === "";
-// What can sit between the groups of a number written as 1234 5678, 1234-5678 or 12.34.56,
-// besides white space: a hyphen, a dot, the dashes U+2010 to U+2015 and the minus sign.
+// What can sit between the groups of a number written as 1234 5678, 1234-5678 or 12.34.56.
 const joinerMarks = "\\-.\\u2010-\\u2015\\u2212";
 const isJoinerMark = new RegExp(`^[${joinerMarks}]$`);
 const isJoiner = (c: string) => isSpace(c) || isJoinerMark.test(c);

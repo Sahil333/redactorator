@@ -78,8 +78,7 @@ export function detectionClient(start: () => WorkerChannel): DetectionClient {
   function answer(run: Current, channel: WorkerChannel, reply: DetectReply): void {
     const page = run.input.pages[run.next];
     if (run.packs === undefined && reply.type === "failed") {
-      endWorker();
-      finish({ ended: "failed", code: reply.code, packs: [] });
+      fail(reply.code);
     } else if (run.packs === undefined && reply.type === "ready" && sameIds(reply.packs, run.input.packs)) {
       run.packs = reply.packs;
       searchNext(run, channel);
@@ -99,7 +98,6 @@ export function detectionClient(start: () => WorkerChannel): DetectionClient {
       return;
     }
     started.answered = true;
-    // A reply of an earlier run, which was stopped or ended, is ignored.
     if (current !== undefined && reply.run === current.run) answer(current, started.channel, reply);
   }
 
@@ -113,7 +111,6 @@ export function detectionClient(start: () => WorkerChannel): DetectionClient {
       return undefined;
     }
     const started: Started = { channel, answered: false };
-    // Events of a worker already ended are ignored.
     const ifCurrent = (then: () => void) => () => {
       if (worker === started) then();
     };
