@@ -354,8 +354,9 @@ rules:
   - id: in-vehicle-registration-old
     identifier: in-vehicle-registration
     # The older series: 1 to 3 letters and 4 digits; found next to a label. Not the end of a longer
-    # registration number, which the rules above find whole.
-    pattern: '(?<![A-Za-z0-9]{sep?})([A-Z]{1,3}{sep?}\d{4})'
+    # registration number, after its district digits ("12 AB 1234") or district and class ("3C AF
+    # 7781"), which the rules above find whole.
+    pattern: '(?<!\d{sep?}|\d[A-Z]{sep?})([A-Z]{1,3}{sep?}\d{4})'
     value: 1
     needs: labelled
     labels: ["Vehicle No", "Vehicle Number", "Vehicle Registration No", "Registration No", "Regn No", "Reg No"]
@@ -368,6 +369,8 @@ rules:
     examples:
       - "DLA 4417"
       - "MRJ1960"
+      # After a label with no colon.
+      - { value: "PBX 2093", line: "{label} {value}" }
     nearMisses:
       # No label.
       - { value: "DLA 4418", line: "Ref {value}" }
@@ -375,8 +378,8 @@ rules:
   - id: in-upi-id
     identifier: in-upi-id
     # A user part of letters, digits, dots, hyphens and underscores, an @, and a handle that is not
-    # followed by a dot and more: that would be an email address. Group 2 is the handle.
-    pattern: '([A-Za-z0-9._-]{1,256}@([A-Za-z][A-Za-z0-9]{1,63}))(?!\.[A-Za-z0-9])'
+    # followed by a dot or a hyphen and more: that would be an email address. Group 2 is the handle.
+    pattern: '([A-Za-z0-9._-]{1,256}@([A-Za-z][A-Za-z0-9]{1,63}))(?![.-][A-Za-z0-9])'
     value: 1
     needs: format
     labels: ["UPI ID", "UPI", "VPA", "Virtual Payment Address"]
@@ -395,6 +398,8 @@ rules:
     nearMisses:
       # An email address.
       - { value: "jane.roe@ybl.com", line: "Mail {value}" }
+      # The start of an email address whose domain has a hyphen.
+      - { value: "jane@paytm", line: "Mail {value}-bank.com" }
 
   - id: in-abha-number
     identifier: in-abha-number
