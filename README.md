@@ -8,7 +8,8 @@ in documents. Nothing a user loads leaves the browser. Today it handles PDFs.
 The app (`./app`, React 19) talks to one `Engine` object. The engine core keeps
 projects in a folder the user picks, or in the browser's private storage. It
 does all PDF work in a Web Worker that runs MuPDF compiled to WebAssembly
-(vendored in `vendor/mupdf`). A cleaned file is written with the marked text
+(vendored in `vendor/mupdf`). Auto mode searches the stored page text in a
+second Web Worker, the detection worker (`engine/detect`). A cleaned file is written with the marked text
 deleted, then re-opened and checked before the user can save it.
 
 The core never names a browser API. It asks for a worker channel, a project
@@ -94,8 +95,9 @@ engine/pdf/worker.ts (Web Worker, MuPDF) ◄────────────
   (`partly-covered-drawing`; docs/designs/pdf-leak-suite.md, part 6).
 - Zone imports are limited by `.fallowrc.json` `boundaries.rules`, which
   `pnpm test` checks with `fallow architecture --boundaries`. `app` may import
-  only `model`, `storage`, `api` and `host-browser`. One line is exempt:
-  `engine/host-browser/workerChannel.ts` names `../pdf/worker.ts` under a
+  only `model`, `storage`, `api` and `host-browser`. Two lines are exempt:
+  `engine/host-browser/workerChannel.ts` names `../pdf/worker.ts` and
+  `../detect/detectWorker.ts`, each under a
   `fallow-ignore-next-line boundary-violation` comment. The full table is in
   [engine/README.md](./engine/README.md).
 - One tab at a time holds a project, through a Web Lock named
@@ -108,7 +110,8 @@ engine/pdf/worker.ts (Web Worker, MuPDF) ◄────────────
   records and settings.
 - IndexedDB `redactorator` (the picked folder's handle only) and
   `sessionStorage` (open tab ids only), both from `app/`.
-- One module Web Worker for PDF work, and Web Locks for projects.
+- One module Web Worker for PDF work, a module Web Worker for Auto mode's
+  detection once a run starts, and Web Locks for projects.
 - Saved outputs go to a file the user chooses (`showSaveFilePicker`), or to a
   browser download.
 
