@@ -1,6 +1,8 @@
 // Reasons for a unit test: the offset fault of textView.test.ts one step later, in the hits a
 // recognizer gives; a hit's text must be what rangeText reads on the stored page, or a stored
-// findings review would read as stale; and a validator that throws must cost one value, not the page.
+// findings review would read as stale; a card after another group of four digits was missed
+// (found in review); hits on one span must come in the order the resolver breaks ties by; and a
+// validator that throws must cost one value, not the page.
 import { describe, expect, test } from "vitest";
 import type { PageChar, PageText } from "../model/document";
 import { isPageIndex, pointBox, type PageIndex } from "../model/geometry";

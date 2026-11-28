@@ -1,5 +1,6 @@
-// Reason for a unit test: a match of length zero makes a `RegExp` loop repeat for ever unless the
-// position is moved by hand, and a browser test would see that only as a timeout.
+// Reasons for a unit test: a match of length zero makes a `RegExp` loop repeat for ever unless the
+// position is moved by hand, and a browser test would see that only as a timeout; and a value
+// inside a longer match that was rejected was lost (found in review).
 import { describe, expect, test } from "vitest";
 import { jsRegexEngine } from "./regexEngine";
 

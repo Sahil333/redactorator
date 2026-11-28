@@ -92,8 +92,11 @@ export function patternRecognizer(engine: RegexEngine, validators: Readonly<Reco
         const range = charRange(view, value.start, value.end);
         if (range === undefined || (rule.notNextTo !== undefined && isNextTo(view.text, value, rule.notNextTo))) return undefined;
         const evidence = evidenceOf(entry, view.text.slice(value.start, value.end));
-        if (evidence === "error") errors++;
-        if (evidence === "error" || strength[evidence.level] < strength[rule.needs]) return undefined;
+        if (evidence === "error") {
+          errors++;
+          return undefined;
+        }
+        if (strength[evidence.level] < strength[rule.needs]) return undefined;
         return { page, ...range, text: rangeText(text, range.start, range.end), identifier: rule.identifier, evidence: [evidence], rule: rule.id, recognizer: "pattern" };
       });
       return { hits, errors };
