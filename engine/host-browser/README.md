@@ -7,6 +7,7 @@ ports of `engine/core` (`WorkerChannel`, `LockPort`) and the storage port
 `Store` with browser APIs:
 
 - a module Web Worker that runs MuPDF;
+- module Web Workers that run Auto mode's detection, started on demand;
 - Web Locks;
 - the File System Access API, which covers both the site's private storage and a
   folder the user picked.
@@ -16,7 +17,8 @@ The app imports it from `app/App.tsx`, `app/useProjectsFolder.ts` and
 
 The fallow boundary rules in `.fallowrc.json` limit this folder to importing
 `model`, `storage`, `pdf-protocol`, `api` and `core`. The one exception is
-`workerChannel.ts`, which names the worker entry `../pdf/worker.ts` under a
+`workerChannel.ts`, which names the worker entries `../pdf/worker.ts` and
+`../detect/detectWorker.ts`, each under a
 `fallow-ignore-next-line boundary-violation` comment. The folder has no
 `tsconfig.json` of its own. The root `tsconfig.json` includes it and compiles it
 with the DOM libraries.
@@ -25,7 +27,8 @@ with the DOM libraries.
 
 - `createBrowserEngine(first: FirstStore): Engine` (`createBrowserEngine.ts`)
   calls `createEngine` from `engine/core` with one object: the fields of the
-  first store the app worked out, plus `worker: startPdfWorker()` and
+  first store the app worked out, plus `worker: startPdfWorker()`,
+  `startDetectionWorker` and
   `lock: webLocks` (`createBrowserEngine.ts:createBrowserEngine`). It returns the
   `Engine` from [engine/api](../api/README.md).
 - `webLocks: LockPort` (`locks.ts`) holds a lock per open project.
@@ -36,6 +39,8 @@ with the DOM libraries.
   storage.
 - `writeWhole(file, data)` (`stores.ts`) writes a whole file through
   `createWritable`.
+- `startDetectionWorker(): WorkerChannel` (`workerChannel.ts`) starts a
+  detection worker. Both start functions share `channelOf(worker)`.
 - `startPdfWorker(): WorkerChannel` (`workerChannel.ts`) starts the PDF worker
   and wraps `postMessage`, `message`, `messageerror`, `error` and `terminate`.
 
@@ -59,6 +64,9 @@ with the DOM libraries.
 
 - Starts a module Web Worker from `../pdf/worker.ts`, and terminates it on
   request (`workerChannel.ts:startPdfWorker`).
+- Starts a module Web Worker from `../detect/detectWorker.ts` each time the
+  core asks, and terminates it on request
+  (`workerChannel.ts:startDetectionWorker`).
 - Holds Web Locks named `redactorator-project:<projectId>`
   (`locks.ts:webLocks`).
 - Reads, writes, lists and recursively removes files and folders through the

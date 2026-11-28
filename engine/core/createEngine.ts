@@ -1,6 +1,6 @@
 import type { Engine, IncomingFile, Session } from "../api/facade";
 import type { EngineState, Problem } from "../api/state";
-import { notStarted } from "./detect-client/client";
+import { detectionClient } from "./detect-client/client";
 import { createDispatcher } from "./dispatcher";
 import { intake } from "./intake";
 import type { LibraryChange } from "./library/changes";
@@ -77,8 +77,13 @@ function publish(root: Root): EngineState {
 
 const workerOf = ({ state, error }: WorkerStatus): EngineState["worker"] => (error === undefined ? { status: state } : { status: state, error });
 
-/** Builds the engine root: the PDF-worker client over `worker`, and the Library over the first store. No Session is open. */
-export function createEngine(start: FirstStore & { readonly worker: WorkerChannel; readonly lock: LockPort }): Engine {
+/**
+ * Builds the engine root: the PDF-worker client over `worker`, the detection client over the
+ * workers `startDetectionWorker` makes, and the Library over the first store. No Session is open.
+ */
+export function createEngine(
+  start: FirstStore & { readonly worker: WorkerChannel; readonly startDetectionWorker: () => WorkerChannel; readonly lock: LockPort },
+): Engine {
   const client = pdfClient(start.worker);
   const root: Root = { revision: 0, worker: { status: "starting" }, problems: [], library: firstLibrary, session: undefined };
   const dispatcher = createDispatcher(root, reduce);
@@ -90,8 +95,9 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
     },
     dispatch: (from, change, ...effects) => dispatcher.dispatch({ type: "session", from, change }, ...effects),
     client,
-    // Until the detection worker exists, no run starts.
-    detection: notStarted,
+    // One client for every Session: one Session is open at a time, and a closing Session stops
+    // the client, which ends its worker, so no worker is handed to the next project.
+    detection: detectionClient(start.startDetectionWorker),
     intake: take,
     addCustomType: (name) => addCustomType(name),
   };

@@ -1,16 +1,18 @@
 // How a hidden value is found again in other text. Two spellings match when they differ only
 // in case, in spaces and line ends, or in the spaces, dashes and dots inside a number. A match
 // sits on word boundaries, so "Roe" never matches inside "Monroe", and never crosses pages.
-
-/** Text made comparable, and for each of its code units the index of the character it came from. */
-interface Normalised {
-  readonly text: string;
-  readonly from: readonly number[];
-}
+import { charRange, mapText, type TextView } from "./textView";
 
 const isSpace = (c: string) => c.trim() === "";
-// What can sit between the groups of a number written as 1234 5678, 1234-5678 or 12.34.56.
-const isJoiner = (c: string) => isSpace(c) || /^[-.\u2010-\u2015\u2212]$/.test(c);
+// What can sit between the groups of a number written as 1234 5678, 1234-5678 or 12.34.56,
+// besides white space: a hyphen, a dot, the dashes U+2010 to U+2015 and the minus sign.
+const joinerMarks = "\\-.\\u2010-\\u2015\\u2212";
+const isJoinerMark = new RegExp(`^[${joinerMarks}]$`);
+const isJoiner = (c: string) => isSpace(c) || isJoinerMark.test(c);
+
+/** The joiners as a regular expression's character class: white space and the marks above. */
+export const joinerClass = `[\\s${joinerMarks}]`;
+
 const isDigit = (c: string | undefined) => c !== undefined && /^\p{Nd}$/u.test(c);
 const isWordUnit = (c: string | undefined) => c !== undefined && /^[\p{L}\p{N}\p{M}]$/u.test(c);
 
@@ -40,26 +42,20 @@ function joinerUnits(chars: readonly string[], start: number, end: number): [str
 }
 
 /** Folds case and compatibility forms (a ligature reads as its letters), and collapses spacing. */
-function normalise(chars: readonly string[]): Normalised {
-  let text = "";
-  const from: number[] = [];
-  const put = (units: string, index: number) => {
-    text += units;
-    for (let unit = 0; unit < units.length; unit++) from.push(index);
-  };
-  let index = 0;
-  while (index < chars.length) {
-    const end = runEnd(chars, index);
-    if (end === index) {
-      put((chars[index] ?? "").normalize("NFKC").toLowerCase(), index);
-      index++;
-    } else {
-      for (const [unit, at] of joinerUnits(chars, index, end)) put(unit, at);
-      index = end;
+export const normalise = (chars: readonly string[]): TextView =>
+  mapText((put) => {
+    let index = 0;
+    while (index < chars.length) {
+      const end = runEnd(chars, index);
+      if (end === index) {
+        put((chars[index] ?? "").normalize("NFKC").toLowerCase(), index);
+        index++;
+      } else {
+        for (const [unit, at] of joinerUnits(chars, index, end)) put(unit, at);
+        index = end;
+      }
     }
-  }
-  return { text, from };
-}
+  });
 
 /**
  * The form of a value that every spelling of it shares, without punctuation at either end, so
@@ -81,18 +77,16 @@ export interface Found {
 export function findAll(pages: readonly (readonly string[])[], keys: readonly string[]): Found[] {
   const found: Found[] = [];
   pages.forEach((chars, page) => {
-    const { text, from } = normalise(chars);
+    const view = normalise(chars);
+    const { text } = view;
     keys.forEach((key, index) => {
       if (key === "") return;
       let at = text.indexOf(key);
       while (at !== -1) {
         const end = at + key.length;
-        const first = from[at];
-        const last = from[end - 1];
+        const range = charRange(view, at, end);
         const onBoundaries = !isWordUnit(text[at - 1]) && !isWordUnit(text[end]);
-        if (onBoundaries && first !== undefined && last !== undefined) {
-          found.push({ key: index, page, start: first, end: last + 1 });
-        }
+        if (onBoundaries && range !== undefined) found.push({ key: index, page, ...range });
         at = text.indexOf(key, onBoundaries ? end : at + 1);
       }
     });

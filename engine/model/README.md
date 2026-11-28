@@ -118,7 +118,21 @@ uses them yet.
 - `keyOf(value)` gives a value's normalised key. Case is folded, NFKC is
   applied, spacing is collapsed, joiners between the digit groups of a number
   are dropped, and punctuation is trimmed from both ends.
+- `normalise(chars)` gives the text a key is searched in, as a `TextView`.
+- `joinerClass`: the joiners as a regular expression's character class (white
+  space, a hyphen, a dot, the dashes U+2010 to U+2015 and the minus sign).
 - `Found` and `findAll(pages, keys)`.
+
+### Text view (`textView.ts`)
+
+- `TextView { text, from }`: a string made from a page's characters, and for
+  each code unit the index of the character it came from.
+- `mapText(write)`: builds one; `normalise` and `textView` both use it, so
+  positions are mapped in one place.
+- `textView(chars)`: the page as written, line ends included. Auto mode's
+  rules run on it.
+- `charRange(view, start, end)`: the characters a string range covers, or
+  `undefined` for an empty range.
 
 ### Images (`images.ts`)
 
