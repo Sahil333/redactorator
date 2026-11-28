@@ -111,9 +111,9 @@ with the app.
 ## Goals
 
 Each goal can be checked by a test or a count that needs no benchmark. The
-benchmark and the synthetic dataset are separate work (brief S4). Ids G6 and
-G21 belonged to goals removed after the first design review and are not
-reused. The table that maps each goal to its test is in the Verification Plan.
+benchmark and the synthetic dataset are separate work (brief S4). Ids G6, G19
+and G21 belonged to goals that were removed and are not reused. The table that
+maps each goal to its test is in the Verification Plan.
 
 **Finding**
 
@@ -194,10 +194,6 @@ reused. The table that maps each goal to its test is in the Verification Plan.
     worker messages, the same resolver, the same panel and the same step that
     makes marks. A test shows it with a prepared list of hits that carry model
     evidence and edges inside words (brief S12).
-*   **G19.** Detection runs from the command line under Node, without the
-    app, on a document's stored page text. It writes each hit's page,
-    character range, text and identifier. It shows that the engine's detection
-    needs no browser, and gives a quick way to try a rule change.
 *   **G20.** The cost of a findings review is counted on the generated files:
     actions from Run to an approved document, findings in the panel, and
     unticks needed, against the hand marks the same document needs.
@@ -547,7 +543,7 @@ folders its code may import.
 | `model` (existing) | `engine/model` | nothing | New pure parts: the text view, the hit, candidate and finding types, the resolver, the profile, the identifier list |
 | `detect-protocol` (new) | `engine/detect-protocol` | `model` | The messages between the core and the detection worker, and their parsers. Shaped like `pdf-protocol` |
 | `detect` (new) | `engine/detect` | `model`, `detect-protocol` | The recognizer, the `RegexEngine` interface and its JavaScript implementation, validators, the packs and lists under `engine/detect/packs/`, the message handler, and the worker entry `detectWorker.ts`. No DOM |
-| `tools` (new) | `tools/**/*.ts` | `model`, `detect-protocol`, `detect`, `core` | The pack compiler and the command-line detector |
+| `tools` (new) | `tools/**/*.ts` | `model`, `detect` | The pack compiler |
 | `core` (existing) | `engine/core` | `model`, `storage`, `api`, `pdf-protocol`, and now `detect-protocol` | The detection client, the new Session slices, effects, gate rows and commands |
 | `host-browser` (existing) | `engine/host-browser` | as today | Starts the detection worker. One more line carries the exempt comment and names `../detect/detectWorker.ts`, as one names `../pdf/worker.ts` today |
 | `tests` (existing) | `tests` | as today, and now `detect-protocol` and `detect` | The new browser tests |
@@ -1212,9 +1208,6 @@ The table that maps each goal to its test is in the Verification Plan.
     (`tests/e2e/coverage.ts`). The detection worker is kept after a run, so
     its counts are read. A worker ended by Stop leaves none; the code it ran
     is counted by the other tests.
-*   **The command-line detector** (G19) is checked in `pnpm test:tools`: it
-    runs on a committed, synthetic stored page-text file and must give a
-    committed list of hits.
 
 ### 10. Decisions
 
@@ -1779,7 +1772,10 @@ of the Technical Plan, that the alternative lost to.
 *   **Cons**: Nothing would show that detection runs without a browser, and a
     rule change could only be tried through the app.
 *   **Reason for Rejection**: Rejected by author after the first design review
-    proposed it: one slice builds the tool (G19).
+    proposed it. The author has since taken the tool out of this phase for the
+    opposite reason: a detector that reads stored text files is too little.
+    What is wanted is the whole engine run from the command line, which is
+    its own piece of work after this phase (Future Improvements).
 
 #### 53. A first slice that creates every shared file as a stub
 
@@ -2123,6 +2119,17 @@ the review found and what the design now says.
 
 ### Future Improvements
 
+*   **The engine from the command line** (author, 28 Nov 2026). One command
+    takes PDFs and a profile and does the whole path through the same engine
+    the app uses: makes a project, runs Auto mode, accepts every finding,
+    approves, and writes the cleaned files. It is a tool for the author and
+    the build sessions, not a product. It needs a Node host for the engine:
+    both workers as Node threads, MuPDF included, a lock, and a store over
+    ordinary folders. `docs/designs/composable-engine.md` left that host for
+    when a consumer exists. It gets a short design of its own and is built
+    after this phase. An earlier draft of this design had a smaller tool in
+    its place, slice T1, which ran only the detection step on a stored text
+    file.
 *   **Model recognizers:** a new recognizer, the second stage with its state
     and storage, and one undo covering both stages.
 *   **Patterns a user writes,** on their own design.
@@ -2180,7 +2187,6 @@ C1 contracts
              +--> PC Canada
              +--> PA Australia
              +--> PX universal, finance and legal
-             +--> T1 detection from the command line
 
 Z1 closing checks: waits for every slice above
 ```
@@ -2201,7 +2207,6 @@ Z1 closing checks: waits for every slice above
 | R3 | Candidates and edges | R2 |
 | P0 | Rule format, pack compiler, fixture generator | V1 |
 | PU, PK, PI, PC, PA, PX | Packs | P0 |
-| T1 | Detection from the command line | P0 |
 | Z1 | Closing checks | all |
 
 Slices R1 and R3 make overlapping marks. They also wait for the fix that lets
@@ -2209,8 +2214,8 @@ the writer take overlapping marks with each mark's type printed in its box
 (Risks and Mitigations), which is not a slice of this phase.
 
 After C1, the slices M1, U1, W1 and E1 run at once. After V1, the slices R1,
-W2 and P0 run at once. After P0, the six pack slices and T1 run beside R2 and
-R3. There are 21 slices.
+W2 and P0 run at once. After P0, the six pack slices run beside R2 and R3.
+There are 20 slices.
 
 **How slices stay out of each other's way**
 
@@ -2242,8 +2247,7 @@ R3. There are 21 slices.
 before any screen exists, so they add or extend unit tests, each with its
 reason; these are the exception the author accepted with the audit exemption
 below. Every other slice that changes the app starts with its own browser
-test. T1 is a tool and is checked in `pnpm test:tools`. No test is added in a
-skipped or expected-to-fail state.
+test. No test is added in a skipped or expected-to-fail state.
 
 **The audit exemption** (author, 28 Nov 2026). `pnpm exec fallow audit` fails
 a change that adds a file or an export nothing uses, and it scores each
@@ -2258,9 +2262,9 @@ browser test reaches, on purpose. So:
     in each slice's table.
 *   V1 removes the block. From V1 on every file is imported by the app and
     reached by `auto-run.spec.ts`.
-*   The tool entries are different: nothing imports them, ever, because they
-    are run from the command line. P0 lists them under `supportEntry`, to
-    stay.
+*   The pack compiler's entry is different: nothing imports it, ever,
+    because it is run from the command line. P0 lists it under
+    `supportEntry`, to stay.
 *   Slice C0 found these keys by running the audit on stub files (C0's
     results, item 6).
 
@@ -2443,11 +2447,11 @@ group in `engine/api/errors.ts`.
 
 #### The tools' build
 
-The two TypeScript tools import engine sources, whose imports carry no file
-extensions, so Node cannot load them as they are. No runner is added. Vite
-builds each tool into one file for Node. This config was tried on 28 Nov 2026
-with a tool that imports `engine/model/match.ts`; it wrote `compile.mjs` and
-`detect.mjs`, and both ran under Node 24.
+The pack compiler imports engine sources, whose imports carry no file
+extensions, so Node cannot load it as it is. No runner is added. Vite builds
+it into one file for Node. This config was tried on 28 Nov 2026 with a tool
+that imports `engine/model/match.ts`; it wrote the file, and the file ran
+under Node 24.
 
 ```ts
 // tools/vite.config.ts
@@ -2459,7 +2463,7 @@ export default defineConfig({
     emptyOutDir: true,
     target: "node24",
     rolldownOptions: {
-      input: { compile: "tools/packs/compile.ts" }, // T1 adds: detect: "tools/detect/run.ts"
+      input: { compile: "tools/packs/compile.ts" },
       output: { entryFileNames: "[name].mjs" },
     },
   },
@@ -2478,7 +2482,6 @@ declares `crypto` and `TextDecoder` itself and would clash with Node's types.
 | `typecheck` | gains `tsc -p engine/detect-protocol && tsc -p engine/detect && tsc -p engine/detect/tsconfig.worker.json` | W1 |
 | `typecheck` | gains `tsc -p tools` | P0 |
 | `test:tools` | gains `pnpm build:tools && node tools/.build/compile.mjs --check && uv run --project tests/oracle python tests/oracle/make_pack_fixtures.py --check` | P0 |
-| `test:tools` | gains `node tools/.build/detect.mjs tools/detect/fixtures/card.text.json --expect tools/detect/fixtures/card.hits.jsonl` | T1 |
 | `report:review-cost` | `playwright test --grep @report` | Z1 |
 
 `--check` on the compiler fails when the committed JSON differs from what it
@@ -3429,37 +3432,6 @@ the identifier table is either a planted value in
 `fixtures/packs/<pack>.truth.json` or a row under "C0 results and rules left
 out".
 
-#### T1. Detection from the command line
-
-```text
-node tools/.build/detect.mjs <stored page-text file> [--profile us,finance] [--expect <file>]
-```
-
-Without `--profile` the run uses `universal` only. The output is one JSON
-object per line:
-
-```json
-{"page":0,"start":12,"end":31,"text":"...","identifier":"payment-card"}
-```
-
-With `--expect` the tool compares its output with the file and exits with an
-error on a difference.
-
-| File | Action | What changes and why |
-| --- | --- | --- |
-| `tools/detect/run.ts` | Create | Reads the stored page-text file with the app's own parser, taking the number of pages from the file. Sends `load` and each `page` to the worker's own handler, `engine/detect/handler.ts`, and prints the hits. It therefore runs the same code the worker runs, without a worker or a browser (G19) |
-| `tools/detect/README.md` | Create | How to run it on a project's stored text |
-| `tools/detect/fixtures/card.text.json`, `card.hits.jsonl` | Create | The stored page text of `fixtures/auto-card.pdf`, which is synthetic, and the one hit expected. If slice PX adds a rule that finds more on that page, PX regenerates the second file |
-| `tools/vite.config.ts` | Modify | The entry `detect`, built from `tools/detect/run.ts` to `tools/.build/detect.mjs` |
-| `package.json` | Modify | `test:tools`, as section 2 lists |
-
-The tool writes hits, not findings: it does not run the resolver and has no
-marks to compare with. It does not write the dataset's ground-truth format,
-which needs boxes and document fields it does not have; that belongs to the
-benchmark work. It is never pointed at a real project in a test run.
-
-**Done when** `pnpm test:tools` passes.
-
 #### Z1. Closing checks
 
 | File | Action | What changes and why |
@@ -3513,7 +3485,6 @@ author has `test-results/review-cost.json` and the list of proposed changes.
 | G13 | `auto-review` (a rejected value, a value already marked), `auto-stored` (a later run) |
 | G16 | `network`, `bundle` |
 | G17 | `auto-review` and `auto-edit`, through the outside checker |
-| G19 | `test:tools` |
 | G20 | `review-cost` |
 | G22 | `auto-review` (values that overlap are two findings and two marks; a value under a hand mark is offered) |
 | D14 | `spreading` |
