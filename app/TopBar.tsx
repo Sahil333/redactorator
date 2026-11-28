@@ -16,6 +16,8 @@ const tools: readonly { readonly id: Tool; readonly label: string }[] = [
 export interface Editing {
   readonly tool: Tool;
   readonly onTool: (tool: Tool) => void;
+  /** While the document's findings review is open, hand marking is off. */
+  readonly markingOff: boolean;
   readonly appearance: Appearance;
   readonly onAppearance: (appearance: Appearance) => void;
   readonly applyRef: RefObject<HTMLButtonElement | null>;
@@ -23,6 +25,8 @@ export interface Editing {
   readonly busy: boolean;
   readonly onApply: () => void;
   readonly review: ReviewState;
+  /** Whether the Session takes an approval of the document now: not, for one, during its run of Auto mode. */
+  readonly canApprove: boolean;
   /** Approves the document, spreading its values to the project's other documents. */
   readonly onApprove: () => void;
   /** Labelling mode only. */
@@ -52,7 +56,7 @@ interface TopBarProps {
 
 const saveText: Record<SessionState["save"], string> = { saved: "Saved", saving: "Saving…", failed: "Not saved" };
 
-function ToolPicker({ tool, onTool }: Pick<Editing, "tool" | "onTool">) {
+function ToolPicker({ tool, onTool, markingOff }: Pick<Editing, "tool" | "onTool" | "markingOff">) {
   return (
     <div role="group" aria-label="Tool" className="flex rounded-md border border-rule bg-paper p-0.5">
       {tools.map((option) => (
@@ -60,8 +64,9 @@ function ToolPicker({ tool, onTool }: Pick<Editing, "tool" | "onTool">) {
           key={option.id}
           type="button"
           aria-pressed={tool === option.id}
+          disabled={markingOff}
           onClick={() => onTool(option.id)}
-          className="rounded px-3 py-1 text-ink-muted aria-pressed:bg-paper-raised aria-pressed:text-ink aria-pressed:shadow-[0_0_0_1px_var(--color-rule)]"
+          className="rounded px-3 py-1 text-ink-muted disabled:opacity-40 aria-pressed:bg-paper-raised aria-pressed:text-ink aria-pressed:shadow-[0_0_0_1px_var(--color-rule)]"
         >
           {option.label}
         </button>
@@ -121,7 +126,7 @@ function EditingActions({ editing, labelling }: { readonly editing: Editing; rea
       ) : (
         <button
           type="button"
-          disabled={editing.busy}
+          disabled={editing.busy || !editing.canApprove}
           onClick={editing.onApprove}
           className="rounded-md border border-ink px-3 py-1.5 hover:bg-paper-sunk disabled:opacity-40"
         >
@@ -175,7 +180,7 @@ export function TopBar(props: TopBarProps) {
       <div className="flex-1" />
       <AutoControls {...props.auto} />
       {history && <HistoryButtons history={history} />}
-      {editing && <ToolPicker tool={editing.tool} onTool={editing.onTool} />}
+      {editing && <ToolPicker tool={editing.tool} onTool={editing.onTool} markingOff={editing.markingOff} />}
       <PickFiles
         label="Add documents"
         disabled={!props.canAdd}

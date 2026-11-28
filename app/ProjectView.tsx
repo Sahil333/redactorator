@@ -23,6 +23,7 @@ import { useImages } from "./useImages";
 import { incomingFiles } from "./incomingFiles";
 import { useMarks } from "./useMarks";
 import { errorText } from "./errors";
+import { useFindings } from "./useFindings";
 import { useTabs } from "./useTabs";
 import { useUndoKeys } from "./useUndoKeys";
 import { initialWidths, Workspace, type Review } from "./Workspace";
@@ -130,7 +131,7 @@ const historyOf = (session: Session, can: SessionState["can"], active: DocumentI
 
 /** Marking the open document: its marks, undo and redo, approving, and the controls the top bar shows. */
 function useEditing(
-  { session, opened: { project, can, output }, onAppearance }: Pick<ProjectViewProps, "session" | "opened" | "onAppearance">,
+  { session, opened: { project, can, output, detection }, onAppearance }: Pick<ProjectViewProps, "session" | "opened" | "onAppearance">,
   { active, shown }: { readonly active: DocumentId | undefined; readonly shown: DocumentHandle | undefined },
   settings: Settings,
   onFailure: ReturnType<typeof useEngineError>,
@@ -143,13 +144,14 @@ function useEditing(
   const images = useImages(session, active);
   const marking = useMarks(session, shown, activeDocument?.marks ?? [], settings.customTypes);
   const waiting = marking.pending !== undefined;
-  const busy = waiting || !can.apply || !can.approve;
+  const busy = waiting || !can.apply;
   const history = active && historyOf(session, can, active, waiting);
   useUndoKeys(history);
 
   const editing: Editing = {
     tool,
     onTool: setTool,
+    markingOff: active !== undefined && detection.get(active)?.findings !== undefined,
     appearance: settings.appearance,
     onAppearance,
     applyRef: focus.applyRef,
@@ -161,6 +163,7 @@ function useEditing(
       });
     },
     review: activeDocument?.review ?? "not-started",
+    canApprove: can.approve,
     onApprove: () => {
       if (active !== undefined) void session.approval.plan(active);
     },
@@ -272,6 +275,7 @@ export function ProjectView(props: ProjectViewProps) {
   const { shown, missing } = useDocumentInEngine(session, props.opened.open, activeDocument, can.switchDocument, failure);
   const adder = useAddFiles(session, props.initialRefused, (added) => openInTabs(tabs, added));
   const { marking, history, editing, tool, focus, labels, images } = useEditing(props, { active, shown }, settings, failure);
+  const findings = useFindings(session, props.opened.detection, active);
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });
   const [pageInView, setPageInView] = useState<PageInView | undefined>(undefined);
   const [widths, setWidths] = useState(initialWidths);
@@ -290,7 +294,7 @@ export function ProjectView(props: ProjectViewProps) {
         onAdd={adder.add}
         history={history}
         editing={shown !== undefined && output === undefined ? editing : undefined}
-        auto={{ profile: project.profile, onSetProfile: (profile) => session.profile.set(profile) }}
+        auto={{ profile: project.profile, onSetProfile: (profile) => session.profile.set(profile), findings }}
       />
       {labels}
       <ApproveDialog session={session} approval={props.opened.approval} documents={project.documents} />
@@ -315,6 +319,7 @@ export function ProjectView(props: ProjectViewProps) {
             onFailure={failure.failed}
             onDismissError={failure.clear}
             marks={marking}
+            findings={findings.here?.findings}
             review={reviewOf(session, props.opened, activeDocument)}
             images={images}
             tool={tool}

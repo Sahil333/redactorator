@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Refusal } from "../engine/api/errors";
 import type { LibraryState, ProjectSummary } from "../engine/api/state";
 import { DropZone } from "./DropZone";
+import { Menu, MenuItem } from "./Menu";
 import { NotAdded } from "./NotAdded";
 import { PickFiles } from "./PickFiles";
 import type { Waiting } from "./useProjectsFolder";
@@ -187,61 +188,6 @@ function EmptyHome({ canAdd, canImport, onFiles, folder, where }: {
   );
 }
 
-const menuSteps: Partial<Record<string, 1 | -1>> = { ArrowDown: 1, ArrowUp: -1 };
-
-/** A row's ⋯ button and its menu. Arrow keys move through the items; Escape or a click outside closes it. */
-function RowMenu({ name, disabled, children }: { readonly name: string; readonly disabled: boolean; readonly children: ReactNode }) {
-  const menuId = useId();
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const step = menuSteps[event.key];
-    if (step === undefined) return;
-    event.preventDefault();
-    const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    const at = items.findIndex((item) => item === document.activeElement);
-    items.at((at + step) % items.length)?.focus();
-  }
-
-  return (
-    <>
-      <button
-        type="button"
-        popoverTarget={menuId}
-        aria-label={`Actions for ${name}`}
-        aria-haspopup="menu"
-        disabled={disabled}
-        className="grid size-8 place-items-center rounded-md text-ink-muted enabled:hover:bg-paper-sunk enabled:hover:text-ink disabled:opacity-50"
-      >
-        ⋯
-      </button>
-      <div
-        ref={menuRef}
-        id={menuId}
-        popover="auto"
-        role="menu"
-        aria-label={`Actions for ${name}`}
-        onToggle={(event) => {
-          if (event.newState === "open") menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
-        }}
-        onKeyDown={onKeyDown}
-        onClick={() => menuRef.current?.hidePopover()}
-        className="row-menu min-w-40 rounded-md border border-rule bg-paper-raised p-1 text-ink shadow-[0_4px_16px_rgb(31_27_22/0.16)]"
-      >
-        {children}
-      </div>
-    </>
-  );
-}
-
-function MenuItem({ label, onSelect }: { readonly label: string; readonly onSelect: () => void }) {
-  return (
-    <button type="button" role="menuitem" onClick={onSelect} className="block w-full rounded px-3 py-1.5 text-left hover:bg-paper-sunk focus:bg-paper-sunk">
-      {label}
-    </button>
-  );
-}
-
 function RenameField({ name, onDone }: { readonly name: string; readonly onDone: (name: string | undefined) => void }) {
   const [value, setValue] = useState(name);
   return (
@@ -288,12 +234,12 @@ function ProjectRow({ listed, actions, can }: { readonly listed: Listed; readonl
       <span className="text-ink-muted">
         {listed.approved} of {listed.documents} approved
       </span>
-      <RowMenu name={listed.name} disabled={!can.manage}>
+      <Menu label={`Actions for ${listed.name}`} disabled={!can.manage}>
         <MenuItem label="Rename" onSelect={() => setRenaming(true)} />
         <MenuItem label="Duplicate" onSelect={() => actions.onDuplicate(listed)} />
         <MenuItem label={listed.archived ? "Unarchive" : "Archive"} onSelect={() => actions.onArchive(listed, !listed.archived)} />
         <MenuItem label="Delete" onSelect={() => actions.onDelete(listed)} />
-      </RowMenu>
+      </Menu>
     </li>
   );
 }

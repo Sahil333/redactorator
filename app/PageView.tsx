@@ -1,9 +1,11 @@
-import { use, useEffect, useId, useRef, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
-import type { PageModel } from "../engine/model/document";
+import { use, useEffect, useId, useRef, type ComponentProps, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
+import type { PageModel, PageText } from "../engine/model/document";
+import type { FindingPlace } from "../engine/model/findings";
 import type { Box } from "../engine/model/geometry";
 import { boxesOn, type Mark, type MarkTarget } from "../engine/model/marks";
 import type { Pending, Tool } from "./marks";
 import { markTypeLabel } from "../engine/model/markTypes";
+import { rangeBoxes } from "../engine/model/pageText";
 import { CSS_PIXELS_PER_POINT, markElementId, pageFrameId, PageScale } from "./pageGeometry";
 import type { RenderDetail } from "./usePageImages";
 import { useKeyboardMarking } from "./useKeyboardMarking";
@@ -15,6 +17,8 @@ interface PageViewProps {
   readonly page: PageModel;
   readonly image: ImageData | undefined;
   readonly marks: readonly Mark[];
+  /** The places of the open findings review's values on this page, and the page's text, to find their boxes in. */
+  readonly found: { readonly text: PageText | undefined; readonly places: readonly FindingPlace[] };
   /** A new mark still waiting for its type. */
   readonly pending: Pending | undefined;
   /** The mark under the pointer here or in the marks panel. */
@@ -137,6 +141,48 @@ function MarkLayer({ page, marks, pending, highlighted, selection, focusBox, ref
   );
 }
 
+/** The found values on the page, drawn apart from the marks: they are removed only once confirmed. */
+function FindingLayer({ page, found: { text, places } }: { readonly page: PageModel; readonly found: PageViewProps["found"] }) {
+  if (text === undefined || places.length === 0) return null;
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+      {places.flatMap(({ start, end }) =>
+        rangeBoxes(text, start, end).map((box, index) => (
+          <div key={`${start}-${end}-${index}`} data-finding="" className="absolute rounded-[1px] outline-[1.5px] outline-mark outline-dashed" style={boxStyle(page, box)} />
+        )),
+      )}
+    </div>
+  );
+}
+
+interface MarkingSurfaceProps {
+  readonly pageNumber: number;
+  readonly tool: Tool;
+  readonly handlers: ComponentProps<"div">;
+  readonly announcement: string;
+}
+
+/** The page's surface that takes marks with the pointer and the keyboard, and what it says to a screen reader. */
+function MarkingSurface({ pageNumber, tool, handlers, announcement }: MarkingSurfaceProps) {
+  const hintId = useId();
+  return (
+    <>
+      <div
+        role="application"
+        aria-label={`Page ${pageNumber}, ${tools[tool].label}`}
+        aria-describedby={hintId}
+        tabIndex={0}
+        {...handlers}
+        className={`absolute inset-0 touch-none select-none ${tools[tool].cursor}`}
+      />
+      <div className="sr-only">
+        <p id={hintId}>{tools[tool].hint}</p>
+        <p aria-live="polite">{announcement}</p>
+      </div>
+    </>
+  );
+}
+
 type PointerHandlers = ReturnType<typeof usePointerMarking>["handlers"];
 
 /** The page surface's mouse handlers: text goes to the document's selection, boxes stay on the page. */
@@ -180,6 +226,7 @@ export function PageView({
   page,
   image,
   marks,
+  found,
   pending,
   highlighted,
   tool,
@@ -192,7 +239,6 @@ export function PageView({
 }: PageViewProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const scale = use(PageScale);
-  const hintId = useId();
   const pageNumber = page.index + 1;
   const pointer = usePointerMarking({ page, tool, marks, highlighted, onMark, onHighlight });
   const keys = useKeyboardMarking({ page, tool, frameRef, onMark, text });
@@ -208,6 +254,7 @@ export function PageView({
       style={{ width: `${page.width * scale}px`, height: `${page.height * scale}px` }}
     >
       {image !== undefined && <PageImage image={image} label={`Page ${pageNumber}`} />}
+      <FindingLayer page={page} found={found} />
       <MarkLayer
         page={page}
         marks={marks}
@@ -218,21 +265,7 @@ export function PageView({
         refused={refused}
       />
       {tool !== undefined && (
-        <>
-          <div
-            role="application"
-            aria-label={`Page ${pageNumber}, ${tools[tool].label}`}
-            aria-describedby={hintId}
-            tabIndex={0}
-            {...keys.handlers}
-            {...surfaceHandlers(tool, text, pointer.handlers)}
-            className={`absolute inset-0 touch-none select-none ${tools[tool].cursor}`}
-          />
-          <div className="sr-only">
-            <p id={hintId}>{tools[tool].hint}</p>
-            <p aria-live="polite">{keys.announcement}</p>
-          </div>
-        </>
+        <MarkingSurface pageNumber={pageNumber} tool={tool} handlers={{ ...keys.handlers, ...surfaceHandlers(tool, text, pointer.handlers) }} announcement={keys.announcement} />
       )}
       {children}
     </div>

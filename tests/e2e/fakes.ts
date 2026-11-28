@@ -1,8 +1,9 @@
-// Fakes for failure and timing cases only: at the PDF worker's wire, and at the browser's file
-// writes. Each is named by what it does and checks itself: the `fakes` fixture (coverage.ts)
+// Fakes for failure and timing cases only: at the PDF worker's wire, the detection worker's, and
+// the browser's file writes. Each is named by what it does and checks itself: the `fakes` fixture (coverage.ts)
 // fails a test whose fake never acted, and a hold fails when it is released holding nothing.
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import type { ReaderTag } from "../../engine/model/document";
+import type { DetectReply, DetectRequest } from "../../engine/detect-protocol/messages";
 import { READER_TAG, type PdfError, type PdfReply, type PdfRequest } from "../../engine/pdf-protocol/messages";
 
 /** A message as it crosses the wire: the same shape, with plain numbers for branded ones. */
@@ -40,6 +41,8 @@ interface PageFakes {
   /** The PDF worker's script: replaced, or the real one with preludes run before it. */
   worker: { readonly script: string } | { readonly preludes: string[] } | undefined;
   served: boolean;
+  /** The detection worker's script, replaced by `fakeDetection`. */
+  detection: { readonly script: string; served: boolean } | undefined;
 }
 
 const installed = new Map<Page, PageFakes>();
@@ -52,7 +55,7 @@ function listenToWorker() {
 async function fakesOf(page: Page): Promise<PageFakes> {
   const known = installed.get(page);
   if (known !== undefined) return known;
-  const fakes: PageFakes = { acted: new Map(), expected: new Set(), worker: undefined, served: false };
+  const fakes: PageFakes = { acted: new Map(), expected: new Set(), worker: undefined, served: false, detection: undefined };
   installed.set(page, fakes);
   await page.exposeFunction("fakeActed", (key: string) => fakes.acted.set(key, (fakes.acted.get(key) ?? 0) + 1));
   await page.addInitScript(listenToWorker);
@@ -491,6 +494,28 @@ export async function connectionsMade(page: Page): Promise<() => string[]> {
   return () => [...fakes.acted.keys()].filter((key) => key.startsWith("connection "));
 }
 
+/** The detection worker's global scope, as a fake running in it sees it. */
+export interface DetectionWorkerScope {
+  postMessage: (message: Wire<DetectReply>) => void;
+  addEventListener(type: "message", listener: (event: MessageEvent<Wire<DetectRequest>>) => void): void;
+}
+
+/**
+ * Serves `fake` in place of the detection worker's script, run in the worker's scope. It must
+ * call `acted` before the test ends.
+ */
+export async function fakeDetection(page: Page, fake: (scope: DetectionWorkerScope, acted: () => void) => void): Promise<void> {
+  const fakes = await fakesOf(page);
+  if (fakes.detection !== undefined) throw new Error("The detection worker is already faked");
+  const detection = { script: `(${String(fake)})(globalThis, () => (${String(acted)})("fakeDetection"));`, served: false };
+  fakes.detection = detection;
+  fakes.expected.add("fakeDetection");
+  await page.route("**/assets/detectWorker-*.js", async (route) => {
+    detection.served = true;
+    await route.fulfill({ contentType: "text/javascript", body: detection.script });
+  });
+}
+
 /** Fails the test if a fake on one of `context`'s pages changed no worker script, or never acted. */
 export async function checkFakes(context: BrowserContext): Promise<void> {
   const problems: string[] = [];
@@ -498,6 +523,7 @@ export async function checkFakes(context: BrowserContext): Promise<void> {
     if (page.context() !== context) continue;
     installed.delete(page);
     if (fakes.worker !== undefined && !fakes.served) problems.push("a fake of the PDF worker served no worker script");
+    if (fakes.detection?.served === false) problems.push("the fake detection worker was never served");
     const missing = () => [...fakes.expected].filter((key) => !fakes.acted.has(key));
     // A fake in the worker reports through the page, so its word can come a moment after the act.
     await expect.poll(() => missing(), { timeout: 2000 }).toEqual([]).catch(() => undefined);
