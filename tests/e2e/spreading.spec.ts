@@ -589,6 +589,23 @@ test("a file dropped while an approval is worked out isn't added, and says why",
   await expect(inExplorer(page, "letter-b.pdf")).toHaveCount(0);
 });
 
+test("a file dropped while other files are being added isn't added, and says why", async ({ page }) => {
+  await openApp(page);
+  await openPdf(page, oneWordPdf);
+  await saved(page);
+  // Held from here on: the next file's preparation, which keeps the add under way.
+  const release = await holdPreparation(page);
+  await page.reload();
+  await addDocuments(page, letterB);
+
+  await dropFiles(page, page.locator("#page-1"), [letterA]);
+
+  await expect(page.getByText("letter-a.pdf: Documents are being added. Try again once they are in the project.")).toBeVisible();
+  await release();
+  await expect(inExplorer(page, "letter-b.pdf")).toBeVisible();
+  await expect(inExplorer(page, "letter-a.pdf")).toHaveCount(0);
+});
+
 test("a document can't be approved or switched while files are being added, and can once they're in", async ({ page }) => {
   await openApp(page);
   await openPdf(page, oneWordPdf);
