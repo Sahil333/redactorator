@@ -71,7 +71,7 @@ export function redactionsByPage(original: mupdf.Document, edits: readonly Edit[
     list.push(...made);
     byPage.set(edit.page, list);
   }
-  for (const [page, list] of byPage) byPage.set(page, trimmedOnPage(original, page, list, fromText));
+  for (const [page, list] of byPage) byPage.set(page, typesInTheClear(trimmedOnPage(original, page, list, fromText)));
   return byPage;
 }
 
@@ -82,6 +82,34 @@ const HELVETICA_WIDTHS: Readonly<Record<string, number>> = {
   ...Object.fromEntries([..."0123456789"].map((c) => [c, 556])),
   " ": 278, "[": 278, "]": 278, "-": 333, "_": 556, ".": 278,
 };
+
+/** Where a box's type is printed: the letters' size, their left end and baseline, and how far they run. */
+function typePlace(box: Box, printed: string) {
+  const em = [...printed].reduce((sum, c) => sum + (HELVETICA_WIDTHS[c] ?? 600), 0) / 1000;
+  const size = Math.min((box.y1 - box.y0) * 0.7, ((box.x1 - box.x0) * 0.9) / em);
+  return { size, x: (box.x0 + box.x1 - em * size) / 2, baseline: (box.y0 + box.y1) / 2 + size * 0.35, width: em * size };
+}
+
+// How far Helvetica's brackets, which every type has, reach above and below the baseline, as a
+// share of the letters' size. The centre of a letter's font box, where the check reads it, is between.
+const INK_ABOVE = 0.74;
+const INK_BELOW = 0.2;
+
+/**
+ * A page's redactions, each without its type where another box lies over the letters the type
+ * would print. Marks may overlap: a type printed there would be painted over by the other box, or
+ * be text under it, which the check refuses.
+ */
+function typesInTheClear(redactions: readonly Redaction[]): Redaction[] {
+  return redactions.map((redaction) => {
+    const { size, x, baseline, width } = typePlace(redaction.box, redaction.printed);
+    const letters = around([
+      [x, baseline - size * INK_ABOVE],
+      [x + width, baseline + size * INK_BELOW],
+    ]);
+    return redactions.some((other) => other !== redaction && overlap(other.box, letters)) ? { ...redaction, printed: "" } : redaction;
+  });
+}
 
 // A hex string: the stream's text is stored as UTF-8, so a literal string would garble any byte above 0x7f.
 const pdfString = (text: string) => `<${[...text].map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("")}>`;
@@ -100,11 +128,8 @@ function drawBoxes(document: mupdf.PDFDocument, page: mupdf.PDFPage, redactions:
   let content = `q ${inverse.map((n) => n.toFixed(6)).join(" ")} cm ${fill}\n`;
   for (const { box, printed } of redactions) {
     content += `${box.x0} ${box.y0} ${box.x1 - box.x0} ${box.y1 - box.y0} re f\n`;
-    if (!appearance.label) continue;
-    const em = [...printed].reduce((sum, c) => sum + (HELVETICA_WIDTHS[c] ?? 600), 0) / 1000;
-    const size = Math.min((box.y1 - box.y0) * 0.7, ((box.x1 - box.x0) * 0.9) / em);
-    const x = (box.x0 + box.x1 - em * size) / 2;
-    const baseline = (box.y0 + box.y1) / 2 + size * 0.35;
+    if (!appearance.label || printed === "") continue;
+    const { size, x, baseline } = typePlace(box, printed);
     content += `BT ${ink} /RedactLabel ${size.toFixed(3)} Tf 1 0 0 -1 ${x.toFixed(3)} ${baseline.toFixed(3)} Tm ${pdfString(printed)} Tj ET ${fill}\n`;
   }
   content += "Q\n";

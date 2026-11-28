@@ -27,7 +27,7 @@ export interface Redaction {
    * closely set lines overlap, so the whole height would remove letters from the next line.
    */
   readonly textArea: Box;
-  /** What the box prints when labels are on, like `[PERSON]`. */
+  /** What the box prints when labels are on, like `[PERSON]`; empty where another box lies over the place it would print it. */
   readonly printed: string;
 }
 
