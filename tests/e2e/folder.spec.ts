@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "./coverage";
-import { janeRoe, markText, oneWordPdf, openApp, openPdf, saved, standInForFolderPicker, storedNames, storedNamesIn } from "./app";
+import { addType, janeRoe, markText, oneWordPdf, openApp, openPdf, saved, selectText, standInForFolderPicker, storedNames, storedNamesIn } from "./app";
 
 const card = (page: Page, title: string) => page.getByRole("region", { name: title });
 const keepInFolder = (page: Page) => card(page, "Keep your projects in a folder on this computer");
@@ -174,7 +174,9 @@ test("custom mark types made inside Chrome join the projects folder's own when i
 
   await clearSiteData(page);
   await openPdf(page, oneWordPdf);
-  await markText(page, 1, janeRoe, "Case number");
+  // "Case number" is part of the built-in "Court case number (US)", so it is added through its own row.
+  await selectText(page, 1, janeRoe);
+  await addType(page, "Case number");
   await saved(page);
   await goHome(page);
   await chooseFolder(page);

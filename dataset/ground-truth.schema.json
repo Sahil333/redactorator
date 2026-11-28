@@ -15,7 +15,7 @@
       "properties": {
         "source": { "type": "string", "minLength": 1 },
         "licence": { "type": "string", "minLength": 1 },
-        "country": { "enum": ["US", "UK", "CA", "AU", "NZ", "IE"] },
+        "country": { "enum": ["US", "UK", "CA", "AU", "NZ", "IE", "IN"] },
         "format": {
           "oneOf": [
             { "const": "born-digital-pdf", "title": "Born-digital PDF" },
@@ -82,7 +82,11 @@
   },
   "$defs": {
     "entityType": {
-      "description": "DET-1's entity types, plus the three a drawn box needs. The app shows each title.",
+      "description": "A general type, or an identifier Auto mode finds.",
+      "anyOf": [{ "$ref": "#/$defs/generalType" }, { "$ref": "#/$defs/identifierType" }]
+    },
+    "generalType": {
+      "description": "DET-1's entity types, plus the three a drawn box needs. Six are also identifiers Auto mode finds. The app shows each title.",
       "oneOf": [
         { "const": "person", "title": "Person" },
         { "const": "address", "title": "Address" },
@@ -98,6 +102,70 @@
         { "const": "signature", "title": "Signature" },
         { "const": "photo", "title": "Photo" },
         { "const": "other", "title": "Other" }
+      ]
+    },
+    "identifierType": {
+      "description": "The identifiers Auto mode finds that are not a general type, in the order of their packs. The app shows each title.",
+      "oneOf": [
+        { "const": "iban", "title": "IBAN" },
+        { "const": "us-ssn", "title": "SSN" },
+        { "const": "us-itin", "title": "ITIN" },
+        { "const": "us-ein", "title": "EIN" },
+        { "const": "us-ptin", "title": "PTIN" },
+        { "const": "us-routing-number", "title": "Bank routing number (US)" },
+        { "const": "us-bank-account", "title": "Bank account number (US)" },
+        { "const": "us-passport", "title": "Passport number (US)" },
+        { "const": "us-drivers-license", "title": "Driver's license (US)" },
+        { "const": "us-npi", "title": "NPI" },
+        { "const": "us-dea-number", "title": "DEA number" },
+        { "const": "us-mbi", "title": "Medicare Beneficiary Identifier" },
+        { "const": "uk-nino", "title": "National Insurance number" },
+        { "const": "uk-nhs-number", "title": "NHS number" },
+        { "const": "uk-utr", "title": "UTR" },
+        { "const": "uk-vat-number", "title": "VAT number (UK)" },
+        { "const": "uk-driving-licence", "title": "Driving licence (UK)" },
+        { "const": "uk-passport", "title": "Passport number (UK)" },
+        { "const": "uk-sort-code-account", "title": "Sort code and account number" },
+        { "const": "uk-vehicle-registration", "title": "Vehicle registration (UK)" },
+        { "const": "in-aadhaar", "title": "Aadhaar" },
+        { "const": "in-aadhaar-vid", "title": "Aadhaar Virtual ID" },
+        { "const": "in-pan", "title": "PAN" },
+        { "const": "in-gstin", "title": "GSTIN" },
+        { "const": "in-voter-id", "title": "Voter ID (EPIC)" },
+        { "const": "in-passport", "title": "Passport number (India)" },
+        { "const": "in-driving-licence", "title": "Driving licence (India)" },
+        { "const": "in-vehicle-registration", "title": "Vehicle registration (India)" },
+        { "const": "in-bank-account", "title": "Bank account number (India)" },
+        { "const": "in-ifsc", "title": "IFSC" },
+        { "const": "in-upi-id", "title": "UPI ID" },
+        { "const": "in-tan", "title": "TAN" },
+        { "const": "in-uan", "title": "UAN" },
+        { "const": "in-abha-number", "title": "ABHA number" },
+        { "const": "ca-sin", "title": "SIN" },
+        { "const": "ca-business-number", "title": "Business Number (Canada)" },
+        { "const": "ca-bc-phn", "title": "BC Personal Health Number" },
+        { "const": "ca-bank-account", "title": "Bank account number (Canada)" },
+        { "const": "ca-passport", "title": "Passport number (Canada)" },
+        { "const": "ca-drivers-licence", "title": "Driver's licence (Canada)" },
+        { "const": "au-tfn", "title": "TFN" },
+        { "const": "au-abn", "title": "ABN" },
+        { "const": "au-acn", "title": "ACN" },
+        { "const": "au-medicare-number", "title": "Medicare number (Australia)" },
+        { "const": "au-bank-account", "title": "Bank account number with BSB" },
+        { "const": "au-passport", "title": "Passport number (Australia)" },
+        { "const": "au-drivers-licence", "title": "Driver's licence (Australia)" },
+        { "const": "bic", "title": "BIC" },
+        { "const": "lei", "title": "LEI" },
+        { "const": "isin", "title": "ISIN" },
+        { "const": "cusip", "title": "CUSIP" },
+        { "const": "crypto-wallet-address", "title": "Crypto wallet address" },
+        { "const": "us-court-case-number", "title": "Court case number (US)" },
+        { "const": "mac-address", "title": "MAC address" },
+        { "const": "imei", "title": "IMEI" },
+        { "const": "us-provider-tax-id", "title": "Provider tax ID (US)" },
+        { "const": "health-insurance-member-id", "title": "Health insurance member ID" },
+        { "const": "insurance-claim-number", "title": "Insurance claim number" },
+        { "const": "prescription-number", "title": "Prescription number" }
       ]
     },
     "box": {

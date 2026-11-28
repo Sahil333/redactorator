@@ -317,6 +317,14 @@ export async function pickType(page: Page, type: string): Promise<void> {
   await expect(picker).toHaveCount(0);
 }
 
+/** Adds `name` as a new type through its own row, which a name that is part of a built-in type's name needs. */
+export async function addType(page: Page, name: string): Promise<void> {
+  const picker = page.getByRole("combobox", { name: "Type for this mark" });
+  await picker.fill(name);
+  await page.getByRole("listbox", { name: "Types" }).getByRole("option", { name: `Add “${name}” as a new type` }).click();
+  await expect(picker).toHaveCount(0);
+}
+
 /** Turns on the setting that prints each mark's type in its box. */
 export async function printTypes(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Appearance" }).click();
