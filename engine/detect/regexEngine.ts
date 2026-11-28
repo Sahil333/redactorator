@@ -4,16 +4,19 @@ export interface Span {
   readonly end: number;
 }
 
-/** What the engine needs of a rule: its pattern, and which group of it is the value. */
+/** What the engine needs of a rule: its pattern, which group of it is the value, and which group is looked up in a list. */
 export interface RegexRule {
   readonly pattern: string;
   readonly valueGroup: number;
+  readonly listGroup?: number;
 }
 
 export interface RegexMatch<R extends RegexRule> {
   readonly rule: R;
   readonly match: Span;
   readonly value: Span;
+  /** The span of the rule's `listGroup`, when the match has it. */
+  readonly list?: Span;
 }
 
 export interface CompiledRules<R extends RegexRule> {
@@ -26,19 +29,22 @@ export interface CompiledRules<R extends RegexRule> {
   scan<T>(text: string, judge: (match: RegexMatch<R>) => T | undefined): T[];
 }
 
-/** Compiles rules once, to scan many texts. Throws when a pattern does not compile or has no group `valueGroup`. */
+/** Compiles rules once, to scan many texts. Throws when a pattern does not compile or lacks its `valueGroup` or `listGroup`. */
 export interface RegexEngine {
   compile<R extends RegexRule>(rules: readonly R[]): CompiledRules<R>;
 }
 
 const groupCount = (expression: RegExp): number => (new RegExp(`${expression.source}|`, expression.flags).exec("")?.length ?? 1) - 1;
 
+const spanOf = (pair: readonly [number, number] | undefined): Span | undefined => pair && { start: pair[0], end: pair[1] };
+
 function scanOne<R extends RegexRule, T>(rule: R, expression: RegExp, text: string, judge: (match: RegexMatch<R>) => T | undefined, into: T[]): void {
   expression.lastIndex = 0;
   for (let found = expression.exec(text); found !== null; found = expression.exec(text)) {
     const start = found.index;
-    const value = found.indices?.[rule.valueGroup];
-    const kept = value !== undefined && value[1] > value[0] ? judge({ rule, match: { start, end: start + found[0].length }, value: { start: value[0], end: value[1] } }) : undefined;
+    const value = spanOf(found.indices?.[rule.valueGroup]);
+    const list = rule.listGroup === undefined ? undefined : spanOf(found.indices?.[rule.listGroup]);
+    const kept = value !== undefined && value.end > value.start ? judge({ rule, match: { start, end: start + found[0].length }, value, ...(list && { list }) }) : undefined;
     if (kept !== undefined) into.push(kept);
     // A kept match goes on from its end. Anything else, a match of length zero included, which
     // leaves lastIndex where it was and would loop for ever, goes on one character later.
@@ -49,8 +55,10 @@ function scanOne<R extends RegexRule, T>(rule: R, expression: RegExp, text: stri
 function compile<R extends RegexRule>(rules: readonly R[]): CompiledRules<R> {
   const compiled = rules.map((rule) => {
     const expression = new RegExp(rule.pattern, "dgu");
-    if (!Number.isInteger(rule.valueGroup) || rule.valueGroup < 1 || rule.valueGroup > groupCount(expression)) {
-      throw new Error("A rule names a value group its pattern does not have");
+    const groups = groupCount(expression);
+    const isGroup = (group: number) => Number.isInteger(group) && group >= 1 && group <= groups;
+    if (!isGroup(rule.valueGroup) || (rule.listGroup !== undefined && !isGroup(rule.listGroup))) {
+      throw new Error("A rule names a group its pattern does not have");
     }
     return { rule, expression };
   });

@@ -13,7 +13,7 @@ const second = pageAt(1);
 const box = pointBox(0, 0, 1, 1);
 
 const checksum: Evidence = { kind: "checksum", level: "checked" };
-const label: Evidence = { kind: "label", level: "labelled", label: 0 };
+const label: Evidence = { kind: "label", level: "labelled", label: "UAN" };
 const format: Evidence = { kind: "format", level: "format" };
 
 const hit = (text: string, start: number, more: Partial<Hit> = {}): Hit => ({

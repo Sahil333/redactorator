@@ -1,26 +1,21 @@
 import type { RunNumber } from "../detect-protocol/messages";
 import { parseDetectRequest } from "../detect-protocol/parse";
 import type { PackId } from "../model/detection";
+import { loadPacks } from "./loadPacks";
 import { post } from "./messages";
-import { compiledPacks } from "./packs/generated";
 import { patternRecognizer } from "./patternRecognizer";
-import { parsePack, type Pack, type Recognizer } from "./recognizer";
+import type { Recognizer } from "./recognizer";
 import { jsRegexEngine } from "./regexEngine";
 import { validators } from "./validators";
 
 let loaded: { readonly run: RunNumber; readonly recognizer: Recognizer } | undefined;
 
-function packsOf(ids: readonly PackId[]): Pack[] | undefined {
-  const packs = ids.map((id) => parsePack(compiledPacks[id]));
-  return packs.every((pack) => pack !== undefined) ? packs : undefined;
-}
-
-/** A recognizer with the packs loaded, or undefined when a pack is missing, damaged or does not compile. */
-function recognizerOf(packs: readonly Pack[] | undefined): Recognizer | undefined {
-  if (packs === undefined) return undefined;
+/** A recognizer with the packs loaded, or undefined when a pack or list is missing, damaged or does not compile. */
+function recognizerOf(found: ReturnType<typeof loadPacks>): Recognizer | undefined {
+  if (found === undefined) return undefined;
   const recognizer = patternRecognizer(jsRegexEngine, validators);
   try {
-    recognizer.load(packs);
+    recognizer.load(found.packs, found.lists);
   } catch {
     return undefined;
   }
@@ -28,13 +23,13 @@ function recognizerOf(packs: readonly Pack[] | undefined): Recognizer | undefine
 }
 
 function load(run: RunNumber, ids: readonly PackId[]): void {
-  const packs = packsOf(ids);
+  const packs = loadPacks(ids);
   const recognizer = recognizerOf(packs);
   loaded = recognizer && { run, recognizer };
   post(
     packs === undefined || recognizer === undefined
       ? { type: "failed", run, code: "recognizer-failed" }
-      : { type: "ready", run, packs: packs.map(({ id, version }) => ({ id, version })) },
+      : { type: "ready", run, packs: packs.packs.map(({ id, version }) => ({ id, version })) },
   );
 }
 

@@ -61,7 +61,18 @@ interface Span {
   readonly readings: ReadonlyMap<MarkType, Reading>;
 }
 
-const evidenceId = ({ kind, level, label }: Evidence) => `${kind}:${level}:${label ?? ""}`;
+function evidenceId(evidence: Evidence): string {
+  switch (evidence.kind) {
+    case "label":
+      return `label:${evidence.level}:${evidence.label}`;
+    case "list":
+      return `list:${evidence.level}:${evidence.list}`;
+    case "companion":
+      return `companion:${evidence.level}:${evidence.companion}`;
+    default:
+      return `${evidence.kind}:${evidence.level}`;
+  }
+}
 
 function joined(was: Reading | undefined, now: Reading): Reading {
   if (was === undefined) return now;

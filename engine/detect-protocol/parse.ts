@@ -1,5 +1,5 @@
 import { packOrder, type PackId } from "../model/detection";
-import { evidenceKinds, evidenceLevels, type Evidence, type Hit } from "../model/findings";
+import { evidenceLevels, plainEvidenceKinds, type Evidence, type Hit } from "../model/findings";
 import { isPageIndex } from "../model/geometry";
 import { isName, isOffset, isRecord, isText, parseAll } from "../model/guards";
 import { isRunNumber, type DetectReply, type DetectRequest, type LoadedPack } from "./messages";
@@ -25,12 +25,15 @@ export function parseDetectRequest(data: unknown): DetectRequest | undefined {
 
 function parseEvidence(value: unknown): Evidence | undefined {
   if (!isRecord(value)) return undefined;
-  const kind = evidenceKinds.find((known) => known === value.kind);
   const level = evidenceLevels.find((known) => known === value.level);
-  if (kind === undefined || level === undefined || (value.label !== undefined && !isOffset(value.label))) return undefined;
-  return { kind, level, ...(value.label === undefined ? {} : { label: value.label }) };
+  if (level === undefined) return undefined;
+  const { kind, label, list, companion } = value;
+  if (kind === "label") return isName(label) ? { kind, level, label } : undefined;
+  if (kind === "list") return isName(list) ? { kind, level, list } : undefined;
+  if (kind === "companion") return isName(companion) ? { kind, level, companion } : undefined;
+  const plain = plainEvidenceKinds.find((known) => known === kind);
+  return plain && { kind: plain, level };
 }
-
 
 function parseHit(value: unknown): Hit | undefined {
   if (!isRecord(value)) return undefined;

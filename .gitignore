@@ -11,3 +11,6 @@ playwright-report/
 .venv/
 __pycache__/
 .pytest_cache/
+tools/.build/
+engine/detect/packs/generated/
+fixtures/packs/
