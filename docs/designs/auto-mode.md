@@ -2,8 +2,8 @@
 
 *   **Author:** Sahil Chaddha
 *   **Status:** Proposed. Revised twice on 2026-11-28, after each of two
-    design reviews; what changed is listed under "Changes after the design
-    reviews".
+    design reviews, and once more that day when the author allowed marks to
+    overlap; what changed is listed under "Changes after the design reviews".
 *   **Date:** 2026-11-28
 
 This document can be read without any other. It came from a brainstorm, whose
@@ -23,9 +23,10 @@ confirms. Each confirmed finding then becomes an ordinary mark.
 
 What happens after a mark exists comes from phases 1 to 3: approving the
 document, spreading a value to the other documents of a project, writing the
-output file, and the leak checks on that file. One rule of approval changes
-(decision D14). Nothing else does, and how the output file is written does
-not change at all.
+output file, and the leak checks on that file. One rule of spreading changes
+(decision D14). Marks made by Auto mode may overlap other marks, which the
+writer must accept; that fix to the writer is separate work that lands before
+this phase needs it (Risks and Mitigations).
 
 This document covers the whole phase in one place, at the author's choice. It
 has three parts:
@@ -69,8 +70,8 @@ which do not depend on each other are built at the same time (author, 27 Nov
 | Place | A page and a range of indexes into that page's stored characters (`PageText.chars`) |
 | Identifier | A kind of value a rule looks for: SSN, IFSC, UPI ID. Each identifier is one type. The 65 are listed in the Detailed Implementation Plan, section 2, "The identifiers" |
 | Evidence level | `checked` (a checksum or a list confirmed the value), `labelled` (a label or a companion hit supports it) or `format` (shape alone). `checked` is the strongest and `format` the weakest |
-| Candidate | One reading of a piece of text: a span, an identifier and its evidence |
-| Finding | What the user decides on: one value in one document, with all its places and its candidates. The panel calls findings "found values" |
+| Candidate | One reading of one span of text: an identifier and its evidence. Two rules that match the same span give one finding with two candidates |
+| Finding | What the user decides on: one value in one document, with all its places and its candidates. Two found values that overlap are two findings. The panel calls findings "found values" |
 | Resolver | The step that turns a run's hits into findings |
 | Findings review | The state a document is in from a run that found something until its findings are confirmed, closed, dropped or all covered by marks. The code already uses "review" for a document's state (`not-started`, `in-review`, `approved`); the two are different things, and code names for the new thing use `findings` and `detection` |
 | Design review | A review of this document. There were two, both on 28 Nov 2026 |
@@ -160,8 +161,8 @@ reused. The table that maps each goal to its test is in the Verification Plan.
     It is dropped in two cases, and the user is told why and offered a new
     run: a reader change, and stored text that no longer matches the found
     values.
-*   **G13.** A later run never offers a value that an existing mark overlaps,
-    or a rejected value (brief S26).
+*   **G13.** A later run never offers a value that is already marked at that
+    place, or a rejected value (brief S26).
 *   **G14.** Approving a document and confirming its findings are separate
     acts. Approving a document whose findings review is open shows a warning
     with the number of found values not yet marked, and lets the user proceed.
@@ -169,20 +170,21 @@ reused. The table that maps each goal to its test is in the Verification Plan.
 *   **G15.** A mark made from a finding carries the specific identifier's
     name, such as SSN or IFSC, never a general name for a group of identifiers
     (brief S34).
-*   **G22.** Auto mode never makes a mark that overlaps another mark. Each
-    place of an accepted finding gets exactly one mark, and a found value that
-    an existing mark overlaps is not offered.
+*   **G22.** Marks may overlap. Every value Auto mode finds is a finding of
+    its own and, once accepted, has marks of its own, also where it lies
+    inside or around another found value or another mark.
 
 **Keeping the product's rules**
 
 *   **G16.** No request carries document bytes, text or findings. Packs and
     lists ship with the app. The existing same-origin test covers the new
     worker.
-*   **G17.** How the output file is written does not change. A downloaded file
-    made from accepted findings passes the outside checker, including a
-    fixture with a character stored as two UTF-16 units in front of an
-    identifier, and a fixture with marks that touch, cross a line end, and
-    number in the hundreds on a page (brief A2, A12).
+*   **G17.** This phase does not change how the output file is written. A
+    downloaded file made from accepted findings passes the outside checker,
+    including a fixture with a character stored as two UTF-16 units in front
+    of an identifier, and a fixture with marks that overlap, touch, cross a
+    line end, and number in the hundreds on a page, with and without each
+    mark's type printed in its box (brief A2, A12).
 
 **Preparing for what comes next**
 
@@ -202,8 +204,6 @@ reused. The table that maps each goal to its test is in the Verification Plan.
 
 *   **People's names, addresses and other free text.** Recognizers that use
     named-entity recognition (NER) or a large language model are later phases.
-*   **Marks that overlap** (author, 28 Nov 2026). Overlap has too many edge
-    cases for this phase and for the later pseudonymisation phase.
 *   **Patterns a user writes** (author, 28 Nov 2026). A later addition.
 *   **Search and mark** (item REV-10 of `docs/Implementation-Plan.md`; author,
     28 Nov 2026). A later addition.
@@ -303,15 +303,14 @@ may be copied.
 
 *   **Given**: the findings panel is open.
 *   **When**: the user unticks a phone number, changes the identifier of one
-    finding to another of its candidates, picks "Remove more" on a third, and
+    finding to another of its candidates, lengthens the edge of a third, and
     shortens the edge of a fourth.
 *   **Then**: on confirm, the unticked value becomes a rejected value: it
     stays in the file and is not offered again in this document. The user
     never has to choose an identifier: each finding has a default, which stays
     unless the user picks another. A shortened edge applies in every place of
-    the value. "Remove more" and a lengthened edge mark the wider text in each
-    place where it is present, and the value as found in the other places.
-    Every place gets one mark.
+    the value. A lengthened edge marks the wider text in each place where it is
+    present, and the value as found in the other places.
 
 ### CUJ 3: Leave a findings review and come back
 
@@ -333,9 +332,9 @@ may be copied.
 *   **When**: the user runs Auto mode again after a pack was updated.
 *   **Then**: the panel offers only what is new. It offers none of the 188
     marked values and none of the 4 rejected values. The account number that
-    the hand mark covers in part is not offered either, and one line says: "1
-    found value overlaps a mark already made and was not offered." If nothing
-    is new, no panel opens and one line says so.
+    the hand mark covers in part is offered, because no mark of that whole
+    value is there; accepting it adds a mark that overlaps the hand mark. If
+    nothing is new, no panel opens and one line says so.
 
 ### CUJ 5: Approve a document while its findings review is open
 
@@ -455,6 +454,19 @@ may be copied.
     run ends early. The findings of pages 1 to 49 are offered, with one line:
     "The run ended early because of an error. Pages 50 to 100 were not
     searched."
+
+### CUJ 14: Two found values overlap
+
+*Goals: G22. Plan: section 4.*
+
+*   **Given**: a UK bank statement where `12-34-56 12345678` appears, and a
+    profile with the United Kingdom.
+*   **When**: the user runs Auto mode.
+*   **Then**: the panel lists two rows for that place: "Sort code and account
+    number" with the whole text, and the account number `12345678` under its
+    own name. Both are ticked. Confirming makes two marks that overlap, and
+    both are drawn. If the user unticks the wider row, only the account number
+    is marked, and the wider value becomes a rejected value.
 
 ## Technical Plan (Architecture)
 
@@ -666,33 +678,33 @@ event, with the code `detector-failed`.
 **Finding** (made by the resolver, never stored). `key`, `text` (as written
 at the first place), `places`, `candidates`, `chosen` (which candidate),
 `edge` (section 4), `level` (the chosen candidate's), `reasons` (its evidence,
-for the panel's sentence), `ticked`. A candidate is the same across places
-when it has the same identifier and the same key.
+for the panel's sentence), `ticked`. A candidate is one identifier for the
+finding's span.
 
 **Resolver** (`engine/model`, pure). Input: the hits of one ended run, the
 document's marks without its lost marks, its rejected values, and the changes
 the user made in the open findings review. It needs no page text, because each
-hit carries its own. Output: the findings, and the number of places left out
-in step 1. In order:
+hit carries its own. Output: the findings. In order:
 
-1.  Drop a hit that any text mark overlaps, even in part (decision D11). This
-    is what makes a later run skip accepted values and hand marks, and what
-    keeps Auto mode from ever making an overlapping mark. A mark that is lost,
-    meaning it could not be placed after a reader change, is not counted: its
-    stored positions point at other characters.
+1.  Drop a hit where a text mark of the same value already sits: a mark with
+    the hit's key that overlaps the hit's place (decision D11). This is what
+    makes a later run skip values already marked. A hit inside or around a
+    mark of another value is kept, and so gets a mark of its own. A mark that
+    is lost, meaning it could not be placed after a reader change, is not
+    counted: its stored positions point at other characters.
 2.  Drop a hit whose key is one of the document's rejected values.
-3.  At each place, join overlapping hits into one set of candidates. The
-    default candidate is the one with the strongest evidence; a longer
-    candidate is the default only if its evidence is at least as strong (brief
-    S27). Between two identifiers for the same span, the stronger evidence
-    wins, then the order of the packs (section 6), then the order of the rules
-    in the pack (brief S39).
-4.  Join places whose default candidates share a key into one finding (brief
-    S10, S36). A finding has one identifier: the one with the strongest
-    evidence at any of its places.
+3.  Join hits on exactly the same span into one set of candidates, one per
+    identifier. The default is the identifier with the stronger evidence, then
+    the order of the packs (section 6), then the order of the rules in the
+    pack (brief S39). Hits on different spans stay apart, also when the spans
+    overlap: each becomes a finding of its own (decision D11).
+4.  Join places that share a key into one finding (brief S10, S36). A finding
+    has one identifier: the one with the strongest evidence at any of its
+    places.
 5.  Apply the user's stored changes by key, and drop a change whose finding
     no longer exists. If two findings now have the same key, they become one;
-    the merged finding is ticked if either was.
+    the merged finding is ticked if either was. Then drop a place where a mark
+    of the finding's value, as the user changed it, already sits.
 6.  Sort by level, strongest first, then by first place (brief S38).
 
 The same input always gives the same output.
@@ -718,7 +730,7 @@ its stored files (section 5).
 | `detection.run` | `document`, optional `profile` | Starts a run. The optional profile replaces the project's for this run only |
 | `detection.stop` | `document` | Ends the run. Pages already searched keep their hits |
 | `findings.setTicked` | `document`, `key`, `ticked` | Ticks or unticks one finding |
-| `findings.choose` | `document`, `key`, `candidate` (its index) | Picks another candidate: another identifier for the same span, a wider span ("Remove more") or a narrower one ("Remove less") |
+| `findings.choose` | `document`, `key`, `candidate` (its index) | Picks another candidate: another identifier for the same span |
 | `findings.setEdges` | `document`, `key`, `page`, `start`, `end` | Moves the edges of the finding. The user shows the new span at one place; the engine applies it to every place (section 4) |
 | `findings.confirm` | `document` | Makes the marks and the rejected values, and ends the findings review. The app shows its dialog before calling |
 | `findings.close` | `document` | Ends the findings review and keeps nothing. The app shows its dialog before calling |
@@ -737,14 +749,14 @@ interface Hit {
   identifier: MarkType; evidence: Evidence[]; rule: string; recognizer: string;
 }
 interface FindingPlace { page: PageIndex; start: number; end: number }
-interface Candidate { identifier: MarkType; key: string; level: EvidenceLevel; reasons: Evidence[]; places: number }
+interface Candidate { identifier: MarkType; level: EvidenceLevel; reasons: Evidence[] }
 interface Finding {
   key: string; text: string; places: FindingPlace[];
   candidates: Candidate[]; chosen: number; edge?: string;
   level: EvidenceLevel; reasons: Evidence[]; ticked: boolean;
 }
 /** What the user changed in an open findings review, by finding key. */
-interface FindingChange { ticked?: boolean; candidate?: { identifier: MarkType; key: string }; edge?: string }
+interface FindingChange { ticked?: boolean; candidate?: MarkType; edge?: string }
 
 // engine/model/detection.ts
 type Country = "us" | "uk" | "in" | "ca" | "au";
@@ -788,7 +800,7 @@ readonly profile: { set(profile: Profile): Result<void> };
 readonly detection: ReadonlyMap<DocumentId, DocumentDetection>;
 interface DocumentDetection {
   run: { state: "idle" } | { state: "running"; page: number; pages: number };
-  findings?: { findings: Finding[]; notSearched: PageIndex[]; leftOut: number };
+  findings?: { findings: Finding[]; notSearched: PageIndex[] };
   notice?:
     | { kind: "nothing-found"; notSearched: PageIndex[] }
     | { kind: "run-failed"; code: ErrorCode }
@@ -832,8 +844,8 @@ that page is refused with `unknown-finding`.
    |<-------------+ nothing to offer              |   marks and rejected values
    |              | (a line says so)              | close, after a dialog:
    |              |                               |   nothing is kept
-   |<-------------+ could not start or load       | every finding now overlaps
-   |              | (a line gives the error)      |   a mark: ends by itself
+   |<-------------+ could not start or load       | every found value is now
+   |              | (a line gives the error)      |   marked: ends by itself
    |              |                               | reader change, or stored text
    |<-------------+ reload during the run         |   changed: dropped, a notice
    |                (its hits are lost)           |
@@ -853,8 +865,8 @@ cannot start from `open`: the gate refuses it.
     unticks, picks candidates and moves edges. Each change is stored.
 *   A run with nothing to offer, because it found nothing or marks and
     rejected values account for all of it, opens no panel.
-*   If marks spread in from another document's approval come to overlap every
-    finding of an open findings review, it ends by itself, and its stored
+*   If marks spread in from another document's approval come to mark every
+    found value of an open findings review, it ends by itself, and its stored
     files are deleted.
 
 **Confirm** (author, 28 Nov 2026). The confirm button's label states the
@@ -900,21 +912,24 @@ never confirms, closes or changes a findings review.
 *   Confirming the findings review later is an edit like any other: it puts
     the approved document back in review and marks its download as changed.
 
-**What an accepted finding marks: one mark per place** (decision D11, author,
-28 Nov 2026). Auto mode never makes two marks that overlap.
+**What an accepted finding marks** (decision D11, author, 28 Nov 2026). Each
+place of an accepted finding gets one mark, which covers the finding's span at
+that place and carries the chosen identifier as its type. Marks may overlap:
+the marks of two findings whose values overlap, and a finding's mark with a
+mark that was there before. The author's picture is that marks behave like
+bosons: any number can occupy the same place, and each stays a mark of its
+own.
 
-*   At each place the mark covers the chosen candidate's span, where that
-    candidate exists at the place, and the default candidate's span elsewhere.
-*   The mark carries the chosen candidate's identifier as its type.
-*   A wider span is not used at a place where it would overlap an existing
-    mark or another finding. The default span is used there.
-*   So a finding whose wider choice is present in 12 of its 15 places makes 12
-    marks of the wider text and 3 of the value as found. These are two values
-    in the marks panel and for spreading. The findings panel says: "Wider in
-    12 of 15 places."
-
-The cost is stated under Risks: where a wider mark covers an identifier, that
-identifier has no mark of its own in that place.
+*   Two found values that overlap are two findings and two rows. In a
+    statement, `12-34-56 12345678` found as a sort code and account number,
+    and `12345678` found as an account number, are both listed and both
+    ticked. Confirming marks both. To remove less, the user unticks the wider
+    row.
+*   Each value therefore has marks under its own key, so each spreads to the
+    project's other documents on its own.
+*   The writer must accept overlapping marks, also when each mark's type is
+    printed in its box. That is a fix to the writer made outside this phase
+    (Risks and Mitigations); slices R1 and R3 wait for it.
 
 **Edge editing.** The user moves a start or end handle at one place.
 `findings.setEdges` receives that page and the new character range. The engine
@@ -932,18 +947,25 @@ lost.
 *   A shorter span is found at every place, since every place holds the whole
     value. A longer span is found only where the neighbouring characters
     match.
+*   So a finding lengthened where the wider text is present in 12 of its 15
+    places makes 12 marks of the wider text and 3 of the value as found. The
+    panel says: "Wider in 12 of 15 places."
+*   A value the user shortened is offered again, whole and ticked, by a later
+    run, because no mark of the whole value exists. An SSN shortened to
+    `123-45` so that its last four digits stay readable comes back as
+    `123-45-6789`. It is the user's choice to untick it again or to let it be
+    marked whole (author, 28 Nov 2026).
 *   If a shorter span makes a finding's key equal to another finding's key,
     the two become one (resolver, step 5).
 
 A finding never splits in the panel, and it is accepted or rejected for all
 its places (brief S36).
 
-**A found value that overlaps an existing mark is not offered** (decision D11,
-author, 28 Nov 2026). A hand mark on `45-6789` means the SSN `123-45-6789`
-around it is left out, and the panel or the Run control says: "1 place
-overlaps a mark already made and was left out." The user widens their own
-mark if the rest should go. The same rule keeps a finding the user narrowed
-from being offered again: the full value overlaps the mark that was kept.
+**A found value is left out only where that same value is already marked**
+(decision D11, author, 28 Nov 2026). A hand mark on `45-6789` does not hide
+the SSN `123-45-6789` around it: the SSN is offered, and accepting it adds its
+own mark. A hand mark on `John Smith 123-45-6789` does not hide the SSN inside
+it either. Each value ends with a mark of its own.
 
 **A value on the "Don't hide here" list is offered like any other** (decision
 D15, author, 28 Nov 2026). Confirming it marks it and removes it from that
@@ -1020,8 +1042,9 @@ The rules, in full:
     written. `Session.flush` and `Session.close` wait for both.
 *   **Ending after Confirm**: the project is saved; only if that succeeds, the
     hits file is deleted, then the state file. After a crash before the
-    deletes, the findings review reopens, the resolver finds that every hit
-    overlaps a mark or is rejected, and it ends by itself.
+    deletes, the findings review reopens with its hits and its changes. The
+    resolver finds every value already marked, as the user had changed it, or
+    rejected, and the findings review ends by itself.
 *   **Ending after Close**: the hits file is deleted, then the state file.
     After a crash between the two, the state file matches no hits file and is
     ignored. After a crash before both, the findings review is still open and
@@ -1169,9 +1192,10 @@ The table that maps each goal to its test is in the Verification Plan.
 *   **Offset fixture.** A page with a character stored as two UTF-16 units
     and a ligature in front of an identifier; the outside checker judges the
     download against the fixture's known value (G17).
-*   **Shapes for the writer.** Marks that touch, marks that cross a line end,
-    and hundreds on a page, each judged by the outside checker (G17, brief
-    A12).
+*   **Shapes for the writer.** Marks that overlap, marks that touch, marks
+    that cross a line end, and hundreds on a page, each judged by the outside
+    checker, the overlapping ones also with each mark's type printed in its
+    box (G17, brief A12).
 *   **Detection worker fakes.** Every existing fake in `tests/e2e/fakes.ts`
     is a typed function turned into a script, and each test fails if its fake
     did nothing. The detection fakes are written the same way, through one new
@@ -1218,10 +1242,10 @@ Alternatives Considered; each alternative's heading names its decision.
 | D8 | Whether a run's hits are stored | Stored. A run happens only when the user starts one. A reader change drops the findings review and leaves a notice | 27 Nov 2026; amended 28 Nov |
 | D9 | What a profile is, and its default | Sets of countries and industries, one pack per choice, one pack in every run. No default; an empty profile is valid | 28 Nov 2026 |
 | D10 | Approving while a findings review is open | Separate acts. The approval dialog warns; the findings review stays open | 28 Nov 2026 |
-| D11 | Marks that overlap | Auto mode makes none. One mark per place. A found value that an existing mark overlaps is not offered | 28 Nov 2026, after the second design review. The author first chose two marks |
+| D11 | Marks that overlap | Allowed. Each found value is its own finding and gets its own marks. A found value is left out only where that same value is already marked | 28 Nov 2026. The author first chose two marks for one finding, then no overlap, then this, once the writer's fault with overlapping marks got its own fix |
 | D12 | Ending a findings review | Confirm and Close each ask in a dialog | 28 Nov 2026 |
 | D13 | Does undo restore rejected values | No. Undo covers marks only | 28 Nov 2026 |
-| D14 | A value that lies inside a wider mark, at approval | Approval counts it as marked in that document | 28 Nov 2026 |
+| D14 | A value that lies inside a wider mark, when values are spread | Spreading marks a value wherever no mark of that same value sits, also inside another mark. Approval's own rule is unchanged | 28 Nov 2026. The author first chose to change approval |
 | D15 | A value on the "Don't hide here" list | Offered ticked, like any other finding | 28 Nov 2026 |
 | D16 | The record of what each run did | One small file per document, kept after confirm and Close | 28 Nov 2026 |
 | D17 | A run that meets an error | An error in one check costs that value only. A worker failure ends the run early and keeps the pages searched | 28 Nov 2026 |
@@ -1275,18 +1299,22 @@ Alternatives Considered; each alternative's heading names its decision.
 
 **What follows from D14**
 
-*   Today, approving a document stops hiding any project value that the
-    document's text contains but that the document neither marks nor lists
-    under "Don't hide here" (`engine/model/spread.ts`). A value that lies
-    inside a wider mark, such as an account number inside a marked "sort code
-    and account number", is such a value: approval concludes the user
-    un-marked it and removes its marks from every document.
-*   The change: a place that one of the approving document's own text marks
-    covers counts as marked there.
-*   This is a change to approval from Phase 3. It does not touch the writer.
+*   Today, spreading skips a place that any text mark already covers
+    (`placeMark` in `engine/model/spread.ts`). A value that lies inside a
+    wider mark, such as an SSN inside a marked `John Smith 123-45-6789`, then
+    has no mark of its own in that document. When that document is approved,
+    approval finds the value in its text without a mark of its own, concludes
+    the user un-marked it, and stops hiding it in every document.
+*   The change: spreading skips a place only where a mark of that same value
+    already sits. The value gets its own mark inside the wider one, so
+    approval sees it as marked and its rule needs no change.
+*   This is a change to spreading from Phase 3. It does not touch the writer.
     It comes with a browser test in `tests/e2e/spreading.spec.ts` whose
-    downloads the outside checker judges: the inner value is still removed
-    from the other document after the approval.
+    downloads the outside checker judges.
+*   A document that got a wider mark before this change, and into which the
+    value was never spread, can still show the old behaviour when it is
+    approved. That concerns projects made before this phase only, and is
+    accepted (Risks and Mitigations).
 
 ## Alternatives Considered
 
@@ -1492,8 +1520,8 @@ of the Technical Plan, that the alternative lost to.
 *   **Cons**: The shorter value loses its mark, so the next approval stops
     hiding it in the project's other documents.
 *   **Reason for Rejection**: Rejected by author after the first design
-    review, for that cost. Since the second design review a found value that
-    overlaps a mark is not offered at all (D11).
+    review, for that cost. A found value now gets its own mark beside the mark
+    it overlaps (D11).
 
 #### 23. A longer edge that fits only some places splits the finding in two (D11)
 
@@ -1503,8 +1531,8 @@ of the Technical Plan, that the alternative lost to.
     split also needs a notice and rules for the two halves.
 *   **Reason for Rejection**: Rejected by author, who had first approved it.
     After the first design review it gave way to two marks (alternative 54).
-    After the second, each place gets one mark, wider where the wider text is
-    present, and the finding stays one row in the panel (D11).
+    Now a lengthened finding stays one row: each place gets one mark, wider
+    where the wider text is present (D11).
 
 #### 24. Merging by which hit arrived before a stage opened
 
@@ -1782,8 +1810,8 @@ of the Technical Plan, that the alternative lost to.
     one, the check fails, and Preview and Download are refused for the
     document. Fixing that means changing what the writer is given.
 *   **Reason for Rejection**: Rejected by author after the second design
-    review: overlap has too many edge cases, in this phase and for the later
-    pseudonymisation phase. One mark per place.
+    review, when overlap was given up. Overlap is allowed again since, but as
+    two findings with a mark each, not two marks of one finding (D11).
 
 #### 55. Joining overlapping marks into one before the writer sees them (D11)
 
@@ -1792,15 +1820,17 @@ of the Technical Plan, that the alternative lost to.
 *   **Cons**: It changes what the write path is given, so it needs a new leak
     fixture judged by the outside checker, and a rule for which label a joined
     range prints.
-*   **Reason for Rejection**: Rejected by author with alternative 54.
+*   **Reason for Rejection**: Rejected by author with alternative 54. The
+    writer's fault is fixed instead in how it draws and checks the labels,
+    outside this phase.
 
 #### 56. Offering a found value that overlaps an existing mark, locked and unticked (D11)
 
 *   **Pros**: The user sees exactly which values were held back.
 *   **Cons**: Rows that cannot be ticked are one more kind of row to build and
     test.
-*   **Reason for Rejection**: Rejected by author: such values are left out,
-    and one line gives their number.
+*   **Reason for Rejection**: Rejected by author. Such values were first left
+    out; they are now offered like any other (D11).
 
 #### 57. Leaving approval as it is and recording the risk (D14)
 
@@ -1808,7 +1838,7 @@ of the Technical Plan, that the alternative lost to.
 *   **Cons**: Approving a document that marks a combined value can remove
     another document's marks for a value inside it, without saying so.
 *   **Reason for Rejection**: Rejected by author: it leaves a value in another
-    file. Approval is changed.
+    file. Spreading is changed instead (D14).
 
 #### 58. Removing "Remove more" and outward edge moves (D14)
 
@@ -1816,7 +1846,8 @@ of the Technical Plan, that the alternative lost to.
 *   **Cons**: Rules that find a combined value, such as a sort code with an
     account number, and hand marks would still cover a shorter value.
 *   **Reason for Rejection**: Rejected by author: it reduces the case without
-    removing it.
+    removing it. "Remove more" has since gone for another reason: values that
+    overlap are separate findings (D11).
 
 #### 59. Not offering a value on the "Don't hide here" list, or offering it unticked (D15)
 
@@ -1895,6 +1926,57 @@ of the Technical Plan, that the alternative lost to.
 *   **Reason for Rejection**: Rejected by author: both ask in a dialog that
     states the counts.
 
+### After the author allowed marks to overlap
+
+#### 68. No overlapping marks: one mark per place, and a found value that a mark overlaps is not offered (D11 as decided after the second design review)
+
+*   **Pros**: Nothing overlaps, so the writer's check never meets a box inside
+    a box.
+*   **Cons**: A value partly under a hand mark is not offered, and the rest of
+    it stays in the file. Where a wider text is marked, the identifier inside
+    it has no mark of its own. Rules are needed for which span wins at each
+    place.
+*   **Reason for Rejection**: Rejected by author the same day. The writer's
+    fault with overlapping marks is fixed on its own, and marks can then
+    simply overlap, each staying a mark of its own.
+
+#### 69. One finding with "Remove more" and "Remove less" where hits overlap (D11)
+
+*   **Pros**: Fewer rows in the panel.
+*   **Cons**: One row can carry only one name for the place, and the choice of
+    span has to be worked out again at every place of the value.
+*   **Reason for Rejection**: Rejected by author: values that overlap are two
+    findings, and the user unticks the one they do not want.
+
+#### 70. Leaving out a found value that any mark covers whole (D11)
+
+*   **Pros**: After the user marks a wide text by hand, Auto mode offers
+    nothing inside it.
+*   **Cons**: The value inside has no mark of its own, so it is not spread to
+    other documents under its own name.
+*   **Reason for Rejection**: Rejected by author: a found value is left out
+    only where that same value is already marked.
+
+#### 71. Approval counts a value inside a wider mark as marked (D14 as first decided)
+
+*   **Pros**: It also covers a document that was marked before this phase. No
+    overlapping marks are made by spreading.
+*   **Cons**: The document's marks panel does not show the value. Auto mode
+    would make overlapping marks and spreading would not.
+*   **Reason for Rejection**: Rejected by author: spreading follows the same
+    rule as Auto mode. The case this covered concerns older projects only,
+    which is accepted while the product is at MVP stage.
+
+#### 72. Remembering a shortened value so that later runs leave it out, or offer it unticked (D11)
+
+*   **Pros**: A value shortened on purpose is not marked whole by a later
+    run that the user confirms without reading every row.
+*   **Cons**: Either the rejected list also holds values the user only
+    narrowed, or one more list is stored and one more kind of row is built.
+*   **Reason for Rejection**: Rejected by author: the whole value is offered
+    again, ticked, and reversing the earlier choice is the user's call, as it
+    is for a "Don't hide here" value (D15).
+
 ## Risks and Mitigations
 
 Each line gives the risk and either what reduces it or that its cost is
@@ -1906,13 +1988,15 @@ accepted. A missed value is the worst error, so those come first.
 | An identifier broken across a line end is not found | Measured and decided in slice C0. Until then: accepted |
 | A value under a table's column header is missed, because its rule needs a label and the header is far away in reading order | Accepted for this phase (Non-Goals). C0's spike covers labels beside a value and in the same row |
 | The user leaves a country or industry out of the profile, and its identifiers are not searched | A new project has no profile; the first run asks, and the chooser lists what each choice adds. A wrong choice still misses: accepted |
-| A found value overlaps a mark already made and is not offered, so the rest of that value stays in the file | One line gives the number of places left out. The user widens their own mark. Accepted by the author |
 | Found values stay in the file because the user closed the panel, approved with the panel open, or downloaded during a findings review | Close and the approval dialog state the number of found values that stay. The panel says that found values are removed only once confirmed. Accepted by the author |
 | A pattern runs for minutes on one page | The pack build fails on slow shapes, with a negative control. The run shows its page; Stop keeps the findings of earlier pages and says which pages were not searched. Those pages stay unsearched until the rule is fixed: accepted |
 | A check function fails with an error on a value that is in fact valid | The value is not offered. The error is counted in the run record, and a pack's browser test would catch a rule that fails on its own examples. Accepted |
 | The user unticks a value by mistake and confirms | It is not offered again in that document. The user marks it by hand. A view of rejected values is a future improvement |
 | Confirming marks a value the user had chosen "Don't hide here" for | It is the user's choice to reverse it (D15). Accepted by the author |
-| Where the user chose a wider span, the identifier inside it has no mark of its own in that place | The identifier is still marked where the wider text is absent, and D14 keeps approval from un-hiding it. If every place is wider, the bare identifier is not spread from this document: accepted |
+| A later run offers, whole and ticked, a value the user had shortened; confirming without noticing removes what they kept | It is the user's choice to reverse it. Accepted by the author |
+| Where the user lengthened a finding's edge, the value as found has no mark of its own in the places that got the wider mark | It is still marked where the wider text is absent. If every place is wider, the value as found is not spread from this document: accepted |
+| A combined value and its parts are separate rows, so the panel is longer, and a user who unticks one row may not see that another row still removes the same text | Rows are sorted by evidence and then by first place, so rows that overlap usually sit together. Accepted by the author |
+| A document marked before this phase holds a wider mark with an unmarked value inside it; approving it stops hiding that value in other documents | A project made after this phase cannot reach that state (D14). Accepted while the product is at MVP stage |
 | One value written two ways, in letters and digits, is two findings | Each is ticked by default, so both are removed unless the user unticks one. Hand marks split the same way today: accepted |
 | A reader change, or a replaced original file, drops an open findings review with its unticks and edits | A stored notice tells the user why and offers a run. Accepted by the author |
 | An older build opens a project and saves it | Its parser keeps only the fields it knows, so the profile and the rejected values are dropped and nothing tells the user. Accepted while the author is the only user (D2) |
@@ -1921,12 +2005,12 @@ accepted. A missed value is the worst error, so those come first.
 | The type list grows from 14 names to 73 | The picker groups them and filters as the user types (slice U1). The benchmark work must accept the longer list |
 | The undo of a findings review is lost on reload, on approval, and when another document's approval spreads marks in | It is how every undo step works today. Stated in CUJ 6 |
 
-**A fault that exists today and is outside this phase.** Two hand marks can
-overlap. When the user has chosen to print each mark's type in its box, the
-writer's check then fails and Preview and Download are refused for that
-document. Nothing leaks, since the writer refuses. The second design review
-found this while examining overlapping marks. It is reported to the author as
-its own piece of work and is not fixed here.
+**A change this phase waits for.** Overlapping marks fail the writer's own
+check today when the user has chosen to print each mark's type in its box, and
+Preview and Download are then refused for that document. Nothing leaks, since
+the writer refuses. The fix is in how the writer draws and checks those
+labels. It is separate work with its own pull request, and it must be merged
+before slice R1, the first slice that makes overlapping marks.
 
 ## Non-Functional Requirements
 
@@ -1981,7 +2065,7 @@ decided each of these while the design was drafted or after a design review.
 | Custom patterns and search and mark are in the phase | Both are later additions | |
 | Every regular expression runs under a time limit | No time limit; the user stops a run | D5 |
 | Approving through the warning ends the findings review | Approval leaves the findings review open | D10 |
-| A merged finding can offer wider alternatives beside the default | It can, and each place still gets one mark | D11 |
+| Overlapping hits merge into one finding with alternatives | They are separate findings, and their marks overlap | D11 |
 | Every slice is vertical and starts with a browser test | C1, W1 and E1 come before any screen and are checked by unit tests | |
 
 ### Changes after the design reviews
@@ -2010,8 +2094,8 @@ the review found and what the design now says.
 | Found | Now |
 | --- | --- |
 | A hit carried no text, so findings could not be keyed and stale hits could not be told | A hit carries its text; stored hits are tested against the page |
-| Two marks for one finding failed the writer's check with labels on | One mark per place; no overlapping marks (D11) |
-| A wider mark could make approval stop hiding the value inside it | Approval counts a covered value as marked (D14) |
+| Two marks for one finding failed the writer's check with labels on | The writer's fault is fixed on its own, outside this phase. Marks may overlap, and values that overlap are separate findings (D11) |
+| A wider mark could make approval stop hiding the value inside it | Spreading gives the value its own mark inside the wider one (D14) |
 | A lost mark could turn a confirmed finding into a leak | The new marks take the place of lost marks with the same letters |
 | The reader-change notice was deleted by the cleanup rule | The notice is its own kind of state file; the state file is tied to its run |
 | An error on one page discarded every finding | An error costs one value; a worker failure ends the run early (D17) |
@@ -2026,7 +2110,8 @@ the review found and what the design now says.
 *   **Patterns a user writes,** on their own design.
 *   **Search and mark.**
 *   **Labels that are column headers.**
-*   **Marks that overlap,** if pseudonymisation needs them.
+*   **Pseudonymisation where marks overlap:** replace the union of their text
+    and keep each mark as it is.
 *   **A notice of what Auto mode did not search for,** which could include
     counts from the packs that were not chosen.
 *   **A view of a document's rejected values,** so the user can reverse one.
@@ -2055,7 +2140,7 @@ C0 spikes and checks
  v
 C1 contracts
  |
- +--> M1 approval counts a covered value
+ +--> M1 spreading marks a covered value
  +--> U1 type picker in groups --> F1 profile chooser --+
  +--> W1 detection worker, first rule ------------------+
  +--> E1 run, hits and resolver ------------------------+
@@ -2085,7 +2170,7 @@ Z1 closing checks: waits for every slice above
 | --- | --- | --- |
 | C0 | Spikes and checks | none |
 | C1 | Contracts | C0 |
-| M1 | Approval counts a covered value | C1 |
+| M1 | Spreading marks a covered value | C1 |
 | U1 | Type picker in groups | C1 |
 | F1 | Profile chooser | U1 |
 | W1 | Detection worker and first rule | C1 |
@@ -2099,6 +2184,10 @@ Z1 closing checks: waits for every slice above
 | PU, PK, PI, PC, PA, PX | Packs | P0 |
 | T1 | Detection from the command line | P0 |
 | Z1 | Closing checks | all |
+
+Slices R1 and R3 make overlapping marks. They also wait for the fix that lets
+the writer take overlapping marks with each mark's type printed in its box
+(Risks and Mitigations), which is not a slice of this phase.
 
 After C1, the slices M1, U1, W1 and E1 run at once. After V1, the slices R1,
 W2 and P0 run at once. After P0, the six pack slices and T1 run beside R2 and
@@ -2318,14 +2407,13 @@ The exact text of what the user reads. `{n}`, `{m}`, `{a}`, `{b}` and
 | Undo dialog | "Remove the {m} marks Auto mode made for {n} values?" | R1 |
 | Approval dialog, added line | "{n} found values are not marked and stay in the file." | R1 |
 | Nothing new | "Auto mode found nothing new in this document." | V1 |
-| Places left out | "{n} places overlap marks already made and were left out." | R1 |
 | Stopped | "Stopped. Pages {a} to {b} were not searched." | V1 |
 | Ended early | "The run ended early because of an error. Pages {a} to {b} were not searched." | W2 |
 | `detector-not-started` | "Auto mode could not start. Try again." | C1 |
 | `recognizer-failed` | "Auto mode could not load its rules. Try again." | C1 |
 | `detector-failed` | "Auto mode stopped because of an error." | C1 |
 | Wider span | "Wider in {a} of {b} places." | R3 |
-| Candidate picker | "Remove more", "Remove less", "Other possible types ({n})" | R3 |
+| Identifier picker | "Other possible types ({n})" | R3 |
 | Notice, `reader-changed` | "The found values of this document were dropped, because an update changed how the app reads PDFs. Your unticks and edits were not kept. Run Auto mode to find them again." | R2 |
 | Notice, `text-changed` | "The found values of this document were dropped, because its text changed. Run Auto mode to find them again." | R2 |
 | Type picker | "Add '{name}' as a new type" | U1 |
@@ -2902,18 +2990,23 @@ Nothing the user sees changes. The 59 new types are not added here.
 `anchoring.spec.ts` and `golden.spec.ts` still open the storage from before
 Phase 3.
 
-#### M1. Approval counts a covered value
+#### M1. Spreading marks a covered value
 
 Browser test first, in `tests/e2e/spreading.spec.ts`: document A marks an
-account number; document B marks a longer text that contains it; approving B
-leaves the account number removed from A's download, judged by the outside
-checker.
+account number; document B marks a longer text that contains it. Approving A
+gives B a mark of the account number inside its longer mark. Approving B then
+leaves the account number removed from A's download. The outside checker
+judges both downloads.
 
 | File | Action | What changes and why |
 | --- | --- | --- |
 | `tests/e2e/spreading.spec.ts` | Modify | The test above |
-| `engine/model/spread.ts` | Modify | In `approve`, a place that one of the approving document's own text marks covers is not counted as "found here without a mark" (D14) |
+| `engine/model/spread.ts` | Modify | `placeMark` skips a place only where a mark of that same value already sits, where today it skips a place any text mark covers (D14). `approve` is not changed |
 | `engine/model/spread.test.ts` | Modify | An existing unit test file: the same case beside its neighbours |
+
+This slice makes overlapping marks in documents. It needs the writer's fix
+only for the case where each mark's type is printed in its box; its own test
+runs with that setting off, which is the default.
 
 **Done when** `spreading.spec.ts` passes and `pnpm test` passes.
 
@@ -2997,7 +3090,7 @@ the audit exemption.
 
 | File | Action | What changes and why |
 | --- | --- | --- |
-| `engine/core/session/facade.test.ts` | Modify | A run on a document with stored text gives findings. A hit that a mark overlaps is dropped and counted. A hit of a rejected value is dropped. A lost mark does not count as overlapping. A second run is refused. Approval is refused during a run. A run without a profile is refused. A stopped run and a run whose worker failed both keep the hits of the pages searched. Closing the Session stops a run |
+| `engine/core/session/facade.test.ts` | Modify | A run on a document with stored text gives findings. A hit where the same value is already marked is dropped. A hit inside or around a mark of another value is kept. Two hits whose spans overlap give two findings; two hits on the same span give one finding with two candidates. A hit of a rejected value is dropped. A lost mark does not count as a mark. A second run is refused. Approval is refused during a run. A run without a profile is refused. A stopped run and a run whose worker failed both keep the hits of the pages searched. Closing the Session stops a run |
 | `engine/model/resolver.ts` | Create | The resolver of section 3 |
 | `engine/model/resolver.test.ts` | Create | Unit test. Reason: the resolver decides what is offered, and its rules have more cases than fixtures can carry. It also times the resolver on 5,000 marks and 5,000 hits and fails over 200 ms, since the resolver runs on the main thread |
 | `engine/core/session/effects/detect.ts` | Fill | `run` and `stop` behind the gate. Reads the document's stored page texts with `readTexts`; if they are missing, starts the existing update and refuses with `busy-updating`. Drives the client page by page and dispatches `runStarted`, `pageSearched` and `runEnded`. It ends in one function, `ended(document, run)`, which hands the run to the findings effect |
@@ -3058,8 +3151,11 @@ Browser test first: `tests/e2e/auto-review.spec.ts`.
     Cancel leaves the panel open. Confirm makes a mark at every place of each
     ticked value, each with the identifier's name as its type.
 *   A second run does not offer the unticked value.
-*   A value that a hand mark overlaps in part is not offered, and the line
-    with the number of places left out is shown.
+*   A value that a hand mark overlaps in part is offered; accepting it adds
+    its own mark beside the hand mark.
+*   Two prepared hits that overlap are two rows. Confirming makes two marks
+    that overlap, and the download passes the outside checker, with each
+    mark's type printed in its box and without.
 *   A value on the "Don't hide here" list is offered ticked; confirming marks
     it and removes it from that list.
 *   Undo shows its dialog and removes every mark in one step; the rejected
@@ -3091,7 +3187,7 @@ Browser test first: `tests/e2e/auto-review.spec.ts`.
 | `engine/core/session/selectors.ts` | Modify | `nextUndo` from the newest tag |
 | `engine/core/session/effects/plan.ts` | Modify | An approval counts the findings of the document's open findings review, and always shows its dialog when there are any |
 | `app/FindingRow.tsx` | Modify | The tick calls `findings.setTicked` |
-| `app/FindingsPanel.tsx` | Modify | The confirm button with its label, Close, the line of places left out |
+| `app/FindingsPanel.tsx` | Modify | The confirm button with its label, Close |
 | `app/useFindings.ts` | Modify | `confirm` and `close` |
 | `app/ConfirmFindingsDialog.tsx`, `CloseFindingsDialog.tsx`, `UndoFindingsDialog.tsx` | Create | The three dialogs |
 | `app/ProjectView.tsx` | Modify | Undo is built here (`historyOf`); it opens the undo dialog when `nextUndo` is a findings review |
@@ -3166,18 +3262,16 @@ Browser test first: `tests/e2e/auto-stored.spec.ts`.
 #### R3. Candidates and edges
 
 Browser test first: `tests/e2e/auto-edit.spec.ts`, with a detection fake that
-answers with prepared hits, some overlapping.
+answers with prepared hits, some of them two identifiers on one span.
 
 *   Change a finding's identifier to another candidate: the mark carries the
     new name.
-*   Pick "Remove more" on a finding whose wider candidate is present in 2 of
-    its 3 places: after confirming, each place has one mark, two of the wider
-    text and one of the value as found, and the panel said "Wider in 2 of 3
+*   Lengthen an edge whose added text is present in 2 of the finding's 3
+    places: after confirming, two places have a mark of the wider text and
+    one a mark of the value as found, and the panel said "Wider in 2 of 3
     places."
-*   Shorten an edge and see every place change.
-*   Lengthen an edge whose added text is present in some places: the same
-    result as "Remove more".
-*   A wider span that would overlap a hand mark is not used at that place.
+*   Shorten an edge and see every place change. A second run offers the
+    whole value again, ticked.
 *   Make two findings equal and see one, ticked if either was.
 *   The download passes the outside checker.
 
@@ -3185,11 +3279,11 @@ answers with prepared hits, some overlapping.
 | --- | --- | --- |
 | `tests/e2e/auto-edit.spec.ts` | Create | The cases above |
 | `engine/model/edges.ts` | Create | The new span's normalised text, and the search for it at each place through `normalise`'s map |
-| `engine/model/resolver.ts` | Modify | Applies the chosen candidate and the edge; joins findings whose keys became equal |
-| `engine/model/findingMarks.ts` | Modify | The span at each place: the chosen one where present and overlapping nothing, the default elsewhere |
+| `engine/model/resolver.ts` | Modify | Applies the chosen identifier and the edge; joins findings whose keys became equal |
+| `engine/model/findingMarks.ts` | Modify | The span at each place: the edited one where it is found, the span as found elsewhere |
 | `engine/core/session/effects/findings.ts` | Modify | `choose` and `setEdges` |
 | `engine/core/session/slices/findings.ts` | Modify | Stores those changes |
-| `app/FindingRow.tsx` | Modify | The candidate picker: candidates at least as strong as the default, then "Other possible types ({n})"; "Remove more" and "Remove less" |
+| `app/FindingRow.tsx` | Modify | The identifier picker: candidates at least as strong as the default, then "Other possible types ({n})" |
 | `app/PageList.tsx`, `app/PageView.tsx` | Modify | Edge handles on the selected finding; the wider span outlined |
 | `app/FindingsPanel.tsx` | Modify | The "Wider in ..." line |
 
@@ -3362,12 +3456,12 @@ author has `test-results/review-cost.json` and the list of proposed changes.
 | G9, G11, G14, G15 | `auto-review` |
 | G10 | `auto-edit` |
 | G12 | `auto-stored` |
-| G13 | `auto-review` (a rejected value, an overlapped value), `auto-stored` (a later run) |
+| G13 | `auto-review` (a rejected value, a value already marked), `auto-stored` (a later run) |
 | G16 | `network`, `bundle` |
 | G17 | `auto-review` and `auto-edit`, through the outside checker |
 | G19 | `test:tools` |
 | G20 | `review-cost` |
-| G22 | `auto-review` (an overlapped value is not offered), `auto-edit` (one mark per place) |
+| G22 | `auto-review` (values that overlap are two findings and two marks; a value under a hand mark is offered) |
 | D14 | `spreading` |
 
 --------------------------------------------------------------------------------
