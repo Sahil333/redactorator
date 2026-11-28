@@ -57,7 +57,7 @@ export function approvalOf({ source, view, allowed, dispatch, change }: Approval
       dispatch({ type: "approvalFailed" });
       return failed;
     }
-    const plan: ApprovalPlan = { planId, document, changes: approval.changes, here: approval.here, removed: approval.removed };
+    const plan: ApprovalPlan = { planId, document, changes: approval.changes, here: approval.here, removed: approval.removed, unmarkedFindings: 0 };
     if (plan.changes.length > 0 || changed(plan.here) || plan.removed.length > 0) {
       dispatch({ type: "planned", plan, from, project: approval.project });
       return { ok: true, value: { landed: false, plan } };

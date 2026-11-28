@@ -51,6 +51,23 @@ available are the ones declared in `engine/globals.ts`.
   `unsupported-form`, `prepare-failed`.
 - `WriterErrorCode`: `apply-failed`, `check-failed`, `mark-lost`,
   `extra-text-removed`, `text-moved`, `partly-covered-drawing`.
+- `DetectionErrorCode`: `detector-not-started`, `recognizer-failed`,
+  `detector-failed`, why a run of Auto mode ended as failed.
+
+### Auto mode (`findings.ts`, `detection.ts`, `identifiers.ts`)
+
+The contracts of docs/designs/auto-mode.md, Technical Plan, section 3. Nothing
+uses them yet.
+
+- `findings.ts`: `EvidenceKind`, `EvidenceLevel`, `Evidence`, `Hit`,
+  `FindingPlace`, `Candidate`, `Finding`, and `FindingChange`, what the user
+  changed in an open findings review.
+- `detection.ts`: `Country` and `countries`, `Industry` and `industries`,
+  `PackId`, `packOrder` (which breaks a tie between two identifiers with equal
+  evidence), `packNames`, `Profile`, `profilePacks(profile)` (the packs a run
+  loads, `universal` always first), and `RunRecord`.
+- `identifiers.ts`: `identifierPacks`, each of the 65 identifier type ids and
+  its pack.
 
 ### Parsers (`parse.ts`)
 
@@ -113,6 +130,8 @@ available are the ones declared in `engine/globals.ts`.
 - `DocumentId`, `isDocumentId`, `newDocumentId`.
 - `reviewStates` / `ReviewState` and `downloadStates` / `DownloadState`.
 - `ProjectDocument`, `HiddenValue`, `Project`, `Settings`, `defaultSettings`.
+  A project's optional `profile` is what Auto mode looks for; a document's
+  `rejected` holds the keys of values Auto mode does not offer again there.
 
 ### Spreading hidden values (`spread.ts`)
 

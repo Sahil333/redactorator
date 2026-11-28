@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { DocumentHandle } from "../../api/state";
+import type { Profile } from "../../model/detection";
 import type { PageModel } from "../../model/document";
 import { isPageIndex, isPoints, pointBox, type Box } from "../../model/geometry";
 import type { Mark } from "../../model/marks";
 import { defaultSettings, newDocumentId, type Project, type ProjectDocument } from "../../model/project";
 import type { Store } from "../../storage/store";
+import { notStarted } from "../detect-client/client";
 import type { PdfClient } from "../pdf-client/client";
 import type { ClientError } from "../pdf-client/errors";
 import type { SessionChange } from "./changes";
@@ -27,7 +29,7 @@ const { box, ...page } = onePage();
 
 /** A project of one one-page document, "a.pdf", with `marks`; and that document. */
 function projectWith(marks: ProjectDocument["marks"]): { readonly project: Project; readonly document: ProjectDocument } {
-  const document: ProjectDocument = { id: newDocumentId(), file: "a.pdf", sha256: "00", pages: 1, marks, review: "in-review", download: "none", shown: [], removedSeen: [] };
+  const document: ProjectDocument = { id: newDocumentId(), file: "a.pdf", sha256: "00", pages: 1, marks, review: "in-review", download: "none", shown: [], removedSeen: [], rejected: [] };
   return { project: { id: "p", name: "Letters", created: "2026-11-24T00:00:00.000Z", archived: false, hidden: [], documents: [document] }, document };
 }
 
@@ -44,6 +46,7 @@ function sessionOver(project: Project) {
       for (const effect of effects) effect();
     },
     client,
+    detection: notStarted,
     intake: () => Promise.resolve({ added: [], refused: [] }),
     addCustomType: () => undefined,
   };
@@ -100,7 +103,7 @@ describe("approval", () => {
     const { project, document } = projectWith([jane]);
     const opened = sessionOver(project);
     const approved: Project = { ...project, documents: [{ ...document, review: "approved" }] };
-    const plan = { planId: 1, document: document.id, changes: [], here: { ...none(document.id), hidden: 1 }, removed: [] };
+    const plan = { planId: 1, document: document.id, changes: [], here: { ...none(document.id), hidden: 1 }, removed: [], unmarkedFindings: 0 };
     opened.land({ type: "planned", plan, from: project, project: approved });
     return { ...opened, document, approved };
   }
@@ -151,5 +154,20 @@ describe("approval", () => {
     expect(parts().record.present.project.documents[0]).toMatchObject({ review: "in-review", marks: [jane, dear] });
     expect(parts().approval).toBeUndefined();
     expect(parts().operation.operation).toBe("idle");
+  });
+});
+
+describe("profile.set", () => {
+  test("stores the profile in the project record, makes no undo step, and leaves the document's review as it was", () => {
+    const jane: Mark = { id: 1, type: "person", linkId: "", isNew: false, target: { kind: "box", page: page.index, box } };
+    const { project, document } = projectWith([jane]);
+    const approved: Project = { ...project, documents: [{ ...document, review: "approved" }] };
+    const { session, parts } = sessionOver(approved);
+    const profile: Profile = { countries: ["us", "in"], industries: ["finance"] };
+    expect(session.profile.set(profile)).toEqual({ ok: true, value: undefined });
+    expect(parts().record.present.project.profile).toEqual(profile);
+    expect(parts().record.present.project.documents[0]?.review).toBe("approved");
+    expect(parts().record.steps.size).toBe(0);
+    expect(parts().operation.save).toBe("saving");
   });
 });

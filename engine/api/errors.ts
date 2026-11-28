@@ -1,5 +1,5 @@
 import type { Box } from "../model/geometry";
-import type { ReaderErrorCode, WriterErrorCode } from "../model/errors";
+import type { DetectionErrorCode, ReaderErrorCode, WriterErrorCode } from "../model/errors";
 
 /** Codes the PDF-worker client gives on its own; the worker never sends them. The first five are where the wire's `bad-message` arose. */
 export type PdfClientErrorCode = "worker-stopped" | "worker-not-running" | "unexpected-reply" | "unreadable-reply" | "unknown-request" | "stale-handle";
@@ -42,6 +42,8 @@ export type ErrorCode =
   | "save-failed"
   // The documents' readings could not be had or searched, so nothing was approved.
   | "approval-failed"
+  // A run of Auto mode ended as failed.
+  | DetectionErrorCode
   // Refusals the app never shows: it disables the control from the state, or never sends the command.
   | "busy-moving"
   | "busy-creating"
@@ -61,7 +63,15 @@ export type ErrorCode =
   | "busy-applying"
   | "no-plan"
   // Documents are being prepared again for this build.
-  | "busy-updating";
+  | "busy-updating"
+  // Auto mode's.
+  | "busy-detecting"
+  | "busy-marking"
+  | "findings-open"
+  | "no-findings"
+  | "unknown-finding"
+  | "no-profile"
+  | "findings-dropped";
 
 export interface EngineError {
   readonly code: ErrorCode;

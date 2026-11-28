@@ -4,6 +4,18 @@
   "health": {
     "coverage": "coverage/coverage-final.json"
   },
+  // Phase 4 audit exemption: docs/designs/auto-mode.md, Detailed
+  // Implementation Plan, section 1. V1 removes this entry.
+  "overrides": [
+    {
+      "files": ["engine/model/detection.ts", "engine/model/identifiers.ts", "engine/model/findings.ts"],
+      "rules": {
+        "unused-files": "warn",
+        "unused-exports": "warn",
+        "complexity-crap": "warn"
+      }
+    }
+  ],
   "boundaries": {
     "coverage": { "requireAllFiles": true, "allowUnmatched": ["*.config.ts", "engine/globals.ts"] },
     "zones": [

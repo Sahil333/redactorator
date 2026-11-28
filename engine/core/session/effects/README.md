@@ -5,7 +5,8 @@
 The asynchronous work behind the Session's commands: opening a document in the
 PDF worker, applying (writing the cleaned file), planning and confirming an
 approval, adding documents, reading stored readings, preparing documents again
-for this build, and saving the project record. Each effect receives its
+for this build, saving the project record, and Auto mode's runs, findings
+reviews and profile. Each effect receives its
 dependencies (store, folder, PDF client, the gate's `allowed`, `view`,
 `dispatch` and `change`, and for adding, `intake`, which reads the chosen files
 and has the PDF worker prepare them) from
@@ -53,11 +54,23 @@ records that the [slices](../slices/README.md) reduce.
 - `save.ts`
   - `saver({ store, folder, latest, dispatch })`: returns `flush()` and
     `changed()` for one Session's project record.
+- `detect.ts`
+  - `detectionOf(host)`: builds `Session["detection"]` (`run`, `stop`). Until
+    the detection worker exists, both refuse with `detector-not-started`
+    once the gate allows them; `run` first refuses with `no-profile` when
+    neither the project nor the call names a profile.
+- `findings.ts`
+  - `findingsOf(host)`: builds `Session["findings"]`. Until a run can end with
+    hits, every command refuses with `no-findings` once the gate allows it.
+- `profile.ts`
+  - `profileOf(host)`: builds `Session["profile"]`. `set` dispatches
+    `profileSet` through `change`, so the project is saved.
 
 ## Invariants
 
 - Every command built here first asks the gate through `allowed(...)` and
-  returns its refusal unchanged (`viewerOf`, `approvalOf`, `adderOf`).
+  returns its refusal unchanged (`viewerOf`, `approvalOf`, `adderOf`,
+  `detectionOf`, `findingsOf`, `profileOf`).
   `apply.ts:applyOutput` does not call the gate; the facade calls
   `allowed("apply")` before it and passes the allowed view
   (`facade.ts:openSession`, `output.apply`).
@@ -92,6 +105,8 @@ records that the [slices](../slices/README.md) reduce.
   every chosen file and adds none (`add.ts:run`, `add-search-failed`,
   `add-save-failed`). Any other failure, such as `intake` rejecting, also
   refuses every chosen file with `add-save-failed` (`add.ts:adderOf`).
+- An approval plan counts no found values yet (`unmarkedFindings: 0`), since
+  no findings review can be open (`plan.ts:run`).
 - Project saves run one after another, so an older project never lands after
   a newer one; changes made during a save are saved together next, and a failed
   save is retried by the next change or flush (`save.ts:saver`, `writing`,
@@ -125,7 +140,7 @@ records that the [slices](../slices/README.md) reduce.
   `applyFailed`, `planning`, `planned`, `approved`, `approvalFailed`,
   `approvalCancelled`, `addStarted`, `documentsAdded`, `addFailed`, `saved`,
   `saveFailed`, `updateStarted`, `updateFinished`, `documentPrepared`,
-  `preparationFailed` and `reanchored`.
+  `preparationFailed`, `reanchored` and `profileSet`.
 - No network requests are made in this directory.
 
 ## Verification

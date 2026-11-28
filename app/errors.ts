@@ -50,6 +50,9 @@ const sentences: Partial<Record<ErrorCode, (data: (key: string) => string) => st
   "original-missing": (data) => `${data("file")} is missing from the project's folder, so it can't be shown. Add the file again with Add documents.`,
   "save-failed": () => "Your latest changes could not be saved. Check that the disk has space; the next change tries again.",
   "approval-failed": () => "The documents' text could not be read, so nothing was approved. Reload the page and approve again.",
+  "detector-not-started": () => "Auto mode could not start. Try again.",
+  "recognizer-failed": () => "Auto mode could not load its rules. Try again.",
+  "detector-failed": () => "Auto mode stopped because of an error.",
 };
 
 /** What to tell the user about `error`: the worker's own sentence, or the app's; undefined for one the app never shows. */

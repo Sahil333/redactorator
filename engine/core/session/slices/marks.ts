@@ -116,6 +116,8 @@ export function marks(part: MarksPart, change: SessionChange): MarksPart {
       };
     case "reanchored":
       return { ...part, project: reanchored(part.project, change) };
+    case "profileSet":
+      return { ...part, project: { ...part.project, profile: change.profile } };
     case "downloaded": {
       const documents = part.project.documents.map((document): ProjectDocument => (document.id === change.document ? { ...document, download: "downloaded" } : document));
       return { ...part, project: { ...part.project, documents } };

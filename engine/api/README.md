@@ -37,6 +37,11 @@ limit this folder to importing [engine/model](../model/README.md) and
     waits in the state for `confirm` or `cancel` (`facade.ts:Session.approval`).
   - `documents`: `add`, `markDownloaded`
   - `viewer`: `open`, `render`, `pageText`, `images`
+  - `detection`: `run` (with an optional profile for this run only) and
+    `stop`, per document: Auto mode's run
+  - `findings`: `setTicked`, `choose`, `setEdges`, `confirm`, `close` and
+    `dismissNotice`, per document and finding key: its findings review
+  - `profile`: `set`, the countries and industries Auto mode looks for
   - `output`: `apply`, `bytes`, `discard`
   - `labelling`: `link`, `exportGroundTruth`
 
@@ -59,10 +64,19 @@ limit this folder to importing [engine/model](../model/README.md) and
 - `SessionState` holds `project`, `folder`, the `save` status, `operation`
   (including `"updating"`, while documents are prepared again for this
   build), `approval`, the `open` and `output` handles, `can`, `reach`,
-  `newFrom`, and `documentStatus`: per document, its removed kinds, the ids of
-  its lost marks, and the code it failed to prepare again with, if it did.
+  `newFrom`, `documentStatus`: per document, its removed kinds, the ids of
+  its lost marks, and the code it failed to prepare again with, if it did,
+  and `detection`: per document, its `DocumentDetection`. The operation
+  `"marking"` runs while confirmed findings become marks. The project's
+  `profile` is part of `project`.
 - `DocumentStatus`.
-- `DocumentHandle` and `ApprovalPlan`.
+- `DocumentDetection`: a document's `run` (`idle`, or `running` with the page
+  being searched of how many), its open findings review's `findings` and the
+  pages not searched, a `notice` about its last run, `nextUndo` (an edit, or a
+  confirmed findings review with its counts), and `can` (`run`, `stop`,
+  `confirm`, `close`).
+- `DocumentHandle` and `ApprovalPlan`, which counts `unmarkedFindings`: the
+  found values of the document's open findings review, which stay in the file.
 
 ### `errors.ts`
 
@@ -75,6 +89,8 @@ limit this folder to importing [engine/model](../model/README.md) and
     project's folder;
   - `busy-updating`, while documents are prepared again, and for an approval
     of a document whose prepared files are not read yet;
+  - `DetectionErrorCode` from [engine/model](../model/README.md): why a run of
+    Auto mode ended as failed;
   - the refusal codes that the app never shows.
 - `PdfClientErrorCode`: `worker-stopped`, `worker-not-running`,
   `unexpected-reply`, `unreadable-reply`, `unknown-request`, `stale-handle`.
@@ -95,8 +111,9 @@ These are contracts stated in the type docs. The implementation in
   exception is `flush()`, which resolves to `false` when a change did not land.
   The app maps each code, with its `data`, to a sentence. `message` carries a
   sentence that the PDF worker composed, unchanged (`errors.ts:EngineError`).
-- Adding, approving, applying and updating documents run one at a time
-  (`state.ts:SessionState.operation`).
+- Adding, approving, applying, marking confirmed findings and updating
+  documents run one at a time (`state.ts:SessionState.operation`). A run of
+  Auto mode is not an operation: one runs at a time in a project.
 - Viewer results (pixels, page text, images) never enter the state
   (`facade.ts:Session.viewer`).
 - The cleaned output's bytes stay inside the engine. `output.bytes()` releases

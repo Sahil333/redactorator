@@ -50,6 +50,13 @@ write project folders.
   it, and older builds never read those folders. A document gains an optional
   `removedSeen`, the removed kinds its approval dialog listed; one stored
   without it reads as `[]` (`project.ts:parseReview`).
+- It stays version 3 in Phase 4 too, with no migration. A project gains an
+  optional `profile`, the countries and industries Auto mode looks for, absent
+  until the user chooses; a document gains an optional `rejected`, the keys of
+  values the user unticked in a confirmed findings review, read as `[]` when
+  absent. A file of any version reads them so (`project.ts:optionalProfile`,
+  `project.ts:parseDocument`). An older build that saves the project drops
+  both.
 - A record that fails any field check makes the whole file `"damaged"`
   (`parseProject`, `parseDocument`, `parseSettings`).
 - Stored text must have one entry per page, and its boxes must account for

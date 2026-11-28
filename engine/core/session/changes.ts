@@ -1,6 +1,8 @@
-import type { ApprovalPlan, DocumentHandle } from "../../api/state";
+import type { ApprovalPlan, DocumentDetection, DocumentHandle } from "../../api/state";
+import type { Profile, RunRecord } from "../../model/detection";
 import type { Appearance, PageText, RemovalKind } from "../../model/document";
 import type { ReaderErrorCode } from "../../model/errors";
+import type { Finding, FindingChange, Hit } from "../../model/findings";
 import type { PageIndex } from "../../model/geometry";
 import type { Mark } from "../../model/marks";
 import type { MarkType } from "../../model/markTypes";
@@ -75,4 +77,36 @@ export type SessionChange =
    * A document's marks placed again on its text as this build reads it. Not an edit: it is not
    * undone, nor counted. `workingChanged`: its working copy or removed kinds differ from those stored.
    */
-  | { readonly type: "reanchored"; readonly document: DocumentId; readonly marks: readonly Mark[]; readonly workingChanged: boolean };
+  | { readonly type: "reanchored"; readonly document: DocumentId; readonly marks: readonly Mark[]; readonly workingChanged: boolean }
+  /** A run of Auto mode began on `document`: `run`, its id; `pages`, how many it searches. */
+  | { readonly type: "runStarted"; readonly document: DocumentId; readonly run: string; readonly pages: number }
+  /** One page of the run answered. */
+  | { readonly type: "pageSearched"; readonly document: DocumentId; readonly page: PageIndex; readonly hits: readonly Hit[]; readonly errors: number }
+  /** The run ended, finished, stopped or failed: what it did. */
+  | { readonly type: "runEnded"; readonly document: DocumentId; readonly record: RunRecord }
+  /** A findings review opened on an ended run's hits, or on those stored, with the user's stored changes by finding key. */
+  | {
+      readonly type: "findingsOpened";
+      readonly document: DocumentId;
+      readonly run: string;
+      readonly hits: readonly Hit[];
+      readonly notSearched: readonly PageIndex[];
+      readonly changes: ReadonlyMap<string, FindingChange>;
+    }
+  /** The user changed the finding `key`. */
+  | { readonly type: "findingChanged"; readonly document: DocumentId; readonly key: string; readonly change: FindingChange }
+  /** The resolver's findings for the open findings review. */
+  | { readonly type: "findingsResolved"; readonly document: DocumentId; readonly findings: readonly Finding[] }
+  /** Confirming the findings review began: the operation `marking`. */
+  | { readonly type: "findingsApplying"; readonly document: DocumentId }
+  /**
+   * The confirmed findings review's marks, the lost marks they take the place of, and the keys of
+   * the values the user unticked. With marks it is one edit, and one undo step.
+   */
+  | { readonly type: "findingsApplied"; readonly document: DocumentId; readonly marks: readonly Mark[]; readonly replaces: readonly Mark["id"][]; readonly rejected: readonly string[] }
+  /** The findings review ended without marking: closed, dropped, or every found value marked. */
+  | { readonly type: "findingsClosed"; readonly document: DocumentId }
+  | { readonly type: "noticeSet"; readonly document: DocumentId; readonly notice: NonNullable<DocumentDetection["notice"]> }
+  | { readonly type: "noticeDismissed"; readonly document: DocumentId }
+  /** The project's profile. Not an edit: not undone, and no document goes back to review. */
+  | { readonly type: "profileSet"; readonly profile: Profile };

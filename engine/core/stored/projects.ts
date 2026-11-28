@@ -211,7 +211,7 @@ export async function writeOriginals(
       started.push(`${folder}/${name}`, ...preparedPaths(folder, tag, id));
       await store.write(`${folder}/${name}`, bytes);
       await savePrepared(store, folder, tag, id, each);
-      const document: ProjectDocument = { id, file: name, sha256, pages: reading.texts.length, marks: [], review: "not-started", download: "none", shown: [], removedSeen: [] };
+      const document: ProjectDocument = { id, file: name, sha256, pages: reading.texts.length, marks: [], review: "not-started", download: "none", shown: [], removedSeen: [], rejected: [] };
       documents.push(document);
     }
   } catch (error) {

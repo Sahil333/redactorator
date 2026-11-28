@@ -7,14 +7,18 @@ import { customTypeName, type MarkType } from "../../model/markTypes";
 import type { DocumentId, Project, Settings } from "../../model/project";
 import { textTarget, type TextPieceRange, type Texts } from "../../model/selection";
 import type { Store } from "../../storage/store";
+import type { DetectionClient } from "../detect-client/client";
 import type { Intake } from "../intake";
 import type { PdfClient } from "../pdf-client/client";
 import type { LockHold } from "../ports";
 import type { SessionChange } from "./changes";
 import { adderOf } from "./effects/add";
 import { applyOutput } from "./effects/apply";
+import { detectionOf } from "./effects/detect";
+import { findingsOf } from "./effects/findings";
 import { staleHandle, viewerOf } from "./effects/open";
 import { approvalOf } from "./effects/plan";
+import { profileOf } from "./effects/profile";
 import { anchorDocument, preparedFilesOf, updaterOf } from "./effects/reprepare";
 import { saver } from "./effects/save";
 import { gate, type SessionView } from "./gate";
@@ -33,12 +37,14 @@ export interface OpenSession {
 
 /**
  * What the engine root gives a Session: the state, the root dispatcher, which drops a change once
- * its Session is no longer the open one, the PDF worker, intake, and the Library's custom types.
+ * its Session is no longer the open one, the PDF worker, the detection worker, intake, and the
+ * Library's custom types.
  */
 export interface SessionHost {
   state(): { readonly worker: EngineState["worker"]; readonly settings: Settings; readonly session: OpenSession | undefined };
   dispatch(from: Session, change: SessionChange, ...effects: (() => void)[]): void;
   readonly client: PdfClient;
+  readonly detection: DetectionClient;
   /** Reads chosen files and has the PDF worker prepare them. */
   intake(files: readonly IncomingFile[]): Promise<Intake>;
   /** Adds a type the user typed to the settings, once. */
@@ -143,6 +149,9 @@ export function openSession(
   const approval = approvalOf({ source, view, allowed, dispatch, change });
   const adder = adderOf({ ...source, intake: host.intake, allowed, dispatch, change });
   const viewer = viewerOf({ source, view, allowed, dispatch });
+  const detection = detectionOf({ source, view, allowed, dispatch, change, client: host.detection });
+  const findings = findingsOf({ source, view, allowed, dispatch, change });
+  const profile = profileOf({ allowed, change });
 
   /**
    * Places each document's marks on the text its prepared files hold, and starts the update when
@@ -209,6 +218,9 @@ export function openSession(
       },
     },
     viewer,
+    detection,
+    findings,
+    profile,
     output: {
       apply() {
         const at = allowed("apply");

@@ -15,7 +15,8 @@ and the facade do that.
 - `index.ts`
   - `SessionParts`: `record: HistoryPart<MarksPart>`, `operation: OperationPart`,
     `viewer: ViewerPart`, `output: OutputPart | undefined`,
-    `approval: ApprovalPart | undefined`, `documents: DocumentsPart`.
+    `approval: ApprovalPart | undefined`, `documents: DocumentsPart`,
+    `detection: DetectionPart`, `findings: FindingsPart`.
   - `firstParts(project)`: the parts of a freshly opened Session.
   - `session(parts, change)`: the combined reducer; returns `parts` itself when
     every slice returns its part unchanged.
@@ -48,6 +49,17 @@ and the facade do that.
   - `DocumentsPart`: per document, its removed kinds, lost marks and failed
     preparation, set by `documentPrepared` and `preparationFailed`.
   - `firstDocuments`, `documents(part, change)`.
+- `detection.ts`
+  - `DetectionPart`: per document, its run of Auto mode and the notice about
+    its last run that is not stored.
+  - `firstDetection`, `detection(part, change)`: returns its part unchanged
+    until the detection worker exists.
+- `findings.ts`
+  - `FindingsPart`: per document with an open findings review, its
+    `OpenFindings`: the run's id, hits and pages not searched, the user's
+    changes by finding key, and the resolver's findings.
+  - `firstFindings`, `findings(part, change)`: returns its part unchanged
+    until a run can end with hits.
 
 ## Invariants
 
@@ -99,7 +111,12 @@ and the facade do that.
   (`operation.ts:changesRecord`, `operation.ts:saveAfter`); `saved` and
   `saveFailed` set `"saved"` and `"failed"`.
 - `operation` moves only on the changes listed in `operation.ts:operationAfter`
-  (for example `planned` to `"confirming"`, `applyStarted` to `"applying"`).
+  (for example `planned` to `"confirming"`, `applyStarted` to `"applying"`,
+  `findingsApplying` to `"marking"`, `findingsApplied` back to `"idle"`).
+- `profileSet` sets the project's profile. It is not an edit: it is not
+  undone, raises no edit counter and leaves every review state alone. It and
+  `findingsApplied` change the project record, so they are saved
+  (`marks.ts:marks`, `operation.ts:changesRecord`).
   `closeStarted` sets `closing`; `closeFailed` clears it
   (`operation.ts:closingAfter`).
 - The output is dropped on `opening`, `applyStarted` and `outputDiscarded`

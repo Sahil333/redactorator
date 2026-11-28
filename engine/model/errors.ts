@@ -7,3 +7,6 @@ export type ReaderErrorCode = (typeof readerErrorCodes)[number];
 export const writerErrorCodes = ["apply-failed", "check-failed", "mark-lost", "extra-text-removed", "text-moved", "partly-covered-drawing"] as const;
 
 export type WriterErrorCode = (typeof writerErrorCodes)[number];
+
+/** Why a run of Auto mode ended as failed. */
+export type DetectionErrorCode = "detector-not-started" | "recognizer-failed" | "detector-failed";
