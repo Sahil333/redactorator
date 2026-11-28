@@ -2491,8 +2491,498 @@ test golden`.
 
 #### C0 results and rules left out
 
-Empty until slice C0 writes its results here. Each pack slice adds the rules
-it left out, with the reason.
+Slice C0 wrote this part on 28 Nov 2026, and amended it the same day with
+the author's decisions on its results. Each pack slice adds the rules it
+leaves out, with the reason, to the table "Rules left out" at the end.
+
+C0 adds no code. Its spike scripts stayed outside the repository, so each
+result says how it was made, and the repository's own commands are given in
+full. Every test value and document was synthetic. Times were taken on one
+Apple M3 Pro laptop in Chrome 158.0.8127.37, through Playwright.
+
+**What these results change in the design.** In short:
+
+*   `labelRow` is not built in this phase, by the author's decision, so the
+    `page` message carries no boxes. A label in a table drawn column by
+    column is not found. See item 2.
+*   A rule may rest on an existing public resource as well as on the issuer:
+    a published standard, Microsoft Purview's documentation, Presidio,
+    python-stdnum, stdnum-js, validator.js or the like (author, 28 Nov
+    2026). With that, 64 of the 65 identifiers have a source for their
+    format; the Indian bank account number has none and is a label rule.
+    22 of the 23 validators have a source for what they check: 21 check
+    digits, and the UK driving licence's date fields. The DEA number's
+    check method has none. See item 7.
+*   A line end is not made a separator. Identifiers broken across a line end
+    are common in narrow table columns and in boxed form fields; the author
+    has made reading them a research area for later. See item 4.
+*   The UPI handle list and the Purview keyword lists may be used, with
+    their source and terms recorded. See item 8.
+*   The audit exemption needs `overrides` with `unused-files` and
+    `unused-exports`; `ignoreExports` covers only a new export in an
+    existing file. The tool entries fit `supportEntry` better than `entry`.
+    See item 6.
+*   The speed test's limit is 30 seconds. Approval needs no extra slice.
+
+##### 1. Speed
+
+**What was measured.** One trial rule for each of the 23 identifiers with a
+validator, each with its check function, plus a label search within 40
+characters before the value. The rules ran in a Web Worker made from a blob
+on a blank page. The main thread sent one page at a time, as an array of
+characters with boxes, and waited for that page's hits, as the design's flow
+does. The text was 100 synthetic statement-like pages of 60 lines each,
+414,855 characters in all, with dates, amounts, reference numbers and
+planted identifiers. Each case ran five times; the median is given.
+
+The instrumented case used the same script after `istanbul-lib-instrument`,
+with the options `vite.config.ts` uses when `COVERAGE=1`: `esModules: true`,
+`coverageGlobalScope: "globalThis"`, `coverageGlobalScopeFunc: false`.
+
+| Rules | As written: median (min to max) | Instrumented: median (min to max) |
+| --- | --- | --- |
+| 23 | 232 ms (191 to 440) | 202 ms (199 to 230) |
+| 92 (the 23, four times) | 316 ms (314 to 319) | 337 ms (327 to 372) |
+| 299 (the 23, 13 times) | 678 ms (672 to 720) | 703 ms (697 to 708) |
+
+The 299-rule row stands in for every pack loaded, with room to spare.
+Instrumenting added at most 7%, probably because the regular expressions
+run inside the engine, where the counters are not.
+
+"As written" is the trial script, not the app's production bundle, which
+does not exist yet. The goal G4, 60 seconds on the production build, is met
+by about 80 times.
+
+**Decision.** The speed test `auto-speed.spec.ts` on the instrumented build
+fails over **30 seconds**. That is half the goal, so a pass on the slower
+build leaves room on the production build, and it is more than 40 times the
+measured time, so a slow machine does not fail it.
+
+**How to repeat.** Write the trial rules as JavaScript, start a classic
+worker from a blob URL on `about:blank` in Playwright with `channel:
+"chrome"`, and time from the `load` message to the last page's `hits`. A
+module worker from a blob did not start on `about:blank` in this setup; a
+classic one did.
+
+##### 2. Labels
+
+**What was read.** The app's own reader: each file was added to a project in
+the production build, and its stored page text was read from
+`<project>/.redactorator/pdf-3/text/<document id>.json`. That is what a rule
+will see. The files were `fixtures/form.pdf`, `fixtures/table.pdf`, and four
+generated one-page tables with eight label-and-value pairs each, all in the
+same row:
+
+*   **a**: two columns drawn row by row (label, then its value);
+*   **b**: the same table drawn column by column (every label, then every
+    value);
+*   **c**: four columns, two pairs to a row, drawn row by row;
+*   **d**: "Label: value" as one line.
+
+**Distance** is counted in characters of the stored text, from the end of
+the label to the start of its value.
+
+| File | Distance | Same block | Same row by boxes |
+| --- | --- | --- | --- |
+| `form.pdf` ("Client name:" and its value) | 1 | yes | yes |
+| `table.pdf` (3 pairs) | 1 | yes | yes |
+| a (8 pairs) | 1 | yes | yes |
+| b (8 pairs) | 70 to 91 | no | yes, all 8 |
+| c (8 pairs) | 1 | yes | yes |
+| d (8 pairs) | 2 | yes | yes |
+
+In table b the reader puts each label and each value in a block of its own,
+and gives all eight labels before all eight values. "Within N characters,
+same block" finds no label for any value. Without the block condition, the
+nearest label before every value is the last label, "Date of birth", so a
+larger distance finds the wrong label. "Same row" from the boxes (the label's
+and the value's boxes overlap in height by at least half the smaller one, and
+the label ends left of the value) pairs all eight correctly.
+
+In table c a value is followed, one character later, by the next pair's
+label. A rule that accepts a label after the value would take the wrong one,
+so `labelSide: before` should be the usual choice.
+
+**Decision.** `labelRow` is not built in this phase, by the author's
+decision (28 Nov 2026): "a harder problem than to solve in this session".
+The `page` message carries no boxes. A rule uses a label within N
+characters, in the same block, before the value. A table drawn row by row
+needs only that; 40 characters, the distance in the rule format's example,
+covers every pair measured.
+
+What this misses, from the table above: in a table drawn column by column
+(table b), no label is found for any of its eight values. A rule that needs
+a label finds nothing there, and a rule with a checksum or a distinctive
+format finds the value without its label's support.
+
+**Column headers.** Not measured and not solved, as the brief asked. Table b
+shows what a header row is likely to meet: the reader gives whole columns in
+blocks, so a header is far from its values in reading order.
+
+**How to repeat.** Make the tables as `tests/oracle/make_fixtures.py` makes
+PDFs, add each file in the app, and read the stored text file; its
+`boxes` hold four numbers for each character that has a box.
+
+##### 3. Slow-pattern checkers
+
+The author agreed on 28 Nov 2026 to install these four packages into a
+scratch folder, never into `package.json`. All four are MIT-licensed.
+
+| Package | Version | Size unpacked, with its dependencies |
+| --- | --- | --- |
+| `safe-regex2` | 5.1.2 | 13 KB, plus `ret` 69 KB |
+| `scslre` | 0.3.0 | 29 KB, plus `@eslint-community/regexpp`, `refa` and `regexp-ast-analysis`: about 1.9 MB |
+| `redos-detector` | 6.1.4 | 815 KB, plus `regjsparser` 74 KB |
+| `recheck` | 4.6.2 | 11.6 MB, plus a native binary (`recheck-macos-arm64`, 30 MB) or a Java build (`recheck-jar`, 24 MB) |
+
+Each judged four known slow patterns, one safe control, and the 23 trial
+patterns of item 1.
+
+| Pattern | `safe-regex2` | `scslre` | `redos-detector` | `recheck` |
+| --- | --- | --- | --- | --- |
+| `(a+)+$` | slow | slow | cannot judge | slow |
+| `(\d+)*x` | slow | slow | cannot judge | slow |
+| `(a\|aa)+$` | safe (wrong) | slow | cannot judge | slow |
+| `\s*\d+\s*\d+\s*$` (polynomial) | safe (wrong) | slow | cannot judge | slow |
+| `\d{3}-\d{2}-\d{4}` | safe | safe | safe | safe |
+| The 23 trial patterns | 5 called slow (wrong) | all safe | 6 cannot judge | all safe |
+
+`safe-regex2` judges by how deeply repeats nest, so it misses an
+alternation that repeats, and calls five plain patterns slow (card, IBAN,
+VAT, Business Number, Medicare). `redos-detector` stopped at its default
+score limit on every slow pattern. With the limit raised ten times it still
+could not judge `(a+)+$` or the card pattern; at a hundred times it ran out
+of memory. `recheck` was right on every pattern, but needs a native binary
+or Java, and its first call took about a second; its pure-JavaScript mode
+gave no answer within two minutes. `scslre` was right on every pattern,
+answered in 2 ms or less, is plain JavaScript, and analyses a pattern
+without running it.
+
+**Decision.** The pack compiler uses **`scslre`** (MIT). A pattern it cannot
+judge fails the build: for `scslre` that is a pattern it cannot parse, which
+it reports by throwing.
+
+##### 4. Line ends
+
+**What was measured.** Two generated three-page statements, each row being
+a date, an amount, a balance and a details column that wraps at its width,
+with an identifier planted in each row's details, and a generated flattened
+form. All were read with the app's reader, as in item 2.
+
+| Document | Identifiers planted | Broken by a line end |
+| --- | --- | --- |
+| Statement, details column 150 points wide | 86 | 18 (21%): 10 IBANs, 4 cards, 3 Aadhaar numbers, 1 ABN |
+| Statement, details column 230 points wide | 117 | 1 (1%): 1 IBAN |
+
+The generator wraps text at spaces, as most do, so every break fell at a
+space inside a grouped value. No value without spaces broke.
+
+The form shows a different cause. A value written one character to a box (a
+comb field) is read one character to a line: each digit of the SSN, the
+Aadhaar number and the account number became a line of its own. A value
+written one group to a box (sort code `20 | 45 | 77`) is read one group to
+a line. A value drawn as two text runs with a small gap
+stayed on one line.
+
+**What allowing a line end would cost.** The trial rules were run again with
+the line end added to "one separator". In the statements, the reader puts a
+row's date, amount and balance on separate lines of one block, so they join.
+
+| Document | Joins of one value across a line end | Joins of two values | Of those, passing their check |
+| --- | --- | --- | --- |
+| Statement, 150 points | 22 | 101 | 8 |
+| Statement, 230 points | 1 | 118 | 9 |
+| Form | 1 (the boxed NHS number) | 0 | 0 |
+
+In the narrow statement it would make about five wrong joins for each right
+one, and in the wide one 118 for one. About 8% of the wrong joins pass their
+check and would be shown as `checked`. It would not help comb fields, whose
+digits have line ends and no separators between them.
+
+**Decision.** "One separator" does **not** include a line end. The design is
+unchanged. The risk in Risks, "an identifier broken across a line end is not
+found", is common in narrow columns and certain in comb fields. The author
+has decided that reading such values is a research area for later, with
+models that read layout: "In this phase lets do what can be done easily or
+in a vanilla way." This phase reads the page text as the reader gives it.
+
+##### 5. Approval
+
+**What was measured.** A generated 10-page document with 5,000 distinct
+8-digit numbers. Its project file was given one text mark for each number,
+and the app was reloaded. The time runs from clicking Approve to the
+"Approved" badge, then to "Saved". Three runs each, in the production build.
+
+| Case | Click to dialog or Approved | Dialog's Approve to Approved | Then to Saved | Total |
+| --- | --- | --- | --- | --- |
+| One document, 5,000 marks | 1.40 to 1.41 s | no dialog | 0.29 s | about 1.7 s |
+| Two documents; the approval spreads 5,000 marks into the second | 1.94 to 2.04 s | 0.61 to 0.63 s | 0.40 to 0.42 s | 2.95 to 3.09 s |
+
+**Decision.** Under 5 seconds, so no slice to speed approval up is added.
+
+The first try spread nothing, and showed a fact about the matcher. The
+numbers were separated by single spaces, and `findAll` reads digits joined
+by spaces on one line as one number. So a line of numbers with only spaces
+between them has no word boundary inside it, and no value in it spreads. The
+same holds for a marked account number followed by a space and an amount on
+one line. The runs above used commas between the numbers. This is how the
+matcher works today. Whether it should change is a question for the author;
+it is not part of Phase 4.
+
+##### 6. The audit exemption
+
+**What was run.** `pnpm test:coverage` first (263 tests passed), because
+`pnpm exec fallow audit` needs `coverage/coverage-final.json`. Then three
+temporary stub files, since removed: an exported function in a file nothing
+imports, an exported function of cyclomatic complexity 10 that no browser
+test reaches, and a tool under `tools/` that imports the second. The
+settings were tried one at a time and then together, each time with `pnpm
+exec fallow audit` and `pnpm exec fallow architecture --boundaries`.
+`.fallowrc.json` was then restored; its SHA-1 is unchanged.
+
+What failed with no exemption: all three files as "unused files", the tool
+as "no matching boundary zone", and the complex function's CRAP score (110
+against the limit 30; its cyclomatic 10 and cognitive 9 were under their
+limits). By fallow's CRAP formula an untested function of cyclomatic
+complexity 5 scores 30, the limit, and so fails too.
+
+| Setting | Result |
+| --- | --- |
+| A `tools` zone and its rule | Boundary check passes. A rule that names a zone not yet defined (`detect` before W1 adds it) fails both commands with "invalid boundary configuration" |
+| `entry` or `supportEntry` with `tools/**/*.ts` | The tool and what it imports count as used. Both pass |
+| `ignoreExports` with `"exports": ["*"]` for a new file | No effect: the file is still unused |
+| `ignoreExports` naming one new export in a file that is imported | Passes. This is the case `ignoreExports` is for |
+| `overrides`, `unused-files` set to `warn` or `off` | Passes. With `warn` the file is still listed and the verdict is a warning; the commit hook blocks only a failing verdict |
+| `overrides`, `unused-exports` set to `warn`, for a new file that is imported but has an unused export | Passes; without it that export fails |
+| `overrides`, `complexity-crap` set to `warn` or `off` | Passes |
+| `ignoreFindings`, or `health.ignore`, or `health.thresholdOverrides` | Each also passes, but hides more or reads less clearly |
+| A `//` comment in `.fallowrc.json` | Accepted |
+
+**Decision.** The smallest block, for C1, W1 and E1 to add their files to:
+
+```jsonc
+// Phase 4 audit exemption: docs/designs/auto-mode.md, Detailed
+// Implementation Plan, section 1. V1 removes this entry.
+"overrides": [
+  {
+    "files": ["engine/model/findings.ts"],
+    "rules": {
+      "unused-files": "warn",
+      "unused-exports": "warn",
+      "complexity-crap": "warn"
+    }
+  }
+]
+```
+
+The file named is an example. `unused-exports` is needed for a listed file
+that another file imports while some of its exports stay unused: a second
+try, with a new file imported by `engine/model/pageText.ts`, failed without
+it and passed with it. A new export added to an existing file needs an
+`ignoreExports` entry naming that export instead. P0 adds for the tools, to
+stay:
+
+```jsonc
+"supportEntry": ["engine/globals.ts", "tools/**/*.ts"],
+// in boundaries.zones:
+{ "name": "tools", "patterns": ["tools/**/*.ts"] },
+// in boundaries.rules:
+{ "from": "tools", "allow": ["model", "detect-protocol", "detect", "core"] }
+```
+
+`supportEntry` is the key the schema gives for tooling that does not run in
+production; `entry` also works. This differs from the design's guess of
+`ignoreExports` and `entry`.
+
+##### 7. Facts
+
+**What counts as a source.** The author decided on 28 Nov 2026: "We
+piggybacking on existing regex pattern resources and validator resources to
+build our own." A rule may be written when its format, and for a checked
+rule its check method, is stated by an existing public resource: the
+issuer's page, a published standard, Microsoft Purview's documentation,
+Presidio, python-stdnum, stdnum-js, validator.js or the like. A third-party
+page counts too, named as what it is. A fact recalled with no source is not
+enough. The earlier wording, "verified at the body that issues it", is
+withdrawn.
+
+Every page below was read on 28 Nov 2026. Many official sites refuse
+automated reading; most of those were also tried in a normal browser. Some
+could not be read even so: `cms.gov` refused every page, `aba.com` showed a
+check for robots, which was not got round, and `gov.bc.ca` did not answer. A
+page not read no longer blocks a rule that has another source.
+
+**Read at the issuer or its standard.** The facts the workbook marks
+unverified: what the issuer or its standard states, where it could be read.
+"Not read at the issuer" means only that; the table after this one gives
+the source each rule rests on.
+
+| Fact | Result | Source |
+| --- | --- | --- |
+| SSN: area not 000, 666 or 900 to 999; group not 00; serial not 0000 | Verified. The page says "900 series" | https://secure.ssa.gov/poms.nsf/lnx/0110201035 |
+| EIN: format and valid prefixes | Prefixes verified (a table by campus). The written form 12-3456789 is not stated there | https://www.irs.gov/businesses/small-businesses-self-employed/how-eins-are-assigned-and-valid-ein-prefixes |
+| PTIN: "P" and 8 digits | Verified, IRM 2.3.63.2 | https://www.irs.gov/irm/part2/irm_02-003-063 |
+| ABA routing number: weights 3, 7, 1 | Not read at the issuer. Only third-party sources; the registrar's site blocked reading | https://www.aba.com/about-us/routing-number |
+| NPI: Luhn with the prefix 80840 | Not read at the issuer. The final rule states 10 positions with a check digit in the tenth, but not the method; the CMS check-digit paper could not be read | https://www.govinfo.gov/content/pkg/FR-2004-01-23/html/04-1149.htm |
+| Medicare Beneficiary Identifier format | Not read at the issuer. `cms.gov` refused every page | https://www.cms.gov/medicare/new-medicare-card |
+| US court case and docket numbers | Not read at the issuer. The US Courts page read states no format | https://www.uscourts.gov/court-records/find-a-case-pacer |
+| NHS number: modulus 11 | Verified, with weights 10 to 2; 11 gives 0, 10 means invalid | https://www.datadictionary.nhs.uk/attributes/nhs_number.html |
+| UTR: is the first digit a check digit? | Not read at the issuer. HMRC says 10 digits, and its design pattern says 10 or 13. No HMRC page names a check digit | https://www.gov.uk/find-utr-number and https://design.tax.service.gov.uk/hmrc-design-patterns/unique-taxpayer-reference |
+| UK VAT number: modulus 97 | Not read at the issuer. HMRC states nine digits and names "modulus 97", but withholds the formula | https://www.gov.uk/hmrc-internal-manuals/enquiry-manual/em3058 and https://www.gov.uk/hmrc-internal-manuals/vat-agricultural-flat-rate-scheme/vatafrs2500 |
+| Sort code and account number format | Verified: six-digit sorting code, eight-digit account number, in Vocalink's specification, version 9.20 of 4 Nov 2026 | https://www.vocalink.com/media/h3rou4er/validating-account-numbers-uk-modulus-checking-v920.pdf |
+| Aadhaar and Aadhaar Virtual ID: Verhoeff | Not read at the issuer. The UIDAI pages read do not state it, and the UIDAI pages that search results name for it return "not found" | https://uidai.gov.in/en/aadhaar-online-services |
+| PAN format and holder-type letter | Verified: 5 letters, 4 digits, 1 letter; the fourth letter is one of A, B, C, F, G, H, J, L, P, T; the last letter is a check letter whose method is not published | https://www.incometaxindia.gov.in/w/how-pan-is-formed-and-how-it-gets-its-unique-identity- |
+| GSTIN: check character by modulus 36 | Not read at the issuer. Only third-party sources | none found |
+| Indian passport number format | Not read at the issuer. The page tried returns "not found" | https://www.passportindia.gov.in/AppOnlineProject/online/faqServicesAvailable |
+| Indian bank account number lengths | Not read at the issuer. RBI states no length | https://www.rbi.org.in/Scripts/FAQView.aspx?Id=60 |
+| IFSC format | Verified: four letters for the bank, a 0, six characters for the branch | https://www.rbi.org.in/Scripts/FAQView.aspx?Id=60 |
+| UPI ID format | Not read at the issuer. NPCI's pages list handles but do not state the form of an ID | https://www.npci.org.in/product/upi/all-members |
+| TAN format | Verified: 4 letters, 5 digits, 1 letter; the first three letters are a jurisdiction code | https://www.incometaxindia.gov.in/w/tax-deduction-account-number |
+| UAN format | Not read at the issuer. The EPFO portal does not state the length | https://unifiedportal-mem.epfindia.gov.in/memberinterface/ |
+| ABHA number: format and check digit | Not read at the issuer. No ABDM page read states either. Third-party summaries of ABDM papers call it a random 14-digit number, with no check digit mentioned | https://abdm.gov.in/abha-number |
+| Voter ID (EPIC): format and check digit | Not read at the issuer. The Election Commission's sites gave no text | https://eci.gov.in/ |
+| Business Number: Luhn | Verified. CRA's worksheet applies the SIN formula to the first nine digits of a BN; the program account form is 9 digits, 2 letters, 4 digits | an archived CRA paper, https://bac-lac.wayback.archive-it.org/web/20061210041004/http:/www.cra-arc.gc.ca/eservices/magmedia/sin-e.pdf, and https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/business-registration/business-number-program-account/need-program-accounts.html |
+| BC Personal Health Number: check | Not read at the issuer. The province's specifications exist, but `gov.bc.ca` dropped every connection | https://www2.gov.bc.ca/assets/gov/health/practitioner-pro/software-development-guidelines/conformance-standards/vol-4c-app-rules-pnet.pdf |
+| ABN: modulus 89 | Verified, weights and steps as the workbook has them | https://abr.business.gov.au/Help/AbnFormat |
+| ACN: check | Not read at the issuer. ASIC states nine digits; the page named "digit check" gives no method | https://asic.gov.au/for-business/registering-a-company/steps-to-register-a-company/australian-company-numbers/australian-company-number-digit-check |
+| IBAN: modulus 97 | Verified: ISO 7064 MOD 97-10, first four characters moved to the end, remainder 1. Read in the 1997 edition's preview pages; SWIFT publishes the national formats | https://cdn.standards.iteh.ai/samples/21228/8c19005e318742e7ba49cd4fe544257c/ISO-13616-1997.pdf and https://www.swift.com/standards/data-standards/iban-international-bank-account-number |
+| BIC format | Verified: 4 characters, ISO 3166 country code, 2 characters, optional 3-character branch | https://www.swift.com/standards/data-standards/bic-business-identifier-code |
+| IMEI: Luhn | Verified: 8-digit TAC, 6-digit serial, a Luhn check digit (Annex B) | https://www.etsi.org/deliver/etsi_ts/123000_123099/123003/19.08.00_60/ts_123003v190800p.pdf |
+| Crypto wallet address formats | Verified from the published specifications: Bech32 and Bech32m (BIP-173, BIP-350), Base58Check, and Ethereum's EIP-55. No body issues these | https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki, https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki, https://eips.ethereum.org/EIPS/eip-55 |
+| LEI: modulus 97 | Verified: characters 19 and 20 are check digits by ISO 7064 MOD 97-10; valid when the remainder is 1 | https://cdn.standards.iteh.ai/samples/59771/b4526b6c9dc04897b014c659ed70ad27/ISO-17442-2012.pdf |
+| ISIN check | Verified: country code, 9 characters, check digit by the modulus 10 "Double-Add-Double" formula | https://anna-web.org/identifiers/ |
+| CUSIP check | Not read at the issuer. CUSIP Global Services states 9 characters with a check character, but not the method | https://www.cusip.com/identifiers.html |
+
+The CRA worksheet is an archived copy, kept by Library and Archives Canada,
+of a 2006 CRA paper. It is the government's own text, but not a current
+page.
+
+**The source each of the 65 rests on.** "Issuer" and "standard" are the
+rows of the table above. Library sources are named by project: python-stdnum
+(LGPL 2.1 or later; its documentation at
+https://arthurdejong.org/python-stdnum/doc/ and its source at
+https://github.com/arthurdejong/python-stdnum), Presidio (MIT;
+https://presidio.dataprivacystack.org/supported_entities/ and its
+recognizers in https://github.com/data-privacy-stack/presidio, under
+`presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/`),
+stdnum-js (MIT; https://github.com/koblas/stdnum-js), validator.js (MIT;
+https://github.com/validatorjs/validator.js), and Microsoft Purview's
+definitions (https://learn.microsoft.com/en-us/purview/, page names below).
+A check method marked "source" was read in that project's code, not only in
+its documentation. The rules are written here from these statements; no
+library becomes a runtime dependency, as the Non-Goals require.
+
+| Identifier | Format and check, as the source states them | Source it rests on |
+| --- | --- | --- |
+| `payment-card` | 14 to 19 digits, Luhn | Purview `sit-defn-credit-card-number`; the Luhn steps also in the IMEI standard (ETSI TS 123 003, Annex B) |
+| `iban` | Country code, 2 check digits, up to 30 characters; MOD 97-10 | Standard: ISO 13616 (1997 preview); SWIFT's registry for each country's length |
+| `email` | Address form, RFC 822 validation | Presidio `EMAIL_ADDRESS`; validator.js `isEmail` |
+| `phone` | Per country | Presidio `PHONE_NUMBER`; validator.js `isMobilePhone` (en-US, en-GB, en-IN, en-CA, en-AU) |
+| `date-of-birth` | A date | Presidio `DATE_TIME`; validator.js `isDate`. No issuing body |
+| `us-ssn` | Area not 000, 666 or 900s; group not 00; serial not 0000 | Issuer: SSA POMS RM 10201.035 |
+| `us-itin` | Starts with 9; fourth and fifth digits 50 to 65, 70 to 88, 90 to 92, 94 to 99 | Issuer: IRS Publication 4757 (revised June 2026). Presidio's "7 or 8 as the fourth digit" disagrees; the issuer wins |
+| `us-ein` | Two digits, optional hyphen, seven digits; prefix from the IRS list | Issuer for the prefixes; python-stdnum `us.ein` source for the form |
+| `us-ptin` | P and 8 digits | Issuer: IRM 2.3.63.2 |
+| `us-routing-number` | 9 digits; weights 3, 7, 1, sum divisible by 10 | Presidio `aba_routing_recognizer.py` source; python-stdnum `us.rtn` source (the same check, as weights 7, 3, 9); Purview `sit-defn-aba-routing` |
+| `us-bank-account` | 6 to 17 digits (Purview), 8 to 17 (Presidio); no check | Purview `sit-defn-us-bank-account-number`; Presidio `US_BANK_NUMBER`. A label rule |
+| `us-passport` | 9 digits, or a letter and 8 digits | Purview `sit-defn-us-uk-passport-number`; stdnum-js passport table; Presidio `US_PASSPORT` |
+| `us-drivers-license` | Per state | Purview `sit-defn-us-drivers-license-number` (per-state patterns); Presidio `US_DRIVER_LICENSE` |
+| `us-npi` | 10 digits starting 1 or 2; Luhn over "80840" and the 10 digits | Presidio `us_npi_recognizer.py` source |
+| `us-dea-number` | Two letters and seven digits; the last is a check digit, method not stated | Purview `sit-defn-drug-enforcement-agency-number` |
+| `us-mbi` | 11 characters; digits at 1, 4, 7, 10, 11; letters at 2, 5, 8, 9 (no S, L, O, I, B, Z); letter or digit at 3, 6 | Presidio `us_mbi_recognizer.py` source; Purview `sit-defn-medicare-beneficiary-identifier-card` |
+| `uk-nino` | Two letters, six digits, A to D; barred letters and prefixes | Issuer: HMRC NIM39110 |
+| `uk-nhs-number` | 10 digits; modulus 11, weights 10 to 2 | Issuer: NHS data dictionary |
+| `uk-utr` | 10 digits; the first is a check digit from weights 6, 7, 8, 9, 10, 5, 4, 3, 2, modulus 11, mapped through "21987654321" | python-stdnum `gb.utr` source; HMRC for the length (10 or 13) |
+| `uk-vat-number` | 9 digits (12 with a branch); weights 8 to 2, 10, 1, modulus 97; remainder 0, or 42 or 55 when the first three digits are 100 or more | python-stdnum `gb.vat` source; HMRC for the length |
+| `uk-driving-licence` | 16 characters: 5 of surname, decade, month (plus 50), day, year, 2 initials, a digit, 2 letters; the DVLA check is not public | Presidio `uk_driving_licence_recognizer.py` source. Purview says 18 characters; Presidio's 16 matches the field layout |
+| `uk-passport` | Sources disagree: 2 letters and 7 digits (Presidio, from 2015); 9 digits (stdnum-js); a letter or digit and 8 digits (Purview) | Presidio `uk_passport_recognizer.py`; stdnum-js; Purview `sit-defn-us-uk-passport-number`. PK chooses and records why |
+| `uk-sort-code-account` | Six-digit sort code, eight-digit account | Operator: Vocalink specification 9.20 |
+| `uk-vehicle-registration` | Two letters, two digits, three letters, since 2001 | Issuer's guidance: GOV.UK; Presidio `UK_VEHICLE_REGISTRATION` for older forms |
+| `in-aadhaar` | 12 digits, not starting 0 or 1; Verhoeff | python-stdnum `in_.aadhaar` source; Purview `sit-defn-india-unique-identification-number` |
+| `in-aadhaar-vid` | 16 digits, not starting 0 or 1; Verhoeff | python-stdnum `in_.vid` source |
+| `in-pan` | 5 letters, 4 digits, 1 letter; fourth letter A, B, C, F, G, H, J, L, P or T | Issuer: Income Tax Department. Presidio's "12 characters" is wrong |
+| `in-gstin` | 2-digit state code, PAN, a character, Z, a check character by Luhn modulus 36 | python-stdnum `in_.gstin` source; Presidio `IN_GSTIN` |
+| `in-voter-id` | 3 letters, 7 digits; Luhn over the 7 digits | python-stdnum `in_.epic` source; Presidio `in_voter_recognizer.py`; Purview `sit-defn-india-voter-id-card` |
+| `in-passport` | A letter and 7 digits; also 2 letters and 6 digits (ePassport) | Presidio `in_passport_recognizer.py`; stdnum-js passport table |
+| `in-driving-licence` | 15 characters, letters and digits | Purview `sit-defn-india-drivers-license-number` |
+| `in-vehicle-registration` | State code, district number, series letters, 4 digits; BH series; per-state district tables | Presidio `in_vehicle_registration_recognizer.py` source |
+| `in-bank-account` | No fixed format; RBI states none | No source. A label rule (see below) |
+| `in-ifsc` | 4 letters, a 0, 6 characters | Issuer: RBI |
+| `in-upi-id` | A user part, `@`, a handle; letters, digits, dot and hyphen, varying by bank | Third-party page: Paytm, https://paytm.com/support/upi/upi-id-format-rules-valid-structure; handles from NPCI (item 8) |
+| `in-tan` | 4 letters, 5 digits, 1 letter | Issuer: Income Tax Department |
+| `in-uan` | 12 digits | Third-party page: DBS Bank, https://www.dbs.com/digibank/in/articles/save/what-is-uan-number |
+| `in-abha-number` | A random 14-digit number; no check digit stated | Government: Press Information Bureau, https://pib.gov.in/PressReleasePage.aspx?PRID=2003068 |
+| `ca-sin` | 9 digits, Luhn; not starting 0 or 8 | Issuer and CRA worksheet; python-stdnum `ca.sin` source |
+| `ca-business-number` | 9 digits, Luhn; with a program, 2 letters and 4 digits | Issuer (CRA); python-stdnum `ca.bn` source |
+| `ca-bc-phn` | 10 digits starting 9; weights 2, 4, 8, 5, 10, 9, 7, 3 on digits 2 to 9, each product modulo 11, check = (11 - sum) modulo 11 | python-stdnum `ca.bc_phn` source; stdnum-js `BC_BHN` |
+| `ca-bank-account` | 7 or 12 digits | Purview `sit-defn-canada-bank-account-number`. A label rule |
+| `ca-passport` | 2 letters and 6 digits | Purview `sit-defn-canada-passport-number`; stdnum-js passport table |
+| `ca-drivers-licence` | Per province | Purview `sit-defn-canada-drivers-license-number` |
+| `au-tfn` | 8 or 9 digits; weights 1, 4, 3, 7, 5, 8, 6, 9, 10, modulus 11; an 8-digit TFN uses the first eight weights | python-stdnum `au.tfn` source; Purview `sit-defn-australia-tax-file-number` |
+| `au-abn` | 11 digits; modulus 89 | Issuer: ABR |
+| `au-acn` | 9 digits; weights 8 to 1 on the first 8, check = (10 - sum modulo 10) modulo 10 | python-stdnum `au.acn` source; Presidio `AU_ACN`; ASIC for the length |
+| `au-medicare-number` | 10 digits, first 2 to 6; weights 1, 3, 7, 9, 1, 3, 7, 9 on digits 1 to 8, sum modulo 10 = digit 9 | Presidio `au_medicare_recognizer.py` source; Purview `sit-defn-australia-medical-account-number` |
+| `au-bank-account` | 6 to 10 digits, with or without a BSB | Purview `sit-defn-australia-bank-account-number`. A label rule |
+| `au-passport` | A letter and 7 digits, or 2 letters and 7 digits | stdnum-js passport table; Purview `sit-defn-australia-passport-number` |
+| `au-drivers-licence` | Per state | Purview `sit-defn-australia-drivers-license-number` |
+| `bic` | 4 characters, country code, 2 characters, optional 3 | Issuer: SWIFT |
+| `lei` | 20 characters; MOD 97-10 | Standard: ISO 17442 |
+| `isin` | Country code, 9 characters, Double-Add-Double modulus 10 | Issuer body: ANNA; python-stdnum `isin` source |
+| `cusip` | 9 characters; values doubled at even positions, digits summed, check = (10 - sum) modulo 10 | python-stdnum `cusip` source; CUSIP Global Services for the layout |
+| `crypto-wallet-address` | Bech32, Bech32m, Base58Check, EIP-55 | Specifications: BIP-173, BIP-350, EIP-55 |
+| `us-court-case-number` | Office, year, case type, number of 1 to 5 digits, as in 0:2010op00289; parts vary by court | Administrative Office of the US Courts, public user group notes of 11 May 2023, https://www.uscourts.gov/file/78483/download |
+| `ip-address` | IPv4 and IPv6 | Presidio `IP_ADDRESS`; Purview `sit-defn-ip-address`; validator.js `isIP` |
+| `url` | URL with a known top-level domain | Presidio `URL`; validator.js `isURL` |
+| `mac-address` | Six octets in hexadecimal | Issuer: IEEE Registration Authority |
+| `imei` | 8-digit TAC, 6-digit serial, Luhn | Standard: ETSI TS 123 003 |
+| `us-provider-tax-id` | A TIN or EIN | Presidio `US_PROVIDER_TAX_ID`; the EIN row above. A label rule |
+| `health-insurance-member-id` | No fixed format | Presidio `US_HEALTH_INSURANCE_MEMBER_ID`, found by context. A label rule |
+| `insurance-claim-number` | No fixed format | Presidio `US_CLAIM_NUMBER`, found by context. A label rule |
+| `prescription-number` | No fixed format | Presidio `US_PRESCRIPTION_NUMBER`, found by context. A label rule |
+
+**What this does to the 23 validators.** 21 have a stated check-digit
+method: the nine read at the issuer or its standard (IBAN, NHS number, SIN,
+Business Number, ABN, LEI, ISIN, IMEI, and Luhn for the card), and, from
+library source, the twelve others: routing number, NPI, UTR, UK VAT number,
+Aadhaar, Aadhaar Virtual ID, GSTIN, BC PHN, TFN, ACN, Australian Medicare
+number and CUSIP. The 22nd, the UK driving licence, has no public check
+digit; its validator checks the date fields, as Presidio's does. No source
+read states the DEA number's check method, so its validator is left out;
+the rule finds it by format and label. The ABHA number has no check digit
+in any source, so PI adds no ABHA validator. The voter ID has a Luhn check
+in python-stdnum, which PI may add.
+
+##### 8. Lists
+
+| List | Source | Licence or terms | How often it changes |
+| --- | --- | --- | --- |
+| UPI handles | NPCI's "UPI 3rd Party Applications" table: each app, its bank and its handles, for example `@apl` and `@yapl` for Amazon Pay; it can be downloaded. https://www.npci.org.in/product/upi/all-members. A tab on the same page lists banks' own apps, which was not read | NPCI's terms grant no licence to copy, and forbid caching and framing; the site says "All rights reserved" (https://www.npci.org.in/terms-and-condition) | Rows have go-live months up to June 2026, so several times a year |
+| Indian bank codes (the first four letters of an IFSC) | RBI, "List of NEFT enabled bank Branches (Bank-wise IFSC)", one Excel file per bank, "updated as on November 15, 2026". https://www.rbi.org.in/Scripts/bs_viewcontent.aspx?Id=2009 | RBI's copyright policy allows reproduction "accurately and without modification", with RBI acknowledged as the source (https://www.rbi.org.in/Scripts/Disclaimer.aspx) | Not stated; the date shows it is kept current |
+| Microsoft Purview keyword lists | The pages list keywords, for example six for Aadhaar (https://learn.microsoft.com/en-us/purview/sit-defn-india-unique-identification-number) | Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse). No public source repository with an open licence was found for these pages | not relevant |
+
+**Decisions.** By the author's decision (28 Nov 2026), all three may be used:
+"Anything that is publicly accessible but can't be copied just because of
+licence shall be copied. We will handle the licensing part later when we have
+some customers, say 100." Each list file records its `source` URL and, in
+`licence`, what the terms above say, so that the author can settle the
+licensing later. This does not change what the terms say: NPCI's and
+Microsoft Learn's terms grant no right to ship a copy, and RBI's allow only
+an unmodified reproduction with acknowledgement.
+
+##### Rules left out
+
+A rule is left out only when no source of any kind states its format, or,
+for its validator, its check method. Rules with no fixed format are allowed
+as label rules: the value is found next to its label, with `needs:
+labelled`, and no validator. That covers the four bank account numbers, the
+provider tax ID, and the health insurance member, claim and prescription
+numbers. An identifier whose sources disagree (the UK passport number) is
+written by its pack slice, which records the choice.
+
+| Identifier | Reason | What would allow it later |
+| --- | --- | --- |
+| `us-dea-number` (validator only) | No source read states how its check digit is computed; the rule itself is written, by format and label | A DEA publication or a library that states the method |
+| `in-bank-account` (format only) | No source states a format; the rule is written as a label rule | Nothing needed: it stays a label rule |
 
 ### 3. Target files, by slice
 
