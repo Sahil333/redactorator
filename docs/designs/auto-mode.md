@@ -2991,7 +2991,6 @@ written by its pack slice, which records the choice.
 
 | Identifier | Reason | What would allow it later |
 | --- | --- | --- |
-| `us-dea-number` (validator only) | No source read states how its check digit is computed; the rule itself is written, by format and label | A DEA publication or a library that states the method |
 | `in-bank-account` (format only) | No source states a format; the rule is written as a label rule | Nothing needed: it stays a label rule |
 
 ### 3. Target files, by slice
