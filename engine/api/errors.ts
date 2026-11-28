@@ -44,6 +44,13 @@ export type ErrorCode =
   | "approval-failed"
   // A run of Auto mode ended as failed.
   | DetectionErrorCode
+  // Another operation runs. The app shows these where no state disables the control, as when setting the profile.
+  | "busy-adding"
+  | "busy-approving"
+  | "busy-applying"
+  | "busy-marking"
+  // Documents are being prepared again for this build.
+  | "busy-updating"
   // Refusals the app never shows: it disables the control from the state, or never sends the command.
   | "busy-moving"
   | "busy-creating"
@@ -58,15 +65,9 @@ export type ErrorCode =
   | "empty-target"
   | "empty-box"
   | "worker-not-ready"
-  | "busy-adding"
-  | "busy-approving"
-  | "busy-applying"
   | "no-plan"
-  // Documents are being prepared again for this build.
-  | "busy-updating"
   // Auto mode's.
   | "busy-detecting"
-  | "busy-marking"
   | "findings-open"
   | "no-findings"
   | "unknown-finding"

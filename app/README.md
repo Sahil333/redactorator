@@ -37,7 +37,8 @@ The app has three screens:
   confirmation dialog.
 - `ProjectView` (ProjectView.tsx): the open project. It holds `TopBar`,
   `ApproveDialog`, `Explorer`, `DocumentTabs` and `Workspace`, and wires adding
-  files, applying, approving, undo and redo, and label export.
+  files, applying, approving, undo and redo, label export, and setting the
+  project's profile.
 - `useProjectsFolder`, `Waiting` (useProjectsFolder.ts): find the remembered
   projects folder and its store. Return `{waiting, chooseFolder, reopenFolder,
   pickProjectToImport}`.
@@ -55,8 +56,17 @@ The app has three screens:
   document view (thumbnails, pages, marks panel) and the checked-output preview
   with its download.
 - `TopBar`, `Editing`, `History` (TopBar.tsx): the header with save state,
-  status, undo and redo, tool picker, Add documents, Approve, Preview, and
-  Export labels.
+  status, Auto mode's controls, undo and redo, tool picker, Add documents,
+  Approve, Preview, and Export labels.
+- `AutoControls`, `Auto` (AutoControls.tsx): Auto mode's controls in the top
+  bar. For now only "What to look for", which opens the chooser for the
+  project.
+- `ProfileChooser` (ProfileChooser.tsx): the dialog that asks which countries
+  and industries Auto mode looks for, with "Adds: ..." under each choice, from
+  `identifierPacks` and the schema's type names. It starts from the project's
+  profile, or with nothing selected, and may be saved with nothing selected. Its
+  `purpose` is `project` (stored with `profile.set`) or `run` (for one run
+  only, which nothing opens yet). A refusal keeps it open with its sentence.
 - `ApproveDialog` (ApproveDialog.tsx): the heads-up shown while an
   `ApprovalPlan` waits: where the approval spreads, and under "Removed from this
   file" the plan's `removed` kinds, one line each in the design's Appendix A.3
@@ -215,7 +225,8 @@ The app has three screens:
   `remove`, `keepHere`. Also `labelling.link`, `labelling.exportGroundTruth`
   (`ProjectView.tsx:saveLabels`), `documents.add`, `documents.markDownloaded`,
   `output.apply` and `discard`, `approval.plan`, `confirm` and `cancel`,
-  `history.undo` and `redo`, `flush`, and `close` (`App.tsx:useOpenProject`).
+  `history.undo` and `redo`, `profile.set` (`ProfileChooser`), `flush`, and
+  `close` (`App.tsx:useOpenProject`).
   Library calls: `projects.create`, `open`, `rename`, `duplicate`, `archive`,
   `remove`, plus `folders.check`, `folders.importFrom`, `folders.switchTo` and
   `settings.update`. The viewer

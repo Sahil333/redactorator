@@ -290,6 +290,7 @@ export function ProjectView(props: ProjectViewProps) {
         onAdd={adder.add}
         history={history}
         editing={shown !== undefined && output === undefined ? editing : undefined}
+        auto={{ profile: project.profile, onSetProfile: (profile) => session.profile.set(profile) }}
       />
       {labels}
       <ApproveDialog session={session} approval={props.opened.approval} documents={project.documents} />

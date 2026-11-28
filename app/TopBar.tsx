@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import type { Appearance } from "../engine/model/document";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { AutoControls, type Auto } from "./AutoControls";
 import { PickFiles } from "./PickFiles";
 import type { Tool } from "./marks";
 import type { ReviewState } from "../engine/model/project";
@@ -46,6 +47,7 @@ interface TopBarProps {
   /** Undefined while no document is open. */
   readonly history: History | undefined;
   readonly editing: Editing | undefined;
+  readonly auto: Auto;
 }
 
 const saveText: Record<SessionState["save"], string> = { saved: "Saved", saving: "Saving…", failed: "Not saved" };
@@ -171,6 +173,7 @@ export function TopBar(props: TopBarProps) {
         {props.status}
       </p>
       <div className="flex-1" />
+      <AutoControls {...props.auto} />
       {history && <HistoryButtons history={history} />}
       {editing && <ToolPicker tool={editing.tool} onTool={editing.onTool} />}
       <PickFiles

@@ -91,6 +91,9 @@ limit this folder to importing [engine/model](../model/README.md) and
     project's folder;
   - `busy-updating`, while documents are prepared again, and for an approval
     of a document whose prepared files are not read yet;
+  - `busy-adding`, `busy-approving`, `busy-applying` and `busy-marking`, while
+    another operation runs: the app shows them where no state disables the
+    control, as when setting the profile or for a dropped file;
   - `DetectionErrorCode` from [engine/model](../model/README.md): why a run of
     Auto mode ended as failed;
   - the refusal codes that the app never shows.

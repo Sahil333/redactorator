@@ -64,7 +64,7 @@ const needsWorker = new Set<SessionCommand>(["history", "apply", "approve"]);
 /** Refused while another operation runs, with the code each gives; `documents.add` has its own codes. */
 const oneOperation = new Set<SessionCommand>(["history", "open", "apply", "approve", "confirmFindings", "profile"]);
 const busy: Partial<Record<SessionState["operation"], ErrorCode>> = { applying: "busy-applying", adding: "busy-adding", marking: "busy-marking" };
-/** Why `documents.add` is refused while another operation runs; the app tells the user the first two codes. */
+/** Why `documents.add` is refused while another operation runs; the app tells the user each of them. */
 const addRefused: Partial<Record<SessionState["operation"], ErrorCode>> = {
   planning: "add-while-approving",
   confirming: "add-while-approving",
