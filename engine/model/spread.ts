@@ -66,10 +66,18 @@ export interface Change {
 
 export const changed = (change: Change) => change.hidden + change.shown + change.retyped > 0;
 
-/** Whether a text mark already covers [start, end) on `page`. */
-const coveredText = (marks: readonly Mark[], page: PageIndex, start: number, end: number) =>
+/**
+ * Whether a text mark of the same value already holds the whole of `place`. A mark of another
+ * value, however wide, does not: the value needs a mark of its own, or approving the document
+ * would find it unmarked and stop hiding it everywhere. Nor does a mark of the same value over
+ * only part of the place, which would leave the rest of it visible.
+ */
+const markedText = (marks: readonly Mark[], { key, page, start, end }: TextPlace) =>
   marks.some(
-    ({ target }) => target.kind === "text" && target.pieces.some((piece) => piece.page === page && piece.start <= start && piece.end >= end),
+    (mark) =>
+      mark.target.kind === "text" &&
+      mark.target.pieces.some((piece) => piece.page === page && piece.start <= start && piece.end >= end) &&
+      markKey(mark) === key,
   );
 
 // Boxes are kept to a ten-thousandth of their image, so a copy laid over its own image can land a little off.
@@ -113,12 +121,12 @@ function textMark(id: number, value: HiddenValue, text: PageText, { page, start,
   return { id, type: value.type, linkId: "", isNew, target: { kind: "text", text: letters, pieces: [piece] } };
 }
 
-/** A mark of `value` at `place`, unless a mark there already covers it. */
+/** A mark of `value` at `place`, unless a mark there already holds it. */
 function placeMark(marks: readonly Mark[], value: HiddenValue, texts: readonly PageText[], place: Place, isNew: boolean): Mark | undefined {
   const id = nextId(marks);
   if (!("box" in place)) {
     const text = texts[place.page];
-    return text === undefined || coveredText(marks, place.page, place.start, place.end) ? undefined : textMark(id, value, text, place, isNew);
+    return text === undefined || markedText(marks, place) ? undefined : textMark(id, value, text, place, isNew);
   }
   if (coveredBox(marks, place.page, place.box)) return undefined;
   const image = value.image && { image: value.image };
