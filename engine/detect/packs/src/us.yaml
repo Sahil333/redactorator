@@ -68,9 +68,9 @@ rules:
     distance: 40
     notNextTo: letter-or-digit
     validator: abaRouting
-    # Before us-ein: an unlabelled number that passes this check and has an EIN prefix is named a
-    # routing number. A labelled EIN that passes it by chance is named an EIN.
-    yieldsTo: [us-ein, us-ssn, us-itin, us-passport, us-drivers-license, us-bank-account, us-provider-tax-id, health-insurance-member-id, insurance-claim-number, prescription-number]
+    # It does not give way to us-ein, whose label can reach it from the pair before. Where both
+    # are checked, this rule comes first, and the EIN stays a candidate.
+    yieldsTo: [us-ssn, us-itin, us-passport, us-drivers-license, us-bank-account, us-provider-tax-id, health-insurance-member-id, insurance-claim-number, prescription-number]
     stdnum: us.rtn
     source: "Microsoft Purview, ABA routing number: nine digits, the first two in the ranges 00-12, 21-32, 61-72 or 80, then two digits, an optional hyphen, four digits, an optional hyphen and a digit, with a checksum; found without a keyword at low confidence; Presidio aba_routing_recognizer.py: the check, weights 3, 7, 1 repeated, the sum divisible by 10. https://learn.microsoft.com/en-us/purview/sit-defn-aba-routing and https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/aba_routing_recognizer.py"
     licence: "Presidio is MIT-licensed; Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
@@ -81,6 +81,8 @@ rules:
       - { value: "0812-4637-5", line: "Bank {value}" }
       # No label, and 32 is also an EIN prefix: the routing number comes first.
       - { value: "320018471", line: "Bank {value}" }
+      # The pair before lends an EIN label: both are checked, and the routing number comes first.
+      - { value: "221483079", line: "EIN: 46-2738190 Routing No: {value}" }
     nearMisses:
       # Fails the check, and no label.
       - { value: "0812-4637-6", line: "Bank {value}" }
@@ -150,6 +152,8 @@ rules:
       - "000123456789"
       - "98765432109876543"
       - "31450092001876"
+      # The pair before lends a routing label, and the routing check fails: the routing rule gives way.
+      - { value: "123456781", line: "Routing No: 210034565 Checking Account: {value}" }
     nearMisses:
       # Too short, though labelled.
       - "12345"
@@ -186,8 +190,10 @@ rules:
     needs: labelled
     # Purview's Keyword_us_drivers_license, one spelling of each, and the abbreviations of
     # Keyword_us_drivers_license_abbreviations that name a licence; "ID" and "identification
-    # number" are left out, as Purview needs a state's name beside them.
-    labels: ["Driver's License Number", "Driver's License", "Driver's Lic", "Drivers License", "Drivers Lic", "Driver License", "Driver Lic", "DriversLicense", "DriverLicense", "DriverLic", "DL", "DLS", "DLN", "CDL", "CDLS", "LIC#"]
+    # number" are left out, as Purview needs a state's name beside them. "License Number", "License
+    # No" and "License" catch "Driver’s License" written with a curly apostrophe, which no label
+    # can hold: the fixture's font cannot write it.
+    labels: ["Driver's License Number", "Driver's License", "Driver's Lic", "Drivers License", "Drivers Lic", "Driver License", "Driver Lic", "DriversLicense", "DriverLicense", "DriverLic", "DL", "DLS", "DLN", "CDL", "CDLS", "LIC#", "License Number", "License No", "License"]
     labelSide: before
     distance: 40
     notNextTo: letter-or-digit
