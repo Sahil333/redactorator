@@ -13,11 +13,9 @@ export const readsAt = (texts: Texts, { page, start, end, text }: Pick<TextPiece
   return text !== "" && pageText !== undefined && rangeText(pageText, start, end) === text;
 };
 
-const isLost = (piece: TextPiece, texts: Texts): boolean => !readsAt(texts, piece);
-
 /** The indexes of the target's pieces whose letters are no longer at their offsets. */
 export const lostPieces = (target: TextTarget, texts: Texts): readonly number[] =>
-  target.pieces.flatMap((piece, index) => (isLost(piece, texts) ? [index] : []));
+  target.pieces.flatMap((piece, index) => (readsAt(texts, piece) ? [] : [index]));
 
 /** Whether a character can start or end a range: it is drawn, and is not a space. */
 const isEdge = (text: PageText, offset: number): boolean => {

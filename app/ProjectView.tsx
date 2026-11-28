@@ -145,6 +145,23 @@ function historyOf(
   };
 }
 
+/** The undo of a confirmed findings review, which asks first: whether it asks, and its dialog while it does. */
+function useFindingsUndo(session: Session) {
+  const [undoing, setUndoing] = useState<FindingsUndo | undefined>(undefined);
+  const dialog = undoing && (
+    <UndoFindingsDialog
+      values={undoing.values}
+      marks={undoing.marks}
+      onUndo={() => {
+        setUndoing(undefined);
+        session.history.undo(undoing.document);
+      }}
+      onCancel={() => setUndoing(undefined)}
+    />
+  );
+  return { asking: undoing !== undefined, ask: setUndoing, dialog };
+}
+
 /** Marking the open document: its marks, undo and redo, approving, and the controls the top bar shows. */
 function useEditing(
   { session, opened: { project, can, output, detection }, onAppearance }: Pick<ProjectViewProps, "session" | "opened" | "onAppearance">,
@@ -155,15 +172,16 @@ function useEditing(
   const [tool, setTool] = useState<Tool>("text");
   const [exporting, setExporting] = useState(false);
   const [lastFacts, setLastFacts] = useState<DocumentFacts | undefined>(undefined);
-  const [undoing, setUndoing] = useState<FindingsUndo | undefined>(undefined);
   const focus = useHandOffFocus(output !== undefined);
   const activeDocument = documentOf(project, active);
   const images = useImages(session, active);
   const marking = useMarks(session, shown, activeDocument?.marks ?? [], settings.customTypes);
   const waiting = marking.pending !== undefined;
   const busy = waiting || !can.apply;
-  const history = active && historyOf(session, { can, detection }, active, waiting, setUndoing);
-  useUndoKeys(history);
+  const findingsUndo = useFindingsUndo(session);
+  const history = active && historyOf(session, { can, detection }, active, waiting, findingsUndo.ask);
+  // While the undo dialog asks, the keys would act on the record behind it.
+  useUndoKeys(findingsUndo.asking ? undefined : history);
 
   const editing: Editing = {
     tool,
@@ -198,19 +216,7 @@ function useEditing(
       onClose={() => setExporting(false)}
     />
   );
-  /** The undo dialog of a confirmed findings review, while it asks. */
-  const undo = undoing && (
-    <UndoFindingsDialog
-      values={undoing.values}
-      marks={undoing.marks}
-      onUndo={() => {
-        setUndoing(undefined);
-        session.history.undo(undoing.document);
-      }}
-      onCancel={() => setUndoing(undefined)}
-    />
-  );
-  return { marking, history, editing, tool, focus, labels, undo, images };
+  return { marking, history, editing, tool, focus, labels, undo: findingsUndo.dialog, images };
 }
 
 interface DocumentPanelProps extends Omit<Parameters<typeof Workspace>[0], "handle" | "currentPage" | "onCurrentPage"> {

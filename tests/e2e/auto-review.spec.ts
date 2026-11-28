@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
 import {
   applyAndDownload,
+  approve,
   approveButton,
   fixturePath,
   inExplorer,
@@ -247,9 +248,7 @@ test("a value on the Don't hide here list is offered ticked, and confirming mark
   await openPdf(page, cardPdf);
   await chooseProfile(page, []);
   await markText(page, 1, wholeCard, "Payment card");
-  await approveButton(page).click();
-  const approval = page.getByRole("dialog", { name: /^Approve/ });
-  if (await approval.isVisible()) await approval.getByRole("button", { name: "Approve" }).click();
+  await approve(page, undefined);
   await page.getByRole("button", { name: `Don't hide ${card} on page 1 here` }).click();
   await expect(marks(page)).toHaveCount(0);
   expect(await storedField(page, "auto-card", "shown")).toEqual(["4111111111111111"]);
@@ -289,6 +288,30 @@ test("one undo, after a dialog, removes every mark the confirm made; the rejecte
   await expect(asking).toBeVisible();
   await asking.getByRole("button", { name: "Remove marks" }).click();
   await expect(marks(page)).toHaveCount(0);
+});
+
+test("while the undo dialog asks, the undo and redo keys do nothing behind it", async ({ page }) => {
+  // auto-pages.pdf's "Statement page 1" is at x 72, y 700, in 12 pt Helvetica: "Statement" ends at x 126.7.
+  const statement: PointBox = [72, 79.1, 126.7, 95.6];
+  await openApp(page);
+  await openPdf(page, pagesPdf);
+  await chooseProfile(page, []);
+  await runAuto(page, 3);
+  await confirmFindings(page, "Mark 3 values for removal?");
+  await markText(page, 1, statement, "Other");
+  await expect(marks(page)).toHaveCount(4);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(marks(page)).toHaveCount(3);
+
+  await page.keyboard.press("ControlOrMeta+z");
+  const asking = page.getByRole("dialog", { name: "Remove the 3 marks Auto mode made for 3 values?" });
+  await expect(asking).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  await asking.getByRole("button", { name: "Remove marks" }).click();
+
+  await expect(marks(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Redo" }).click();
+  await expect(marks(page)).toHaveCount(3);
 });
 
 test("approving with the findings panel open warns of the values not marked, leaves the panel open, and confirming later puts the document back in review", async ({ page }) => {

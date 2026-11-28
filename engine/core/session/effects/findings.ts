@@ -143,7 +143,8 @@ export function findingsOf({ source, allowed, view, dispatch, change }: Findings
         dispatch({ type: "findingsNotApplied", document });
         throw error;
       });
-      underWay = confirmed;
+      // Closing waits for the confirm to land, not for it to succeed.
+      underWay = confirmed.catch(() => undefined);
       return confirmed;
     },
     close(document) {
