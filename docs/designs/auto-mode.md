@@ -703,7 +703,8 @@ hit carries its own. Output: the findings. In order:
     places.
 5.  Apply the user's stored changes by key, and drop a change whose finding
     no longer exists. If two findings now have the same key, they become one;
-    the merged finding is ticked if either was.
+    the merged finding is ticked if either was. Then drop a place where a mark
+    of the finding's value, as the user changed it, already sits.
 6.  Sort by level, strongest first, then by first place (brief S38).
 
 The same input always gives the same output.
@@ -949,9 +950,11 @@ lost.
 *   So a finding lengthened where the wider text is present in 12 of its 15
     places makes 12 marks of the wider text and 3 of the value as found. The
     panel says: "Wider in 12 of 15 places."
-*   A finding confirmed with a shorter span adds the key of the value as
-    found to the document's rejected values. Otherwise every later run would
-    offer the full value again, since no mark of it exists.
+*   A value the user shortened is offered again, whole and ticked, by a later
+    run, because no mark of the whole value exists. An SSN shortened to
+    `123-45` so that its last four digits stay readable comes back as
+    `123-45-6789`. It is the user's choice to untick it again or to let it be
+    marked whole (author, 28 Nov 2026).
 *   If a shorter span makes a finding's key equal to another finding's key,
     the two become one (resolver, step 5).
 
@@ -1039,8 +1042,9 @@ The rules, in full:
     written. `Session.flush` and `Session.close` wait for both.
 *   **Ending after Confirm**: the project is saved; only if that succeeds, the
     hits file is deleted, then the state file. After a crash before the
-    deletes, the findings review reopens, the resolver finds that every hit
-    is already marked or rejected, and it ends by itself.
+    deletes, the findings review reopens with its hits and its changes. The
+    resolver finds every value already marked, as the user had changed it, or
+    rejected, and the findings review ends by itself.
 *   **Ending after Close**: the hits file is deleted, then the state file.
     After a crash between the two, the state file matches no hits file and is
     ignored. After a crash before both, the findings review is still open and
@@ -1963,6 +1967,16 @@ of the Technical Plan, that the alternative lost to.
     rule as Auto mode. The case this covered concerns older projects only,
     which is accepted while the product is at MVP stage.
 
+#### 72. Remembering a shortened value so that later runs leave it out, or offer it unticked (D11)
+
+*   **Pros**: A value shortened on purpose is not marked whole by a later
+    run that the user confirms without reading every row.
+*   **Cons**: Either the rejected list also holds values the user only
+    narrowed, or one more list is stored and one more kind of row is built.
+*   **Reason for Rejection**: Rejected by author: the whole value is offered
+    again, ticked, and reversing the earlier choice is the user's call, as it
+    is for a "Don't hide here" value (D15).
+
 ## Risks and Mitigations
 
 Each line gives the risk and either what reduces it or that its cost is
@@ -1979,6 +1993,7 @@ accepted. A missed value is the worst error, so those come first.
 | A check function fails with an error on a value that is in fact valid | The value is not offered. The error is counted in the run record, and a pack's browser test would catch a rule that fails on its own examples. Accepted |
 | The user unticks a value by mistake and confirms | It is not offered again in that document. The user marks it by hand. A view of rejected values is a future improvement |
 | Confirming marks a value the user had chosen "Don't hide here" for | It is the user's choice to reverse it (D15). Accepted by the author |
+| A later run offers, whole and ticked, a value the user had shortened; confirming without noticing removes what they kept | It is the user's choice to reverse it. Accepted by the author |
 | Where the user lengthened a finding's edge, the value as found has no mark of its own in the places that got the wider mark | It is still marked where the wider text is absent. If every place is wider, the value as found is not spread from this document: accepted |
 | A combined value and its parts are separate rows, so the panel is longer, and a user who unticks one row may not see that another row still removes the same text | Rows are sorted by evidence and then by first place, so rows that overlap usually sit together. Accepted by the author |
 | A document marked before this phase holds a wider mark with an unmarked value inside it; approving it stops hiding that value in other documents | A project made after this phase cannot reach that state (D14). Accepted while the product is at MVP stage |
@@ -2800,8 +2815,8 @@ answers with prepared hits, some of them two identifiers on one span.
     places: after confirming, two places have a mark of the wider text and
     one a mark of the value as found, and the panel said "Wider in 2 of 3
     places."
-*   Shorten an edge and see every place change. A second run does not offer
-    the full value again.
+*   Shorten an edge and see every place change. A second run offers the
+    whole value again, ticked.
 *   Make two findings equal and see one, ticked if either was.
 *   The download passes the outside checker.
 
@@ -2811,7 +2826,7 @@ answers with prepared hits, some of them two identifiers on one span.
 | `engine/model/edges.ts` | Create | The new span's normalised text, and the search for it at each place through `normalise`'s map |
 | `engine/model/resolver.ts` | Modify | Applies the chosen identifier and the edge; joins findings whose keys became equal |
 | `engine/model/findingMarks.ts` | Modify | The span at each place: the edited one where it is found, the span as found elsewhere |
-| `engine/core/session/effects/findings.ts` | Modify | `choose` and `setEdges`. A finding confirmed with a shorter span adds the key of the value as found to the rejected values |
+| `engine/core/session/effects/findings.ts` | Modify | `choose` and `setEdges` |
 | `engine/core/session/slices/findings.ts` | Modify | Stores those changes |
 | `app/FindingRow.tsx` | Modify | The identifier picker: candidates at least as strong as the default, then "Other possible types ({n})" |
 | `app/PageList.tsx`, `app/PageView.tsx` | Modify | Edge handles on the selected finding; the wider span outlined |
@@ -2986,7 +3001,7 @@ author has `test-results/review-cost.json` and the list of proposed changes.
 | G9, G11, G14, G15 | `auto-review` |
 | G10 | `auto-edit` |
 | G12 | `auto-stored` |
-| G13 | `auto-review` (a rejected value, a value already marked), `auto-stored` (a later run), `auto-edit` (a shortened value) |
+| G13 | `auto-review` (a rejected value, a value already marked), `auto-stored` (a later run) |
 | G16 | `network`, `bundle` |
 | G17 | `auto-review` and `auto-edit`, through the outside checker |
 | G19 | `test:tools` |
