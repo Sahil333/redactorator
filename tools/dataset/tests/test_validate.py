@@ -42,6 +42,16 @@ def test_an_unknown_type_is_rejected_but_a_custom_one_is_not():
     assert changed(lambda t: t["entities"][0].update(type="custom:")) != []
 
 
+def test_an_identifier_type_and_india_are_accepted():
+    def identifier_from_india(truth):
+        truth["document"].update(country="IN")
+        truth["entities"][0].update(type="in-aadhaar", value="1234 5678 9012")
+
+    assert changed(identifier_from_india) == []
+    assert changed(lambda t: t["entities"][0].update(type="us-ssn")) == []
+    assert changed(lambda t: t["document"].update(country="IND")) != []
+
+
 def test_ids_must_be_unique_and_referenced():
     assert changed(lambda t: t["entities"][1].update(id="e1")) == ["entities: id 'e1' is used twice"]
     assert changed(lambda t: t["occurrences"][0].update(entity_id="nope")) == [

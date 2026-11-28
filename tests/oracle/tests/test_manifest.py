@@ -22,8 +22,9 @@ RULES = {"strip", "flatten", "keep-redact", "rewrite", "refuse", "keep"}
 # apply-failed are reached through the fake worker, and mark-lost through edited stored text.
 REFUSALS = {"unsupported-form": "add", "prepare-failed": "add", "encrypted": "add", "open-failed": "add",
             "extra-text-removed": "preview", "partly-covered-drawing": "preview"}
-# The types a mark can take, by the label the app shows: the dataset's entity types.
-MARK_TYPES = {kind["title"] for kind in json.loads((ROOT / "dataset/ground-truth.schema.json").read_text())["$defs"]["entityType"]["oneOf"]}
+# The types a mark can take, by the label the app shows: the dataset's general types and identifiers.
+SCHEMA_TYPES = json.loads((ROOT / "dataset/ground-truth.schema.json").read_text())["$defs"]
+MARK_TYPES = {kind["title"] for types in ("generalType", "identifierType") for kind in SCHEMA_TYPES[types]["oneOf"]}
 
 
 def is_box(value: object) -> bool:

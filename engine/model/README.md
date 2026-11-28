@@ -107,8 +107,8 @@ uses them yet.
 ### Marks and mark types
 
 - `markTypes.ts`: `MarkType`, `MarkTypeOption`, `builtInMarkTypes` (read from
-  the schema's `$defs.entityType.oneOf`), `customMarkType`, `customTypeName`,
-  `markTypeLabel`.
+  the schema's `$defs.generalType.oneOf`, then `$defs.identifierType.oneOf`),
+  `generalTypeIds`, `customMarkType`, `customTypeName`, `markTypeLabel`.
 - `marks.ts`: `TextPiece` (with `text`, its letters), `MarkTarget`, `TextTarget`, `Mark`, `nextId`,
   `markKey`, `itemKey`, `markPages`, `boxesOn`, `firstPage`, `markName`,
   `toEdits`.
