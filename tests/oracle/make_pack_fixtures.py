@@ -11,12 +11,16 @@ section 9). Every value is synthetic.
 A rule's `stdnum` names a python-stdnum module: each example must pass its `is_valid`, and each
 near-miss must fail it.
 
-Run: uv run --project tests/oracle python tests/oracle/make_pack_fixtures.py [--check]
+The files are not committed: `pnpm packs`, which `pnpm build`, `pnpm dev` and the tests run
+first, writes them.
+
+Run: uv run --project tests/oracle python tests/oracle/make_pack_fixtures.py
 """
 
 import importlib
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -145,22 +149,14 @@ def outputs() -> dict[str, bytes]:
     return files
 
 
-def main(check: bool) -> int:
+def main() -> int:
     try:
         files = outputs()
     except FixtureError as error:
         print(error, file=sys.stderr)
         return 1
-    present = {path.name for path in OUT.glob("*")} if OUT.exists() else set()
-    if check:
-        wrong = [name for name, data in files.items() if not (OUT / name).exists() or (OUT / name).read_bytes() != data]
-        wrong += sorted(present - files.keys())
-        for name in wrong:
-            print(f"fixtures/packs/{name} is not what make_pack_fixtures.py writes: run `pnpm packs` and commit the result", file=sys.stderr)
-        return 1 if wrong else 0
-    OUT.mkdir(exist_ok=True)
-    for name in present - files.keys():
-        (OUT / name).unlink()
+    shutil.rmtree(OUT, ignore_errors=True)
+    OUT.mkdir()
     for name, data in files.items():
         (OUT / name).write_bytes(data)
         print(f"wrote fixtures/packs/{name}")
@@ -168,4 +164,4 @@ def main(check: bool) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main("--check" in sys.argv))
+    sys.exit(main())

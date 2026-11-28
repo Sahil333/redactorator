@@ -1262,9 +1262,11 @@ Alternatives Considered; each alternative's heading names its decision.
 *   The compiler is a TypeScript tool under `tools/packs/`. It has to be
     JavaScript, because it compiles every pattern with the same `RegExp` the
     app uses, so a pattern the browser would refuse fails the build.
-*   The compiled JSON is committed, and `pnpm test:tools` runs the compiler
-    with `--check`, which fails when the JSON is out of date, as
-    `tools/arlington/generate.py --check` already does.
+*   The compiled JSON is not committed (author, 28 Nov 2026, in slice P0's
+    review; first planned as committed and checked with `--check`).
+    `pnpm build`, `pnpm dev`, `pnpm test` and `pnpm test:coverage` run
+    `pnpm packs` first, so a rule that fails a check fails the build, and the
+    pack fixtures are written the same way.
 *   The compiler also checks each rule's fields, that its identifier is in
     the dataset schema, that its validator and list exist, and that its
     pattern is not a slow shape. It writes the index file that imports every
@@ -2488,13 +2490,11 @@ declares `crypto` and `TextDecoder` itself and would clash with Node's types.
 | `packs` | `pnpm build:tools && node tools/.build/compile.mjs && uv run --project tests/oracle python tests/oracle/make_pack_fixtures.py` | P0 |
 | `typecheck` | gains `tsc -p engine/detect-protocol && tsc -p engine/detect && tsc -p engine/detect/tsconfig.worker.json` | W1 |
 | `typecheck` | gains `tsc -p tools` | P0 |
-| `test:tools` | gains `pnpm build:tools && node tools/.build/compile.mjs --check && uv run --project tests/oracle python tests/oracle/make_pack_fixtures.py --check` | P0 |
+| `build`, `dev`, `test`, `test:coverage` | each start with `pnpm packs`; the compiled packs and the pack fixtures are not committed | P0 |
 | `report:review-cost` | `playwright test --grep @report` | Z1 |
 
-`--check` on the compiler fails when the committed JSON differs from what it
-would write. `--check` on the fixture generator fails when a committed PDF or
-truth file differs from what it would write, and when a positive example fails
-python-stdnum's check or a near-miss passes it. The generator's own tests run
+The fixture generator fails when a positive example fails python-stdnum's
+check or a near-miss passes it. The generator's own tests run
 with the existing `uv run --project tests/oracle python -m pytest tests/oracle
 -q`. The golden files are recorded with `GOLDEN_UPDATE=1 pnpm exec playwright
 test golden`.

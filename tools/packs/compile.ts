@@ -1,9 +1,9 @@
 // The pack compiler (docs/designs/auto-mode.md, decision D4): reads every pack's YAML source and
 // every list, checks them, and writes the compiled JSON and the index the detection worker
-// imports. With --check it writes nothing and fails when the committed files differ from what it
-// would write. How to add a rule: tools/packs/README.md.
+// imports. Its output is not committed: `pnpm build`, `pnpm dev` and the tests write it first.
+// How to add a rule: tools/packs/README.md.
 //
-// Run: pnpm packs (which builds this file first), or node tools/.build/compile.mjs [--check].
+// Run: pnpm packs (which builds this file first), or node tools/.build/compile.mjs.
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -189,36 +189,14 @@ function compiledFiles(): Map<string, string> {
   return files;
 }
 
-function filesIn(folder: string): string[] {
-  return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? filesIn(join(folder, entry.name)) : [join(folder, entry.name)]));
-}
-
-function committed(path: string): string | undefined {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-}
-
-/** For --check: each committed file that differs from what the compiler writes, or that it does not write. */
-function reportDifferences(files: ReadonlyMap<string, string>, stale: readonly string[]): void {
-  for (const [path, text] of files) if (committed(path) !== text) problemIn(path)("differs from what the compiler writes: run `pnpm packs` and commit the result");
-  for (const path of stale) problemIn(path)("is not written by the compiler: run `pnpm packs`, which removes it");
-}
-
 function main(): void {
-  const check = process.argv.includes("--check");
   checkNegativeControl();
   const files = compiledFiles();
-  const stale = filesIn(outFolder).filter((path) => !files.has(path));
-  if (check) reportDifferences(files, stale);
   if (problems.length > 0) {
     for (const problem of problems) console.error(problem);
     process.exit(1);
   }
-  if (check) return;
-  for (const path of stale) rmSync(path);
+  rmSync(outFolder, { recursive: true, force: true });
   for (const [path, text] of files) {
     mkdirSync(join(path, ".."), { recursive: true });
     writeFileSync(path, text);

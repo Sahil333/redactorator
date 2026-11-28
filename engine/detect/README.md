@@ -48,8 +48,8 @@ one is in [tools/packs/README.md](../../tools/packs/README.md).
   `verhoeff`, `mod97`, `weightedSum`); and `index.ts:validators`, every export
   of the nine files by name, with the `Validator` type.
 - `packs/src/`, `packs/lists/`: the YAML sources of the nine packs and six
-  lists. `packs/generated/`: what the compiler writes from them, never edited
-  by hand: a JSON file per pack and per list, and `index.ts` with
+  lists. `packs/generated/`: what the compiler writes from them, not
+  committed (`pnpm build`, `pnpm dev` and the tests write it first): a JSON file per pack and per list, and `index.ts` with
   `compiledPacks` (by id) and `compiledLists` (by name).
 
 ## Invariants

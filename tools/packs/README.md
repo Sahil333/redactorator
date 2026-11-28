@@ -19,14 +19,16 @@ recognizer (`engine/detect/patternRecognizer.ts`).
 ## Interface
 
 ```
-pnpm packs            # compile, then regenerate fixtures/packs/; commit what changes
-pnpm test:tools       # includes both with --check: fails when a committed file is out of date
+pnpm packs            # compile, then regenerate fixtures/packs/
 ```
 
 `pnpm packs` builds the compiler with Vite (`tools/vite.config.ts`, into
-`tools/.build/`, which git ignores), runs `node tools/.build/compile.mjs`, then
-the generator. Both take `--check`, which writes nothing and fails when a
-committed file differs from what they would write.
+`tools/.build/`), runs `node tools/.build/compile.mjs`, then the generator.
+What they write is not committed: `engine/detect/packs/generated/` and
+`fixtures/packs/` are in `.gitignore`, and `pnpm build`, `pnpm dev`, `pnpm test`
+and `pnpm test:coverage` run `pnpm packs` first. A rule that fails a check
+therefore fails the build. Python and `uv` are needed to build the app, for the
+generator.
 
 - `compile.ts`: reads, checks, writes. It prints every problem it finds, one
   per line, as `<file>, rule <id>: <problem>`, and exits 1.
@@ -47,11 +49,12 @@ committed file differs from what they would write.
    pack is the one `engine/model/identifiers.ts` gives the identifier. The order
    of rules in a pack matters: it breaks a tie between two identifiers with the
    same evidence on one span.
-3. Run `pnpm packs`, then the pack's browser test:
-   `COVERAGE=1 pnpm exec playwright test packs`. It fails until the rule finds
+3. Run the pack's browser test: `pnpm test:coverage packs`, which runs
+   `pnpm packs` first. It fails until the rule finds
    every example and no near-miss. The browser tests share the port
    127.0.0.1:4173 across worktrees; wait until it is free.
-4. Commit the YAML, `engine/detect/packs/generated/`, and `fixtures/packs/`.
+4. Commit the YAML (and any validator or list). The compiled files and the
+   fixtures are written by every build and are not committed.
 
 ### A rule's fields
 
@@ -199,7 +202,6 @@ The compiler:
 | `list names ..., which is not a list with entries` | Fill the list, or fix its name |
 | `companion must name another rule ...` / `yieldsTo names ...` | The rule id does not exist, is the rule itself, or (for a companion) is in another pack or has a companion of its own |
 | `the rule id ... is used twice` | Rule ids are unique across all packs |
-| `differs from what the compiler writes` (`--check`) | Run `pnpm packs` and commit |
 | `the worker could not read this pack` | The compiler and `engine/detect/recognizer.ts:parsePack` disagree: a fault in this tool |
 
 The generator:
@@ -209,7 +211,6 @@ The generator:
 | `the example ... fails stdnum.<module>` | The example is not a valid value; fix it |
 | `the near-miss ... passes stdnum.<module>` | The near-miss is a valid value; make it fail the check |
 | `the character ... cannot be written in the fixture's font` | Use printable ASCII, the en dash, the minus sign or the no-break space |
-| `is not what make_pack_fixtures.py writes` (`--check`) | Run `pnpm packs` and commit |
 
 The browser test, `packs.spec.ts`, lists the examples missed and the
 near-misses found, and every other row.
@@ -227,12 +228,13 @@ near-misses found, and every other row.
 
 ## Side Effects
 
-- `compile.mjs` writes and removes files under
-  `engine/detect/packs/generated/` only; the generator under `fixtures/packs/`
-  only. Neither makes a network request.
+- `compile.mjs` replaces `engine/detect/packs/generated/` whole, and the
+  generator `fixtures/packs/`, each only when every check passes. Neither
+  makes a network request.
 
 ## Verification
 
-- `pnpm test:tools` runs both with `--check` and the generator's tests
+- `pnpm packs`, at the start of `pnpm test`, runs every check of both tools.
+  `pnpm test:tools` runs the generator's tests
   (`tests/oracle/tests/test_make_pack_fixtures.py`).
 - `pnpm test:coverage` runs `tests/e2e/packs.spec.ts` and `bundle.spec.ts`.
