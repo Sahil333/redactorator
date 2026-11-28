@@ -182,7 +182,9 @@ rules:
     pattern: '([A-Z9]{5}\d{6}[A-Z9]{2}[A-Z0-9]{3}(?:\d{2})?)'
     value: 1
     needs: labelled
-    labels: ["Driving licence number", "Driving licence no", "Driving licence", "Driving license", "Driver's licence", "Driver's license", "Licence number", "License number", "DL number", "DL no", "DVLA"]
+    # "Licence" and "License" alone also match "Driver’s licence" written with a curly apostrophe,
+    # which "Driver's licence" does not.
+    labels: ["Driving licence number", "Driving licence no", "Driving licence", "Driving license", "Driver's licence", "Driver's license", "Licence number", "License number", "Licence", "License", "DL number", "DL no", "DVLA"]
     labelSide: before
     distance: 40
     notNextTo: letter-or-digit
