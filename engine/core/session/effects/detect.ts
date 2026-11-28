@@ -70,8 +70,8 @@ function hitsPerRule(hits: readonly Hit[]): RunRecord["hitsPerRule"] {
 /**
  * Runs of Auto mode, behind the gate: one at a time in a project, each searching one document's
  * stored page texts page by page in the detection worker. The pages that answered keep their hits
- * however the run ends. `end` stops a run and ends the worker, as the Session closes, and
- * resolves once that run has ended.
+ * however the run ends; a run that failed before any did leaves the `run-failed` notice. `end`
+ * stops a run and ends the worker, as the Session closes, and resolves once that run has ended.
  */
 export function detectionOf({ source, allowed, dispatch, client, ended }: DetectionHost): Session["detection"] & { end(): Promise<void> } {
   let underWay: Promise<void> = Promise.resolve();
@@ -100,7 +100,8 @@ export function detectionOf({ source, allowed, dispatch, client, ended }: Detect
     const notSearched = pages.flatMap(({ index }) => (searched.has(index) ? [] : [index]));
     const record: RunRecord = { run, ...result, profile, pages: pages.length, notSearched, hitsPerRule: hitsPerRule(hits), errors };
     dispatch({ type: "runEnded", document, record });
-    ended(document, record, hits);
+    if (searched.size === 0 && result.code !== undefined) dispatch({ type: "noticeSet", document, notice: { kind: "run-failed", code: result.code } });
+    else ended(document, record, hits);
   }
 
   return {

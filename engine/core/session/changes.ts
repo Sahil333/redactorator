@@ -90,6 +90,7 @@ export type SessionChange =
       readonly document: DocumentId;
       readonly run: string;
       readonly hits: readonly Hit[];
+      readonly ended: RunRecord["ended"];
       readonly notSearched: readonly PageIndex[];
       readonly changes: ReadonlyMap<string, FindingChange>;
       readonly findings: readonly Finding[];

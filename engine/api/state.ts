@@ -1,6 +1,7 @@
 import type { Change, Reach } from "../model/spread";
 import type { DocumentId, Project, Settings } from "../model/project";
 import type { PageModel, RemovalKind } from "../model/document";
+import type { RunRecord } from "../model/detection";
 import type { ReaderErrorCode } from "../model/errors";
 import type { Finding } from "../model/findings";
 import type { PageIndex } from "../model/geometry";
@@ -90,10 +91,11 @@ export interface SessionState {
 export interface DocumentDetection {
   /** While running: the page being searched, of `pages`. */
   readonly run: { readonly state: "idle" } | { readonly state: "running"; readonly page: number; readonly pages: number };
-  /** Present while a findings review is open; `notSearched`: the pages a run that ended early did not reach. */
-  readonly findings?: { readonly findings: readonly Finding[]; readonly notSearched: readonly PageIndex[] };
+  /** Present while a findings review is open; `ended`: how its run ended; `notSearched`: the pages a run that ended early did not reach. */
+  readonly findings?: { readonly findings: readonly Finding[]; readonly ended: RunRecord["ended"]; readonly notSearched: readonly PageIndex[] };
+  /** About the last run, when it opened no findings review: it had nothing to offer, it searched no page because of `code`, or its review was dropped. */
   readonly notice?:
-    | { readonly kind: "nothing-found"; readonly notSearched: readonly PageIndex[] }
+    | { readonly kind: "nothing-found"; readonly ended: RunRecord["ended"]; readonly notSearched: readonly PageIndex[] }
     | { readonly kind: "run-failed"; readonly code: ErrorCode }
     | { readonly kind: "dropped"; readonly reason: "reader-changed" | "text-changed" };
   /** What undo on this document takes back: an edit, or a confirmed findings review and its counts. Absent when there is nothing to undo. */

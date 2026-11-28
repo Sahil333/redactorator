@@ -77,7 +77,10 @@ The app has three screens:
   row's `data-text`, `data-identifier` and `data-places` give tests the value,
   its identifier id and its number of places.
 - `runLine`, `NotSearched` (RunNotices.tsx): the lines about a run from the
-  design's wording table, beside the Run control and in the panel.
+  design's wording table, beside the Run control and in the panel: "Stopped."
+  or, for a failure, "The run ended early because of an error.", with the
+  pages not searched; for a run that searched no page, the sentence for its
+  code from `errors.ts`.
 - `Menu`, `MenuItem` (Menu.tsx): a ⋯ button and its menu of items, for
   projects on Home and for the Run control.
 - `ProfileChooser` (ProfileChooser.tsx): the dialog that asks which countries

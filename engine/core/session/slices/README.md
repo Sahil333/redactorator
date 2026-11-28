@@ -58,8 +58,8 @@ and the facade do that.
     clears.
 - `findings.ts`
   - `FindingsPart`: per document with an open findings review, its
-    `OpenFindings`: the run's id, hits and pages not searched, the user's
-    changes by finding key, and the resolver's findings.
+    `OpenFindings`: the run's id, hits, how it ended and pages not searched,
+    the user's changes by finding key, and the resolver's findings.
   - `firstFindings`, `findings(part, change)`: `findingsOpened` opens a
     findings review, `findingsResolved` replaces its findings, and
     `findingsClosed` ends it.

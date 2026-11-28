@@ -57,3 +57,6 @@ stops the client.
 
 - Run: `pnpm test`. `tests/e2e/auto-run.spec.ts` drives the client from the
   app, with the real worker and with a fake one that never answers a page.
+  `tests/e2e/auto-failures.spec.ts` drives it with fake workers that cannot
+  start, cannot load their packs, fail on a page or stop answering, and runs
+  again after each failure that opens no panel.
