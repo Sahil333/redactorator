@@ -206,7 +206,9 @@ rules:
     pattern: '([A-Za-z]{3}\d{7})'
     value: 1
     needs: labelled
-    labels: ["EPIC No", "EPIC Number", "EPIC", "Voter ID", "Voter ID No", "Elector's Photo Identity Card"]
+    # "Photo Identity Card" also matches a page that writes "Elector’s" with a curly apostrophe,
+    # which the straight one in "Elector's" does not.
+    labels: ["EPIC No", "EPIC Number", "EPIC", "Voter ID", "Voter ID No", "Elector's Photo Identity Card", "Photo Identity Card"]
     labelSide: before
     distance: 40
     notNextTo: letter-or-digit
