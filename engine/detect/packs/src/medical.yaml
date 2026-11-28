@@ -38,8 +38,9 @@ rules:
     pattern: '((?=(?:[A-Za-z0-9]{sep?}){5}[A-Za-z0-9])(?=[A-Za-z0-9-]{0,40}\d)[A-Za-z0-9]{1,20}(?:(?:-|(?<=\d){sep}(?=\d))[A-Za-z0-9]{1,20}){0,6})'
     value: 1
     needs: labelled
-    # Presidio's context words as labels, and the CMS-1500's box 1a.
-    labels: ["Member ID", "Member Number", "Member No", "Member", "Subscriber ID", "Subscriber Number", "Subscriber", "Policy Number", "Policy No", "Policy ID", "Insurance ID", "Insured's ID Number", "Insured's I.D. Number"]
+    # Presidio's context words as labels, and the CMS-1500's box 1a. "Insured" catches "Insured’s"
+    # written with a curly apostrophe, which no label can hold: the fixture's font cannot write it.
+    labels: ["Member ID", "Member Number", "Member No", "Member", "Subscriber ID", "Subscriber Number", "Subscriber", "Policy Number", "Policy No", "Policy ID", "Insurance ID", "Insured's ID Number", "Insured's I.D. Number", "Insured"]
     labelSide: before
     distance: 40
     notNextTo: letter-or-digit
