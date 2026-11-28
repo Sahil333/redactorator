@@ -5,13 +5,11 @@ import type { PageText } from "../../../model/document";
 import type { Hit } from "../../../model/findings";
 import { isPageIndex, type PageIndex } from "../../../model/geometry";
 import type { DocumentId, ProjectDocument } from "../../../model/project";
-import { READER_TAG } from "../../../pdf-protocol/messages";
 import type { DetectionClient } from "../../detect-client/client";
-import { findOriginal, readTexts } from "../../stored/projects";
 import type { SessionChange } from "../changes";
 import type { SessionView } from "../gate";
 import type { FindingsReview } from "./findings";
-import type { ReadingSource } from "./readings";
+import { storedTexts, type ReadingSource } from "./readings";
 
 /** What a run of Auto mode uses: the Session's gate, its project's stored page texts, how changes land, the detection worker, and the findings review it hands an ended run to. */
 interface DetectionHost {
@@ -27,7 +25,6 @@ type Ended = Awaited<ReturnType<DetectionClient["run"]>>;
 
 const done: Result<void> = { ok: true, value: undefined };
 const noProfile: Result<never> = { ok: false, error: { code: "no-profile" } };
-const busyUpdating: Result<never> = { ok: false, error: { code: "busy-updating" } };
 // The client resolves every run; a rejection is a fault in it, and ends the run as the worker failing would.
 const failed: Ended = { ended: "failed", code: "detector-failed", packs: [] };
 
@@ -41,24 +38,13 @@ const workerChars = ({ chars }: PageText): string[] => chars.map(({ c, box }) =>
 
 /**
  * `document`'s page texts as this build stored them, each page as the characters the client
- * sends. Missing or damaged texts start the update that prepares the document again; a document
- * whose original is gone cannot be prepared, and says so.
+ * sends. Missing or damaged texts start the update that prepares the document again.
  */
 async function storedPages(source: ReadingSource, document: ProjectDocument): Promise<Result<Pages>> {
-  const { store, folder } = source;
-  const missing: Result<never> = { ok: false, error: { code: "original-missing", data: { file: document.file } } };
-  try {
-    const texts = await readTexts(store, folder, READER_TAG, document);
-    if (texts !== undefined && typeof texts !== "string") {
-      return { ok: true, value: texts.pages.flatMap((text, index) => (isPageIndex(index) ? [{ index, chars: workerChars(text) }] : [])) };
-    }
-    if ((await findOriginal(store, folder, document)) === undefined) return missing;
-  } catch {
-    // As opening the document does: a folder that cannot be read is told as its original missing.
-    return missing;
-  }
-  source.unavailable();
-  return busyUpdating;
+  const texts = await storedTexts(source, document);
+  if (texts.ok) return { ok: true, value: texts.value.flatMap((text, index) => (isPageIndex(index) ? [{ index, chars: workerChars(text) }] : [])) };
+  if (texts.error.code === "busy-updating") source.unavailable();
+  return texts;
 }
 
 function hitsPerRule(hits: readonly Hit[]): RunRecord["hitsPerRule"] {

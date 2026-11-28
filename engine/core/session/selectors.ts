@@ -65,13 +65,13 @@ function documentStatus({ parts }: SessionView): ReadonlyMap<DocumentId, Documen
 function documentDetection(view: SessionView, document: DocumentId): DocumentDetection {
   const { run, notice } = view.parts.detection.get(document) ?? { run: { state: "idle" } };
   const open = view.parts.findings.get(document);
+  const nextUndo = stepsOf(view.parts.record, document).pastTags.at(-1);
   const allows = (command: Parameters<typeof gate>[1]) => gate(view, command, document) === undefined;
   return {
     run,
     ...(open === undefined ? {} : { findings: { findings: open.findings, notSearched: open.notSearched } }),
     ...(notice === undefined ? {} : { notice }),
-    // Every undo step is an edit until a findings review can be confirmed.
-    ...(canStep(view, document, "undo") ? { nextUndo: { kind: "edit" } } : {}),
+    ...(nextUndo === undefined ? {} : { nextUndo }),
     can: { run: allows("run"), stop: run.state === "running" && allows("stop"), confirm: allows("confirmFindings"), close: allows("closeFindings") },
   };
 }

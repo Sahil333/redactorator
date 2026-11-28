@@ -64,18 +64,28 @@ The app has three screens:
   run "Searching page {a} of {b}" and Stop. The first Run on a project with no
   profile is refused with `no-profile`, and the control answers by opening the
   chooser, whose answer is stored before the run starts.
-- `useFindings`, `Findings` (useFindings.ts): reads `detection` from the state
-  for the open document and the project's run in progress, and wraps
-  `detection.run` and `detection.stop`. It keeps the sentence for a refused
-  Run, and whether the chooser must ask for a profile first.
+- `useFindings`, `Findings`, `OpenReview` (useFindings.ts): reads `detection`
+  from the state for the open document and the project's run in progress, and
+  wraps `detection.run` and `detection.stop`, and for the open findings review
+  `findings.setTicked`, `confirm` and `close`. It keeps the sentence for a
+  refused Run, Confirm or Close, and whether the chooser must ask for a profile
+  first.
 - `FindingsPanel` (FindingsPanel.tsx): the open findings review, in the marks
   panel's place: "Found values", the instruction line, the line about pages
-  not searched, the rows, and Close and the confirm button, both disabled
-  until slice R1.
-- `FindingRow` (FindingRow.tsx): one found value: its tick (disabled until R1),
-  its exact text, its identifier's name, its places and why it was found. The
-  row's `data-text`, `data-identifier` and `data-places` give tests the value,
-  its identifier id and its number of places.
+  not searched, the rows, Close and the confirm button, whose label states the
+  result ("Mark 3 values for removal", or with nothing ticked "Keep all 3
+  values in the file"). Each opens its dialog first; the state's
+  `can.confirm` and `can.close` enable them.
+- `FindingRow` (FindingRow.tsx): one found value: its tick, its exact text,
+  its identifier's name, its places and why it was found. The row's
+  `data-text`, `data-identifier` and `data-places` give tests the value, its
+  identifier id and its number of places.
+- `AskDialog` (AskDialog.tsx): a modal dialog in the centre of the view that
+  asks one question, with Cancel first. `ConfirmFindingsDialog`,
+  `CloseFindingsDialog` and `UndoFindingsDialog` ask before a findings review
+  is confirmed, closed, or its marks undone, in the design's wording.
+  `ProjectView` opens the undo dialog in place of undoing when the state's
+  `nextUndo` is a findings review, from the Undo button and from the keys.
 - `runLine`, `NotSearched` (RunNotices.tsx): the lines about a run from the
   design's wording table, beside the Run control and in the panel.
 - `Menu`, `MenuItem` (Menu.tsx): a ⋯ button and its menu of items, for
@@ -87,9 +97,10 @@ The app has three screens:
   `purpose` is `project` (stored with `profile.set`) or `run` (the first run's,
   or one run's). A refusal keeps it open with its sentence.
 - `ApproveDialog` (ApproveDialog.tsx): the heads-up shown while an
-  `ApprovalPlan` waits: where the approval spreads, and under "Removed from this
-  file" the plan's `removed` kinds, one line each in the design's Appendix A.3
-  words and order. It confirms or cancels the plan.
+  `ApprovalPlan` waits: where the approval spreads, how many found values of
+  the document's open findings review stay unmarked, and under "Removed from
+  this file" the plan's `removed` kinds, one line each in the design's
+  Appendix A.3 words and order. It confirms or cancels the plan.
 - `CheckedBanner`, `ReviewBanner`, `LabelExport`, `AppearanceSettings`: the
   output banner, a walk through new marks brought in by another document's
   approval, the ground-truth label form, and the box appearance settings (box

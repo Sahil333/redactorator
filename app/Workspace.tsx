@@ -16,12 +16,13 @@ import { Splitter } from "./Splitter";
 import { Thumbnails, thumbnailsWidth } from "./Thumbnails";
 import type { EngineError } from "../engine/api/errors";
 import type { Session } from "../engine/api/facade";
-import type { DocumentDetection, DocumentHandle } from "../engine/api/state";
+import type { DocumentHandle } from "../engine/api/state";
 import { errorText } from "./errors";
 import { FindingsPanel } from "./FindingsPanel";
 import { usePageImages } from "./usePageImages";
 import { useZoom } from "./useZoom";
 import { ZoomControls } from "./ZoomControls";
+import type { OpenReview } from "./useFindings";
 import type { Marks } from "./useMarks";
 
 const THUMBNAILS_ID = "thumbnails";
@@ -77,7 +78,7 @@ interface WorkspaceProps {
   readonly onDismissError: () => void;
   readonly marks: Marks;
   /** The document's open findings review, shown in the marks panel's place. */
-  readonly findings: DocumentDetection["findings"];
+  readonly findings: OpenReview | undefined;
   readonly review: Review;
   /** The document's images a box can spread over; undefined until they are read. */
   readonly images: readonly PlacedImage[] | undefined;

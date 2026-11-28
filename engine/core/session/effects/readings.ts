@@ -1,5 +1,6 @@
 // What spreading searches: each document's reading (its pages' text and images) as this build
 // stored it in the tag folder, and where the PDF worker finds values in the text.
+import type { Result } from "../../../api/errors";
 import type { PageText, PlacedImage, Reading } from "../../../model/document";
 import type { DocumentId, ProjectDocument } from "../../../model/project";
 import type { TextPlace } from "../../../model/spread";
@@ -61,4 +62,23 @@ export async function findPlaces(
     const value = keys[key];
     return id === undefined || value === undefined ? [] : [{ document: id, key: value, page, start, end }];
   });
+}
+
+/**
+ * `document`'s page texts as this build stored them. Refused with `busy-updating` when they are
+ * missing or damaged, for the caller to start the update that prepares the document again; a
+ * document whose original is gone cannot be prepared, and says so.
+ */
+export async function storedTexts(source: Pick<ReadingSource, "store" | "folder">, document: ProjectDocument): Promise<Result<readonly PageText[]>> {
+  const { store, folder } = source;
+  const missing: Result<never> = { ok: false, error: { code: "original-missing", data: { file: document.file } } };
+  try {
+    const texts = await readTexts(store, folder, READER_TAG, document);
+    if (texts !== undefined && typeof texts !== "string") return { ok: true, value: texts.pages };
+    if ((await findOriginal(store, folder, document)) === undefined) return missing;
+  } catch {
+    // As opening the document does: a folder that cannot be read is told as its original missing.
+    return missing;
+  }
+  return { ok: false, error: { code: "busy-updating" } };
 }

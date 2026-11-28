@@ -22,8 +22,12 @@ and the facade do that.
     every slice returns its part unchanged.
 - `history.ts`
   - `HistoryPart<P>`: `present` (the wrapped part) and `steps`, a per-document
-    map of `past` and `future` `Edits` snapshots.
-  - `history(inner, undoable)`: wraps a slice with per-document undo and redo.
+    map of `past` and `future` `Edits` snapshots, with `pastTags` and
+    `futureTags` beside them: each snapshot's `StepTag` at the same place.
+  - `StepTag`: what a step undoes, `{ kind: "edit" }` or
+    `{ kind: "findings", values, marks }` (the published `nextUndo`).
+  - `history(inner, undoable)`: wraps a slice with per-document undo and redo;
+    `undoable` names the document an undoable change changes and its tag.
   - `withNoHistory(present)`, `stepsOf(part, document)`.
 - `marks.ts`
   - `MarksPart`: `project` (the project record as saved) and `edits`, a
@@ -61,8 +65,9 @@ and the facade do that.
     `OpenFindings`: the run's id, hits and pages not searched, the user's
     changes by finding key, and the resolver's findings.
   - `firstFindings`, `findings(part, change)`: `findingsOpened` opens a
-    findings review, `findingsResolved` replaces its findings, and
-    `findingsClosed` ends it.
+    findings review, `findingChanged` merges the user's change into its
+    changes, `findingsResolved` replaces its findings, and `findingsApplied`
+    and `findingsClosed` end it.
 
 ## Invariants
 
@@ -72,13 +77,19 @@ and the facade do that.
   nor `approved`: an undoable change always records a snapshot and returns a
   new part, even when the wrapped slice changed nothing, and `approved` always
   returns a new part.
-- `markAdded` also drops the lost marks it `replaces`, which the facade
-  works out: the document's lost marks of the same letters on a page the new
-  mark shares (`facade.ts:markedAgain`; CUJ 7).
-- Only `markAdded`, `markRetyped`, `markRemoved` and `keptHere` are undoable
-  (`index.ts:isUndoable`). `linked` is labelling data: it is not undone, does
-  not count as an edit and leaves the document's review state alone
-  (`marks.ts:edited`, `marks.ts:withEdits` with `kind: "label"`).
+- `markAdded` and `findingsApplied` also drop the lost marks they `replace`,
+  which the facade and the findings effect work out: the document's lost marks
+  of the same letters on a page a new mark shares (`engine/model/marks.ts:markedAgain`;
+  CUJ 7).
+- Only `markAdded`, `markRetyped`, `markRemoved` and `keptHere`, tagged
+  `edit`, and `findingsApplied` with marks, tagged `findings` with its counts,
+  are undoable (`index.ts:isUndoable`). `linked` is labelling data, and
+  `findingsApplied` with no marks only adds rejected values: neither is undone,
+  counts as an edit or changes the document's review state (`marks.ts:edited`,
+  `marks.ts:withEdits` with `kind: "note"`).
+- `findingsApplied` adds its marks and its `rejected` keys not yet in the
+  document's `rejected` list. An undo restores marks and `shown` only, so
+  rejected values stay rejected (`marks.ts:withEdits`).
 - An undoable change records a snapshot of the document's `marks` and `shown`
   before it, clears that document's redo, and keeps at most `HISTORY_LIMIT`
   (100) snapshots per document (`history.ts:history`).
@@ -115,7 +126,8 @@ and the facade do that.
   `saveFailed` set `"saved"` and `"failed"`.
 - `operation` moves only on the changes listed in `operation.ts:operationAfter`
   (for example `planned` to `"confirming"`, `applyStarted` to `"applying"`,
-  `findingsApplying` to `"marking"`, `findingsApplied` back to `"idle"`).
+  `findingsApplying` to `"marking"`, `findingsApplied` and
+  `findingsNotApplied` back to `"idle"`).
 - `profileSet` sets the project's profile. It is not an edit: it is not
   undone, raises no edit counter and leaves every review state alone. It and
   `findingsApplied` change the project record, so they are saved

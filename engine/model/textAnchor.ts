@@ -7,10 +7,13 @@ import { contains, rangeText } from "./pageText";
 
 type Texts = ReadonlyMap<PageIndex, PageText>;
 
-const isLost = (piece: TextPiece, texts: Texts): boolean => {
-  const text = texts.get(piece.page);
-  return piece.text === "" || text === undefined || rangeText(text, piece.start, piece.end) !== piece.text;
+/** Whether `text` still reads at its offsets on its page, as `rangeText` reads them. Empty text is unknown, so it never does. */
+export const readsAt = (texts: Texts, { page, start, end, text }: Pick<TextPiece, "page" | "start" | "end" | "text">): boolean => {
+  const pageText = texts.get(page);
+  return text !== "" && pageText !== undefined && rangeText(pageText, start, end) === text;
 };
+
+const isLost = (piece: TextPiece, texts: Texts): boolean => !readsAt(texts, piece);
 
 /** The indexes of the target's pieces whose letters are no longer at their offsets. */
 export const lostPieces = (target: TextTarget, texts: Texts): readonly number[] =>

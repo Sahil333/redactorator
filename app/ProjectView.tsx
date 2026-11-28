@@ -12,7 +12,7 @@ import { NotAdded } from "./NotAdded";
 import type { DocumentId, Project, ProjectDocument, Settings } from "../engine/model/project";
 import type { Refusal } from "../engine/api/errors";
 import type { Session } from "../engine/api/facade";
-import type { DocumentHandle, EngineState, SessionState } from "../engine/api/state";
+import type { DocumentDetection, DocumentHandle, EngineState, SessionState } from "../engine/api/state";
 import type { Appearance } from "../engine/model/document";
 import { TopBar, type Editing, type History } from "./TopBar";
 import { engineStatus } from "./engineStatus";
@@ -25,6 +25,7 @@ import { useMarks } from "./useMarks";
 import { errorText } from "./errors";
 import { useFindings } from "./useFindings";
 import { useTabs } from "./useTabs";
+import { UndoFindingsDialog } from "./UndoFindingsDialog";
 import { useUndoKeys } from "./useUndoKeys";
 import { initialWidths, Workspace, type Review } from "./Workspace";
 
@@ -121,13 +122,28 @@ function reviewOf(session: Session, { project, reach, newFrom, documentStatus }:
 
 const documentOf = (project: Project, id: DocumentId | undefined) => project.documents.find((document) => document.id === id);
 
-/** Undo and redo on the tab's record, which need no document open. `waiting`: a mark waits for its type. */
-const historyOf = (session: Session, can: SessionState["can"], active: DocumentId, waiting: boolean): History => ({
-  canUndo: !waiting && can.undo.has(active),
-  canRedo: !waiting && can.redo.has(active),
-  onUndo: () => session.history.undo(active),
-  onRedo: () => session.history.redo(active),
-});
+/** An undo that would remove the marks a confirmed findings review made, waiting for its dialog. */
+type FindingsUndo = Extract<DocumentDetection["nextUndo"], { kind: "findings" }> & { readonly document: DocumentId };
+
+/**
+ * Undo and redo on the tab's record, which need no document open. `waiting`: a mark waits for its
+ * type. An undo of a confirmed findings review asks first, through `onAsk`.
+ */
+function historyOf(
+  session: Session,
+  { can, detection }: Pick<SessionState, "can" | "detection">,
+  active: DocumentId,
+  waiting: boolean,
+  onAsk: (undo: FindingsUndo) => void,
+): History {
+  const next = detection.get(active)?.nextUndo;
+  return {
+    canUndo: !waiting && can.undo.has(active),
+    canRedo: !waiting && can.redo.has(active),
+    onUndo: () => (next?.kind === "findings" ? onAsk({ ...next, document: active }) : session.history.undo(active)),
+    onRedo: () => session.history.redo(active),
+  };
+}
 
 /** Marking the open document: its marks, undo and redo, approving, and the controls the top bar shows. */
 function useEditing(
@@ -139,13 +155,14 @@ function useEditing(
   const [tool, setTool] = useState<Tool>("text");
   const [exporting, setExporting] = useState(false);
   const [lastFacts, setLastFacts] = useState<DocumentFacts | undefined>(undefined);
+  const [undoing, setUndoing] = useState<FindingsUndo | undefined>(undefined);
   const focus = useHandOffFocus(output !== undefined);
   const activeDocument = documentOf(project, active);
   const images = useImages(session, active);
   const marking = useMarks(session, shown, activeDocument?.marks ?? [], settings.customTypes);
   const waiting = marking.pending !== undefined;
   const busy = waiting || !can.apply;
-  const history = active && historyOf(session, can, active, waiting);
+  const history = active && historyOf(session, { can, detection }, active, waiting, setUndoing);
   useUndoKeys(history);
 
   const editing: Editing = {
@@ -181,7 +198,19 @@ function useEditing(
       onClose={() => setExporting(false)}
     />
   );
-  return { marking, history, editing, tool, focus, labels, images };
+  /** The undo dialog of a confirmed findings review, while it asks. */
+  const undo = undoing && (
+    <UndoFindingsDialog
+      values={undoing.values}
+      marks={undoing.marks}
+      onUndo={() => {
+        setUndoing(undefined);
+        session.history.undo(undoing.document);
+      }}
+      onCancel={() => setUndoing(undefined)}
+    />
+  );
+  return { marking, history, editing, tool, focus, labels, undo, images };
 }
 
 interface DocumentPanelProps extends Omit<Parameters<typeof Workspace>[0], "handle" | "currentPage" | "onCurrentPage"> {
@@ -274,7 +303,7 @@ export function ProjectView(props: ProjectViewProps) {
   const activeDocument = documentOf(project, active);
   const { shown, missing } = useDocumentInEngine(session, props.opened.open, activeDocument, can.switchDocument, failure);
   const adder = useAddFiles(session, props.initialRefused, (added) => openInTabs(tabs, added));
-  const { marking, history, editing, tool, focus, labels, images } = useEditing(props, { active, shown }, settings, failure);
+  const { marking, history, editing, tool, focus, labels, undo, images } = useEditing(props, { active, shown }, settings, failure);
   const findings = useFindings(session, props.opened.detection, active);
   const [panels, setPanels] = useState<Panels>({ documents: true, pages: false });
   const [pageInView, setPageInView] = useState<PageInView | undefined>(undefined);
@@ -297,6 +326,7 @@ export function ProjectView(props: ProjectViewProps) {
         auto={{ profile: project.profile, onSetProfile: (profile) => session.profile.set(profile), findings }}
       />
       {labels}
+      {undo}
       <ApproveDialog session={session} approval={props.opened.approval} documents={project.documents} />
       <div className="flex min-h-0">
         <PanelStrip panels={panels} onToggle={(id) => setPanels((current) => ({ ...current, [id]: !current[id] }))} />
@@ -319,7 +349,7 @@ export function ProjectView(props: ProjectViewProps) {
             onFailure={failure.failed}
             onDismissError={failure.clear}
             marks={marking}
-            findings={findings.here?.findings}
+            findings={findings.review}
             review={reviewOf(session, props.opened, activeDocument)}
             images={images}
             tool={tool}

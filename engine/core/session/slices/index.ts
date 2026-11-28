@@ -4,7 +4,7 @@ import { approval, type ApprovalPart } from "./approval";
 import { detection, firstDetection, type DetectionPart } from "./detection";
 import { documents, firstDocuments, type DocumentsPart } from "./documents";
 import { findings, firstFindings, type FindingsPart } from "./findings";
-import { history, withNoHistory, type HistoryPart } from "./history";
+import { history, withNoHistory, type HistoryPart, type StepTag } from "./history";
 import { firstMarks, marks, type MarksPart } from "./marks";
 import { firstOperation, operation, type OperationPart } from "./operation";
 import { output, type OutputPart } from "./output";
@@ -33,14 +33,16 @@ export const firstParts = (project: Project): SessionParts => ({
   findings: firstFindings,
 });
 
-/** The document an undoable record changes. A label change is not undone. */
-function isUndoable(change: SessionChange): DocumentId | undefined {
+/** The document an undoable record changes, and what its step undoes. A label change, and a confirm that only rejects, are not undone. */
+function isUndoable(change: SessionChange): { readonly document: DocumentId; readonly tag: StepTag } | undefined {
   switch (change.type) {
     case "markAdded":
     case "markRetyped":
     case "markRemoved":
     case "keptHere":
-      return change.document;
+      return { document: change.document, tag: { kind: "edit" } };
+    case "findingsApplied":
+      return change.marks.length === 0 ? undefined : { document: change.document, tag: { kind: "findings", values: change.values, marks: change.marks.length } };
     default:
       return undefined;
   }
