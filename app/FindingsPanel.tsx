@@ -17,7 +17,7 @@ interface FindingsPanelProps {
  * evidence first, to tick or untick, then confirm or close, each after a dialog.
  */
 export function FindingsPanel({ id, width, review }: FindingsPanelProps) {
-  const { findings, notSearched } = review;
+  const { findings } = review;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [asking, setAsking] = useState<"confirm" | "close" | undefined>(undefined);
   const ticked = findings.filter((finding) => finding.ticked).length;
@@ -36,7 +36,7 @@ export function FindingsPanel({ id, width, review }: FindingsPanelProps) {
         <span className="text-xs text-ink-muted">{plural(findings.length, "value")}</span>
       </div>
       <p className="mx-4 mb-2 text-ink-muted">Found values are removed only once you confirm.</p>
-      <NotSearched pages={notSearched} />
+      <NotSearched run={review} />
       <ul className="min-h-0 flex-1 overflow-y-auto border-t border-rule">
         {findings.map((finding) => (
           <FindingRow key={finding.key} finding={finding} onTicked={(on) => review.setTicked(finding.key, on)} />

@@ -87,7 +87,10 @@ The app has three screens:
   `ProjectView` opens the undo dialog in place of undoing when the state's
   `nextUndo` is a findings review, from the Undo button and from the keys.
 - `runLine`, `NotSearched` (RunNotices.tsx): the lines about a run from the
-  design's wording table, beside the Run control and in the panel.
+  design's wording table, beside the Run control and in the panel: "Stopped."
+  or, for a failure, "The run ended early because of an error.", with the
+  pages not searched; for a run that searched no page, the sentence for its
+  code from `errors.ts`.
 - `Menu`, `MenuItem` (Menu.tsx): a ⋯ button and its menu of items, for
   projects on Home and for the Run control.
 - `ProfileChooser` (ProfileChooser.tsx): the dialog that asks which countries

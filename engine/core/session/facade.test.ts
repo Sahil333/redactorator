@@ -361,7 +361,7 @@ describe("Auto mode", () => {
     await session.detection.run(id);
     await ended();
     expect(parts().findings.has(id)).toBe(false);
-    expect(parts().detection.get(id)?.notice).toEqual({ kind: "nothing-found", notSearched: [] });
+    expect(parts().detection.get(id)?.notice).toEqual({ kind: "nothing-found", ended: "finished", notSearched: [] });
   });
 
   test("a lost mark does not count as a mark of its value", async () => {
@@ -401,7 +401,7 @@ describe("Auto mode", () => {
     expect(running()).toBe(true);
     expect(session.detection.stop(id)).toEqual({ ok: true, value: undefined });
     await ended();
-    expect(parts().findings.get(id)).toMatchObject({ findings: [{ text: "123-45-6789" }], notSearched: [pageAt(1), pageAt(2)] });
+    expect(parts().findings.get(id)).toMatchObject({ findings: [{ text: "123-45-6789" }], ended: "stopped", notSearched: [pageAt(1), pageAt(2)] });
   });
 
   test("a run whose worker failed keeps the hits of the pages searched", async () => {
@@ -411,7 +411,7 @@ describe("Auto mode", () => {
     });
     await session.detection.run(id);
     await ended();
-    expect(parts().findings.get(id)).toMatchObject({ findings: [{ text: "123-45-6789" }], notSearched: [pageAt(1), pageAt(2)] });
+    expect(parts().findings.get(id)).toMatchObject({ findings: [{ text: "123-45-6789" }], ended: "failed", notSearched: [pageAt(1), pageAt(2)] });
   });
 
   /** Removes the stored files whose paths `match` picks. */

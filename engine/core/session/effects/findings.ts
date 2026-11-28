@@ -161,9 +161,8 @@ export function findingsOf({ source, allowed, view, dispatch, change }: Findings
       if (now === undefined || now.parts.operation.closing) return;
       const changes = new Map<string, FindingChange>();
       const findings = findingsIn(now, document, hits, changes);
-      if (findings.length > 0) dispatch({ type: "findingsOpened", document, run, hits, notSearched, changes, findings });
-      // A run that failed says why instead (slice W2).
-      else if (ended !== "failed") dispatch({ type: "noticeSet", document, notice: { kind: "nothing-found", notSearched } });
+      if (findings.length > 0) dispatch({ type: "findingsOpened", document, run, hits, ended, notSearched, changes, findings });
+      else dispatch({ type: "noticeSet", document, notice: { kind: "nothing-found", ended, notSearched } });
     },
     landed(change) {
       for (const document of marksChangedBy(change)) resolveAgain(document);

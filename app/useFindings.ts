@@ -3,15 +3,11 @@ import type { Session } from "../engine/api/facade";
 import type { DocumentDetection, SessionState } from "../engine/api/state";
 import type { EngineError, Result } from "../engine/api/errors";
 import type { Profile } from "../engine/model/detection";
-import type { Finding } from "../engine/model/findings";
-import type { PageIndex } from "../engine/model/geometry";
 import type { DocumentId } from "../engine/model/project";
 import { errorText } from "./errors";
 
 /** The open document's findings review, and what the findings panel does with it. */
-export interface OpenReview {
-  readonly findings: readonly Finding[];
-  readonly notSearched: readonly PageIndex[];
+export interface OpenReview extends NonNullable<DocumentDetection["findings"]> {
   readonly canConfirm: boolean;
   readonly canClose: boolean;
   readonly setTicked: (key: string, ticked: boolean) => void;

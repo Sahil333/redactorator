@@ -1,3 +1,4 @@
+import type { RunRecord } from "../../../model/detection";
 import type { DocumentId } from "../../../model/project";
 import type { Finding, FindingChange, Hit } from "../../../model/findings";
 import type { PageIndex } from "../../../model/geometry";
@@ -7,6 +8,7 @@ import type { SessionChange } from "../changes";
 interface OpenFindings {
   readonly run: string;
   readonly hits: readonly Hit[];
+  readonly ended: RunRecord["ended"];
   readonly notSearched: readonly PageIndex[];
   readonly changes: ReadonlyMap<string, FindingChange>;
   readonly findings: readonly Finding[];
@@ -21,8 +23,8 @@ export const firstFindings: FindingsPart = new Map();
 export function findings(part: FindingsPart, change: SessionChange): FindingsPart {
   switch (change.type) {
     case "findingsOpened": {
-      const { run, hits, notSearched, changes, findings: resolved } = change;
-      return new Map(part).set(change.document, { run, hits, notSearched, changes, findings: resolved });
+      const { run, hits, ended, notSearched, changes, findings: resolved } = change;
+      return new Map(part).set(change.document, { run, hits, ended, notSearched, changes, findings: resolved });
     }
     case "findingChanged": {
       const open = part.get(change.document);

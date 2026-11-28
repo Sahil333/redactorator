@@ -67,24 +67,27 @@ records that the [slices](../slices/README.md) reduce.
     the original gone too it refuses with `original-missing`. It asks the gate
     again, then dispatches `runStarted`, sends the pages through
     `DetectionClient.run`, dispatches `pageSearched` as each answers and
-    `runEnded` with the run's record, and hands the run to `host.ended`.
+    `runEnded` with the run's record, and hands the run to `host.ended`. A
+    run that failed before any page answered, such as one whose worker could
+    not start, could not load its packs or failed on the first page, sets the
+    `run-failed` notice with its code instead.
     `stop` ends the worker when a run is on that document. `end()` ends the
     worker and resolves once a run in progress has ended, for `close`.
 - `findings.ts`
   - `findingsOf(host)`: builds `Session["findings"]` plus `ended(document,
     record, hits)`, `landed(change)` and `settled()`. `ended` runs the
     resolver on a run's hits and opens a findings review (`findingsOpened`),
-    or, when nothing is left to offer and the run did not fail, sets the
-    `nothing-found` notice. `landed` runs the resolver again on an open
-    findings review after `approved`, `documentPrepared` or `reanchored`
-    changed its document's marks, and ends it (`findingsClosed`) when no
-    finding is left. `setTicked` dispatches `findingChanged` and resolves
-    again; a key that is no finding is refused with `unknown-finding`.
-    `confirm` follows section 4's steps 1 to 4 (`marking`), and resolves with
-    the values and marks it made; `close` dispatches `findingsClosed`.
-    Choosing, edges and notices still refuse with `no-findings` once the gate
-    allows them (slices R2 and R3). `settled()` resolves once no confirm is
-    under way, for `close`.
+    or, when nothing is left to offer, sets the `nothing-found` notice. Both
+    carry how the run ended and the pages it did not search. `landed` runs
+    the resolver again on an open findings review after `approved`,
+    `documentPrepared` or `reanchored` changed its document's marks, and ends
+    it (`findingsClosed`) when no finding is left. `setTicked` dispatches
+    `findingChanged` and resolves again; a key that is no finding is refused
+    with `unknown-finding`. `confirm` follows section 4's steps 1 to 4
+    (`marking`), and resolves with the values and marks it made; `close`
+    dispatches `findingsClosed`. Choosing, edges and notices still refuse with
+    `no-findings` once the gate allows them (slices R2 and R3). `settled()`
+    resolves once no confirm is under way, for `close`.
 - `profile.ts`
   - `profileOf(host)`: builds `Session["profile"]`. `set` dispatches
     `profileSet` through `change`, so the project is saved.

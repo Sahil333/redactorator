@@ -69,7 +69,7 @@ function documentDetection(view: SessionView, document: DocumentId): DocumentDet
   const allows = (command: Parameters<typeof gate>[1]) => gate(view, command, document) === undefined;
   return {
     run,
-    ...(open === undefined ? {} : { findings: { findings: open.findings, notSearched: open.notSearched } }),
+    ...(open === undefined ? {} : { findings: { findings: open.findings, ended: open.ended, notSearched: open.notSearched } }),
     ...(notice === undefined ? {} : { notice }),
     ...(nextUndo === undefined ? {} : { nextUndo }),
     can: { run: allows("run"), stop: run.state === "running" && allows("stop"), confirm: allows("confirmFindings"), close: allows("closeFindings") },
