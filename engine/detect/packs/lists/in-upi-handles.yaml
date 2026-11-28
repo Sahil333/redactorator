@@ -1,3 +1,109 @@
-# A placeholder: its pack slice fills it (tools/packs/README.md, "Add a list").
+# The handles that end a UPI ID, the part after the @. Read in Chrome from NPCI's "All members"
+# page for UPI: every row of the tab "UPI 3rd Party Applications" (50 apps, 69 handles, Aditya
+# Birla Capital Digital to ZET, the table loading as the page scrolled), and the first ten rows
+# of the tabs "UPI Bank Application" (City Union Bank the last read) and "UPI PPI Applications"
+# (Pine Labs the last read). The site then answered with its error page, and the rest of those
+# two tabs was not read. Handles such as those of SBI, HDFC Bank, Kotak and BHIM are therefore
+# missing; the UPI rule does not need the list to find a value.
+# To refresh: read the same tabs, or the file the page's Download control gives; update `read`;
+# run `pnpm packs`.
 name: in-upi-handles
-entries: []
+title: UPI handle
+source: "NPCI, UPI All members, tabs UPI 3rd Party Applications (all rows), UPI Bank Application and UPI PPI Applications (first ten rows each). https://www.npci.org.in/product/upi/all-members"
+licence: "NPCI's terms grant no licence to copy, and forbid caching and framing; the site says \"All rights reserved\" (https://www.npci.org.in/terms-and-condition). Used by the author's decision of 28 Nov 2026 (docs/designs/auto-mode.md, C0 results, item 8)"
+read: "2026-11-28"
+entries:
+  # UPI 3rd Party Applications
+  - abaxis
+  - abcdicici
+  - abfspay
+  - apl
+  - axisb
+  - axisbank
+  - axl
+  - bpunity
+  - cqaxis
+  - fbyes
+  - fkaxis
+  - fvaxis
+  - goaxb
+  - gsaxis
+  - hfaxis
+  - ibl
+  - icici
+  - ikwik
+  - inhdfc
+  - jarunity
+  - jpyes
+  - jupiteraxis
+  - kbaxis
+  - kphdfc
+  - lxaxis
+  - mbkns
+  - mlyes
+  - mvhdfc
+  - naviaxis
+  - nvdcb
+  - nyes
+  - okaxis
+  - okhdfcbank
+  - okicici
+  - oksbi
+  - oneyes
+  - paytm
+  - pingpay
+  - pnyes
+  - ptaxis
+  - pthdfc
+  - ptsbi
+  - ptyes
+  - rapl
+  - rfunity
+  - rmrbl
+  - rpaxis
+  - seyes
+  - sfunity
+  - shriramhdfcbank
+  - smyes
+  - spyes
+  - superyes
+  - tapicici
+  - timecosmos
+  - tlaxis
+  - tnaxis
+  - waaxis
+  - wahdfcbank
+  - waicici
+  - wasbi
+  - yapl
+  - ybl
+  - yescred
+  - yescurie
+  - yesfam
+  - yesg
+  - yespop
+  - ztrbl
+  # UPI Bank Application, first ten rows
+  - airtel
+  - aubank
+  - barodampay
+  - barodapay
+  - boi
+  - cbin
+  - centralbank
+  - cnrb
+  - csbpay
+  - cub
+  - freecharge
+  - mahb
+  # UPI PPI Applications, first ten rows
+  - amazonpay
+  - bpaywallet
+  - dhani
+  - fam
+  - idfcpay
+  - omni
+  - pinelabs
+  - pockets
+  - spicepay
+  - trans

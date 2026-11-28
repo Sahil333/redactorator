@@ -1,4 +1,11 @@
 # How to write a rule: tools/packs/README.md.
+#
+# A twelve-digit number can be an Aadhaar number, a UAN or a bank account number. The Aadhaar rule
+# needs its Verhoeff check; the UAN rule needs its label; the bank account rule needs its label or
+# an IFSC beside it. A number labelled UAN that also passes the Aadhaar check is a UAN: the Aadhaar
+# rule gives way. "Universal Account Number" holds the bank label "Account Number", so the bank
+# account rule gives way to the UAN rule too. An Aadhaar number labelled as an account is one
+# finding with two candidates, Aadhaar first, because its check is the stronger evidence.
 pack: in
 rules:
   - id: in-ifsc
@@ -39,7 +46,7 @@ rules:
     stdnum: in_.aadhaar
     # A number labelled UAN can pass the Aadhaar check by chance.
     yieldsTo: [in-uan]
-    source: "python-stdnum in_.aadhaar: 12 digits, the first 2 to 9, not a palindrome, Verhoeff check digit; Microsoft Purview, India unique identification (Aadhaar) number: 12 digits with optional spaces or dashes. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/aadhaar.py"
+    source: "python-stdnum in_.aadhaar: 12 digits, the first 2 to 9, not a palindrome, Verhoeff check digit; Microsoft Purview, India unique identification (Aadhaar) number: 12 digits with optional spaces or dashes, the first not 0 or 1, a check digit. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/aadhaar.py and https://learn.microsoft.com/en-us/purview/sit-defn-india-unique-identification-number"
     licence: "python-stdnum is LGPL 2.1 or later; the rule is written from its statements, no code is copied"
     verified: { date: "2026-11-28", at: "https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/aadhaar.py" }
     examples:
@@ -50,6 +57,28 @@ rules:
       - "2345 6789 0125"
       # Starts with 1.
       - "1345 6789 0124"
+
+  - id: in-aadhaar-vid
+    identifier: in-aadhaar-vid
+    # 16 digits in groups of four, the first not 0 or 1.
+    pattern: '([2-9]\d{3}{sep?}\d{4}{sep?}\d{4}{sep?}\d{4})'
+    value: 1
+    needs: checked
+    notNextTo: letter-or-digit
+    validator: aadhaarVid
+    stdnum: in_.vid
+    source: "python-stdnum in_.vid: a 16-digit number mapped to an Aadhaar number, the first 2 to 9, not a palindrome, the last a Verhoeff check digit; written in groups of four. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/vid.py"
+    licence: "python-stdnum is LGPL 2.1 or later; the rule is written from its statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/vid.py" }
+    examples:
+      # Each fails the Luhn check, so the payment card rule does not take it.
+      - "7391 0462 8351 9425"
+      - "4829 1730 5618 2735"
+    nearMisses:
+      # Fails the Verhoeff check.
+      - "7391 0462 8351 9426"
+      # Starts with 1.
+      - "1829 1730 5618 2735"
 
   - id: in-uan
     identifier: in-uan
@@ -78,20 +107,319 @@ rules:
     pattern: '(\d{9,18})'
     value: 1
     needs: labelled
-    labels: ["Account No", "Account Number", "A/c No", "Bank Account"]
+    labels: ["Account No", "Account Number", "A/c No", "A/c Number", "Acct No", "Bank Account"]
     labelSide: before
     distance: 40
     notNextTo: letter-or-digit
     companion: { rule: in-ifsc, distance: 40 }
     # "Universal Account Number" holds the label "Account Number".
     yieldsTo: [in-uan]
-    source: "RBI, Report of the Technical Committee to Examine Uniform Routing Code and Account Number Structure (16 Jan 2013), section 2.9: each bank has its own structure, 9 to 18 digits long. https://www.rbi.org.in/scripts/PublicationReportDetails.aspx?ID=695"
+    source: "RBI, Report of the Technical Committee to Examine Uniform Routing Code and Account Number Structure (16 Jan 2013), sections 2.9 and 5.4: each bank has its own structure, 9 to 18 digits long, purely numeric except at one or two foreign banks. https://www.rbi.org.in/scripts/PublicationReportDetails.aspx?ID=695"
     licence: "RBI's copyright policy allows reproduction accurately and without modification, with RBI acknowledged as the source (https://www.rbi.org.in/Scripts/Disclaimer.aspx)"
     verified: { date: "2026-11-28", at: "https://www.rbi.org.in/scripts/PublicationReportDetails.aspx?ID=695" }
     examples:
       - "50100023456789"
+      - "301204567"
       # No label: the IFSC beside it.
       - { value: "001234567890123", line: "Credited to {value} at {companion}" }
     nearMisses:
       # Neither a label nor an IFSC.
       - { value: "98765432101", line: "Ref {value}" }
+      # Eight digits, though labelled.
+      - "12345678"
+
+  - id: in-pan
+    identifier: in-pan
+    # 5 letters, 4 digits, a letter; the fourth letter is the holder type. Not case-sensitive.
+    pattern: '([A-Za-z]{3}[ABCFGHJKLPTabcfghjklpt][A-Za-z]\d{4}[A-Za-z])'
+    value: 1
+    needs: format
+    labels: ["PAN", "PAN No", "Permanent Account Number", "PAN of the Employee", "PAN of the Deductor"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    stdnum: in_.pan
+    source: "Income Tax Department, How PAN is formed: 5 letters, 4 digits, 1 letter; the fourth letter one of A, B, C, F, G, H, J, L, P, T (read by slice C0 on 28 Nov 2026; the page refused automated reading on the re-check); python-stdnum in_.pan adds K for Krish (Trust Krish); Microsoft Purview, India permanent account number: the same shape, not case-sensitive, no checksum. https://www.incometaxindia.gov.in/w/how-pan-is-formed-and-how-it-gets-its-unique-identity- , https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/pan.py and https://learn.microsoft.com/en-us/purview/sit-defn-india-permanent-account-number"
+    licence: "A government page, python-stdnum (LGPL 2.1 or later) and Microsoft Learn (informational use, without changes, with the copyright notice); the rule is written from their statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://learn.microsoft.com/en-us/purview/sit-defn-india-permanent-account-number" }
+    examples:
+      - "ABCPE1234F"
+      # A firm.
+      - "AAKFR5678L"
+      # Lower case, with no label: the format alone.
+      - { value: "bdmph4321q", line: "Holder {value}" }
+    nearMisses:
+      # X is not a holder type.
+      - "ABCXE1234F"
+
+  - id: in-tan
+    identifier: in-tan
+    # 4 letters, 5 digits, a letter.
+    pattern: '([A-Z]{4}\d{5}[A-Z])'
+    value: 1
+    needs: format
+    labels: ["TAN", "TAN No", "TAN of the Deductor", "Tax Deduction Account Number"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Income Tax Department, Tax Deduction Account Number: 10 characters, 4 letters, 5 digits and a letter, the first three letters a jurisdiction code (read by slice C0 on 28 Nov 2026, docs/designs/auto-mode.md, C0 results, item 7; the page refused automated reading on the re-check). https://www.incometaxindia.gov.in/w/tax-deduction-account-number"
+    licence: "A government page; the rule is written from its statement"
+    verified: { date: "2026-11-28", at: "https://www.incometaxindia.gov.in/w/tax-deduction-account-number" }
+    examples:
+      - "DELR12345B"
+      - { value: "MUMS54321K", line: "Deductor {value}" }
+    nearMisses:
+      # Three letters, six digits.
+      - "DEL123456B"
+
+  - id: in-gstin
+    identifier: in-gstin
+    # A 2-digit state code, the holder's PAN, a registration character other than 0, Z, and a
+    # check character. Not case-sensitive. Any two digits are taken as the state: python-stdnum's
+    # and Presidio's lists stop at 37, and a missed value is the worse error.
+    pattern: '(\d{2}[A-Za-z]{5}\d{4}[A-Za-z][1-9A-Za-z][Zz][0-9A-Za-z])'
+    value: 1
+    needs: format
+    labels: ["GSTIN", "GSTIN No", "GST No", "GST Number", "GSTIN/UIN", "GST Registration No"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    validator: gstin
+    stdnum: in_.gstin
+    source: "python-stdnum in_.gstin: 15 characters, a 2-digit state code, the holder's PAN, a registration character not 0, Z, and a check character by Luhn over base 36; Presidio's India GSTIN recognizer: the same layout, not case-sensitive. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/gstin.py and https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_gstin_recognizer.py"
+    licence: "python-stdnum is LGPL 2.1 or later and Presidio MIT; the rule is written from their statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/gstin.py" }
+    examples:
+      - "07AAGCT4821K1Z5"
+      - "33BQXPS9083M2ZK"
+      # No label: the format, and the check.
+      - { value: "29ABCPE1234F1Z7", line: "Supplier {value}" }
+    nearMisses:
+      # The fourteenth character is not Z.
+      - "29ABCPE1234F1Y7"
+      # The registration character is 0.
+      - "29ABCPE1234F0Z7"
+
+  - id: in-voter-id
+    identifier: in-voter-id
+    # 3 letters and 7 digits, found by the check or next to a label. Not case-sensitive.
+    pattern: '([A-Za-z]{3}\d{7})'
+    value: 1
+    needs: labelled
+    # "Photo Identity Card" also matches a page that writes "Elector’s" with a curly apostrophe,
+    # which the straight one in "Elector's" does not.
+    labels: ["EPIC No", "EPIC Number", "EPIC", "Voter ID", "Voter ID No", "Elector's Photo Identity Card", "Photo Identity Card"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    validator: epic
+    stdnum: in_.epic
+    source: "python-stdnum in_.epic: 10 characters, 3 letters for the assembly constituency, a 6-digit serial number and a Luhn check digit over the 7 digits; Presidio's India voter recognizer: 3 letters and 7 digits, not case-sensitive. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/epic.py and https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_voter_recognizer.py"
+    licence: "python-stdnum is LGPL 2.1 or later and Presidio MIT; the rule is written from their statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/epic.py" }
+    examples:
+      - "XKD1234566"
+      # No label: the check alone.
+      - { value: "RTB4829172", line: "Card {value}" }
+    nearMisses:
+      # No label, and fails the Luhn check.
+      - { value: "RTB4829173", line: "Card {value}" }
+
+  - id: in-passport
+    identifier: in-passport
+    # A letter and 7 digits, or, on an ePassport, 2 letters and 6 digits; found next to a label.
+    # Presidio wants the first and last digits not 0; stdnum-js says that is a convention, not a rule.
+    pattern: '([A-Z]\d{2}{sep?}\d{5}|[A-Z]{2}\d{6})'
+    value: 1
+    needs: labelled
+    labels: ["Passport No", "Passport Number", "Passport"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio's India passport recognizer: a letter and 7 digits, a space allowed after the third character; stdnum-js in/passport: a letter and 7 digits, and 2 letters and 6 digits on the new ePassport. https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_passport_recognizer.py and https://github.com/koblas/stdnum-js/blob/5a8329374ea09aeb6dd2828c70489d5931a0d8a1/src/in/passport.ts"
+    licence: "Presidio and stdnum-js are MIT-licensed; the rule is written from their statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/koblas/stdnum-js/blob/5a8329374ea09aeb6dd2828c70489d5931a0d8a1/src/in/passport.ts" }
+    examples:
+      - "M48 23196"
+      # An ePassport.
+      - "TK305718"
+    nearMisses:
+      # No label.
+      - { value: "M4823197", line: "Ref {value}" }
+
+  - id: in-driving-licence
+    identifier: in-driving-licence
+    # 2 letters for the state, 2 digits for the office, 4 for the year of issue, 7 more.
+    pattern: '([A-Z]{2}{sep?}\d{2}{sep?}\d{4}{sep?}\d{7})'
+    value: 1
+    needs: format
+    labels: ["DL No", "DL Number", "Driving Licence No", "Driving License No", "Driving Licence", "Driving License", "Licence No", "License No"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Microsoft Purview, India driver's license number: 15 letters or digits, two letters for the state, two digits for the city, four for the year of issue, seven digits, each part optionally after a space or dash; no checksum; found by the pattern alone at medium confidence. https://learn.microsoft.com/en-us/purview/sit-defn-india-drivers-license-number"
+    licence: "Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://learn.microsoft.com/en-us/purview/sit-defn-india-drivers-license-number" }
+    examples:
+      - "MH14 2011 0062821"
+      - { value: "KA0120190004567", line: "Licence holder {value}" }
+    nearMisses:
+      # Six digits at the end.
+      - "MH14 2011 006282"
+
+  - id: in-vehicle-registration
+    identifier: in-vehicle-registration
+    # A state code, a 1- or 2-digit district, 1 to 3 series letters, 4 digits. Group 2 is the state.
+    # Presidio allows only 1 or 2 letters after a 2-digit district, and no 0000; this rule allows both.
+    pattern: '(([A-Z]{2}){sep?}\d{1,2}{sep?}[A-Z](?:{sep?}[A-Z]){0,2}{sep?}\d{4})'
+    value: 1
+    needs: labelled
+    labels: ["Vehicle No", "Vehicle Number", "Vehicle Registration No", "Registration No", "Regn No", "Reg No"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    list: { name: in-vehicle-state-codes, group: 2 }
+    source: "Presidio's India vehicle registration recognizer: two letters for the state, a 1- or 2-digit district, 1 to 3 letters, 4 digits; its state codes are the list. https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py"
+    licence: "Presidio is MIT-licensed; the rule is written from its statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py" }
+    examples:
+      - "MH 12 AB 1234"
+      - "DL 3C AF 7781"
+      # A known state code, no label: the list alone.
+      - { value: "KA01MX4321", line: "Insured {value}" }
+      # A state code not on the list, labelled.
+      - "QQ 07 C 5512"
+    nearMisses:
+      # A state code not on the list, and no label.
+      - { value: "QQ 12 AB 1234", line: "Ref {value}" }
+
+  - id: in-vehicle-registration-bh
+    identifier: in-vehicle-registration
+    # The Bharat series: the year, BH, 4 digits, 2 letters. Presidio narrows the year to [2-9][1-9]
+    # and leaves I and O out of the letters; this rule takes any.
+    pattern: '(\d{2}{sep?}BH{sep?}\d{4}{sep?}[A-Z]{2})'
+    value: 1
+    needs: format
+    labels: ["Vehicle No", "Vehicle Number", "Vehicle Registration No", "Registration No", "Regn No", "Reg No"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio's India vehicle registration recognizer, its Bharat series pattern: two digits, BH, 4 digits, 2 letters. https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py"
+    licence: "Presidio is MIT-licensed; the rule is written from its statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py" }
+    examples:
+      - "22 BH 4821 CK"
+      - { value: "23BH0917AA", line: "Insured {value}" }
+    nearMisses:
+      # BX is not the series.
+      - "22 BX 4821 CK"
+
+  - id: in-vehicle-registration-forces
+    identifier: in-vehicle-registration
+    # The armed forces: the year, a class letter, 6 digits, a check letter; found next to a label.
+    pattern: '(\d{2}{sep?}[ABCDEFHKPRX]{sep?}\d{6}{sep?}[A-Z])'
+    value: 1
+    needs: labelled
+    labels: ["Vehicle No", "Vehicle Number", "Vehicle Registration No", "Registration No", "Regn No", "Reg No"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio's India vehicle registration recognizer, its armed forces pattern: two digits, a letter of A, B, C, D, E, F, H, K, P, R, X, six digits, a letter. https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py"
+    licence: "Presidio is MIT-licensed; the rule is written from its statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py" }
+    examples:
+      - "15B 123456K"
+    nearMisses:
+      # No label.
+      - { value: "15B 654321K", line: "Ref {value}" }
+
+  - id: in-vehicle-registration-diplomatic
+    identifier: in-vehicle-registration
+    # A mission's number, CD, CC or UN, and 2 to 4 digits; found next to a label. Presidio also
+    # checks the mission's number against a range and a table; the label stands in for that here.
+    pattern: '(\d{1,3}{sep?}(?:CD|CC|UN){sep?}[1-9]\d{1,3})'
+    value: 1
+    needs: labelled
+    labels: ["Vehicle No", "Vehicle Number", "Vehicle Registration No", "Registration No", "Regn No", "Reg No"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio's India vehicle registration recognizer, its diplomatic pattern: 1 to 3 digits, CD, CC or UN, a digit 1 to 9 and 1 to 3 more digits. https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py"
+    licence: "Presidio is MIT-licensed; the rule is written from its statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py" }
+    examples:
+      - "45 CD 1201"
+    nearMisses:
+      # No label.
+      - { value: "45 UN 3307", line: "Ref {value}" }
+
+  - id: in-vehicle-registration-old
+    identifier: in-vehicle-registration
+    # The older series: 1 to 3 letters and 4 digits; found next to a label. Not the end of a longer
+    # registration number, after its district digits ("12 AB 1234") or district and class ("3C AF
+    # 7781"), which the rules above find whole.
+    pattern: '(?<!\d{sep?}|\d[A-Z]{sep?})([A-Z]{1,3}{sep?}\d{4})'
+    value: 1
+    needs: labelled
+    labels: ["Vehicle No", "Vehicle Number", "Vehicle Registration No", "Registration No", "Regn No", "Reg No"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio's India vehicle registration recognizer, its patterns for the older series: one, two or three letters and four digits. https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py"
+    licence: "Presidio is MIT-licensed; the rule is written from its statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py" }
+    examples:
+      - "DLA 4417"
+      - "MRJ1960"
+      # After a label with no colon.
+      - { value: "PBX 2093", line: "{label} {value}" }
+    nearMisses:
+      # No label.
+      - { value: "DLA 4418", line: "Ref {value}" }
+
+  - id: in-upi-id
+    identifier: in-upi-id
+    # A user part of letters, digits, dots, hyphens and underscores, an @, and a handle that is not
+    # followed by a dot or a hyphen and more: that would be an email address. Group 2 is the handle.
+    pattern: '([A-Za-z0-9._-]{1,256}@([A-Za-z][A-Za-z0-9]{1,63}))(?![.-][A-Za-z0-9])'
+    value: 1
+    needs: format
+    labels: ["UPI ID", "UPI", "VPA", "Virtual Payment Address"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    list: { name: in-upi-handles, group: 2 }
+    source: "Paytm, UPI ID Format Rules: username@handle, the handle naming the bank or payment provider; letters, digits and, depending on the provider, a dot, a hyphen or an underscore; no spaces. The handles are NPCI's (the list in-upi-handles). https://paytm.com/support/upi/upi-id-format-rules-valid-structure"
+    licence: "A company's public support page; its terms were not read"
+    verified: { date: "2026-11-28", at: "https://paytm.com/support/upi/upi-id-format-rules-valid-structure" }
+    examples:
+      - "jane.roe@oksbi"
+      - "9876543210@ybl"
+      # A handle not on the list: the format alone.
+      - { value: "ravi_k-2@newpay", line: "Paid to {value}" }
+    nearMisses:
+      # An email address.
+      - { value: "jane.roe@ybl.com", line: "Mail {value}" }
+      # The start of an email address whose domain has a hyphen.
+      - { value: "jane@paytm", line: "Mail {value}-bank.com" }
+
+  - id: in-abha-number
+    identifier: in-abha-number
+    # 14 digits, often written 2-4-4-4, found next to a label.
+    pattern: '(\d{2}{sep?}\d{4}{sep?}\d{4}{sep?}\d{4})'
+    value: 1
+    needs: labelled
+    labels: ["ABHA Number", "ABHA No", "ABHA", "Health ID", "Health ID No", "Ayushman Bharat Health Account"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Press Information Bureau, Ministry of Health and Family Welfare, 6 Feb 2024: ABHA numbers (erstwhile Health IDs) are created; ABHA is a unique health identifier, a random 14-digit number; no check digit is stated. https://pib.gov.in/PressReleasePage.aspx?PRID=2003068"
+    licence: "A government press release; the rule is written from its statement"
+    verified: { date: "2026-11-28", at: "https://pib.gov.in/PressReleasePage.aspx?PRID=2003068" }
+    examples:
+      # Each fails the Luhn check, so the payment card rule does not take it.
+      - "91-2345-6789-0123"
+      - "73-0192-8465-0172"
+    nearMisses:
+      # No label.
+      - { value: "38-2019-4657-3018", line: "Ref {value}" }
