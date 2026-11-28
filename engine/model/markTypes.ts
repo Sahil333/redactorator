@@ -8,17 +8,14 @@ export interface MarkTypeOption {
   readonly label: string;
 }
 
-const optionsOf = (types: readonly { readonly const: string; readonly title: string }[]): readonly MarkTypeOption[] =>
-  types.map((type) => ({ id: type.const, label: type.title }));
-
-// DET-1's entity types and the three a drawn box needs, as the dataset schema lists them.
-const generalMarkTypes = optionsOf(schema.$defs.generalType.oneOf);
+// The general types are DET-1's entity types and the three a drawn box needs.
+const { generalType, identifierType } = schema.$defs;
 
 /** The schema's types: the general ones, then the identifiers Auto mode finds that are not one of them. */
-export const builtInMarkTypes: readonly MarkTypeOption[] = [...generalMarkTypes, ...optionsOf(schema.$defs.identifierType.oneOf)];
+export const builtInMarkTypes: readonly MarkTypeOption[] = [...generalType.oneOf, ...identifierType.oneOf].map((type) => ({ id: type.const, label: type.title }));
 
 /** The ids of the general types, which the type picker lists first and outside any pack. */
-export const generalTypeIds: ReadonlySet<MarkType> = new Set(generalMarkTypes.map((type) => type.id));
+export const generalTypeIds: ReadonlySet<MarkType> = new Set(generalType.oneOf.map((type) => type.const));
 
 const customPrefix = "custom:";
 

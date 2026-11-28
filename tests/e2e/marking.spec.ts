@@ -69,6 +69,10 @@ test("moving through the type list with the arrow keys keeps the chosen type in 
   await pressUntilSelected(page, "ArrowUp", list.getByRole("option", { name: "Person", exact: true }));
   await picker(page).press("ArrowUp");
   await expect(list.getByRole("option", { name: "Prescription number", selected: true })).toBeInViewport();
+
+  // Up into a group's first type brings the group's name into view too, though the group is taller than the list.
+  await pressUntilSelected(page, "ArrowUp", list.getByRole("option", { name: "Aadhaar", exact: true }));
+  await expect(list.getByRole("group", { name: "India" }).getByText("India", { exact: true })).toBeInViewport();
 });
 
 // The schema's 14 general types, then each pack's new identifiers under the pack's name.

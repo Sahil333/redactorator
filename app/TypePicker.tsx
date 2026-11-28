@@ -15,14 +15,20 @@ interface TypePickerProps {
 /** The picker's width in CSS pixels, so it can be kept on the page. */
 export const PICKER_WIDTH = 240;
 
+/** A row of the list, with its place in the order the arrow keys move through. */
+interface Row {
+  readonly option: MarkTypeOption;
+  readonly index: number;
+}
+
 interface Listed {
   /** The general types and the user's own, listed first and in no group. */
-  readonly ungrouped: readonly MarkTypeOption[];
+  readonly ungrouped: readonly Row[];
   /** The identifiers Auto mode finds, under their pack, in pack order. */
-  readonly groups: readonly { readonly pack: PackId; readonly options: readonly MarkTypeOption[] }[];
+  readonly groups: readonly { readonly pack: PackId; readonly rows: readonly Row[] }[];
   /** The row that adds the typed name as a new type: none when a type already has that name. */
-  readonly added: MarkTypeOption | undefined;
-  /** Every row in the order the arrow keys move through them. */
+  readonly added: Row | undefined;
+  /** Every type, in the order the arrow keys move through them. */
   readonly choices: readonly MarkTypeOption[];
   /** The row the typed name picks: the type with that very name, or else the first. */
   readonly picked: number;
@@ -31,17 +37,28 @@ interface Listed {
 const packOf = ({ id }: MarkTypeOption): PackId | undefined => (generalTypeIds.has(id) ? undefined : identifierPacks[id]);
 
 function listFor(options: readonly MarkTypeOption[], query: string): Listed {
-  const name = query.trim().toLowerCase();
-  const matches = options.filter((option) => option.label.toLowerCase().includes(name));
-  const exact = matches.findIndex((option) => option.label.toLowerCase() === name);
-  const ungrouped = matches.filter((option) => packOf(option) === undefined);
-  const groups = packOrder
-    .map((pack) => ({ pack, options: matches.filter((option) => packOf(option) === pack) }))
-    .filter((group) => group.options.length > 0);
-  const added = name === "" || exact >= 0 ? undefined : customMarkType(query.trim());
-  const choices = [...ungrouped, ...groups.flatMap((group) => group.options), ...(added === undefined ? [] : [added])];
-  const match = matches[exact];
-  return { ungrouped, groups, added, choices, picked: match === undefined ? 0 : choices.indexOf(match) };
+  const typed = query.trim();
+  const name = typed.toLowerCase();
+  const byPack = new Map<PackId | undefined, MarkTypeOption[]>();
+  let exact: MarkTypeOption | undefined;
+  for (const option of options) {
+    const label = option.label.toLowerCase();
+    if (!label.includes(name)) continue;
+    if (exact === undefined && label === name) exact = option;
+    const pack = packOf(option);
+    const bucket = byPack.get(pack);
+    if (bucket === undefined) byPack.set(pack, [option]);
+    else bucket.push(option);
+  }
+  const choices: MarkTypeOption[] = [];
+  const row = (option: MarkTypeOption): Row => ({ option, index: choices.push(option) - 1 });
+  const ungrouped = (byPack.get(undefined) ?? []).map(row);
+  const groups = packOrder.flatMap((pack) => {
+    const packOptions = byPack.get(pack);
+    return packOptions === undefined ? [] : [{ pack, rows: packOptions.map(row) }];
+  });
+  const added = name === "" || exact !== undefined ? undefined : row(customMarkType(typed));
+  return { ungrouped, groups, added, choices, picked: Math.max(0, choices.findIndex((choice) => choice === exact)) };
 }
 
 /**
@@ -55,16 +72,16 @@ export function TypePicker({ options, initial, onPick, onCancel, onAdjust }: Typ
   const { ungrouped, groups, added, choices } = listFor(options, query);
   const [active, setActive] = useState(() => Math.max(0, choices.findIndex((option) => option.id === initial)));
   const activeIndex = Math.min(active, choices.length - 1);
-  const optionId = (choice: MarkTypeOption) => `${listId}-${choices.indexOf(choice)}`;
+  const optionId = (index: number) => `${listId}-${index}`;
+  const labelId = (pack: PackId) => `${listId}-${pack}`;
+  // A group's first type brings the group's name into view with it.
+  const headedBy = groups.find(({ rows }) => rows[0]?.index === activeIndex)?.pack;
 
   // Focus stays in the text field, so the list does not follow the active type by itself.
   useEffect(() => {
-    const option = document.getElementById(`${listId}-${activeIndex}`);
-    // A group's first type brings the group's name into view with it.
-    const label = option?.previousElementSibling;
-    if (label?.role === "presentation") label.scrollIntoView({ block: "nearest" });
-    option?.scrollIntoView({ block: "nearest" });
-  }, [listId, activeIndex]);
+    if (headedBy !== undefined) document.getElementById(labelId(headedBy))?.scrollIntoView({ block: "nearest" });
+    document.getElementById(optionId(activeIndex))?.scrollIntoView({ block: "nearest" });
+  }, [listId, activeIndex, headedBy]);
   // Read before autoFocus moves focus here, so closing the picker can put it back, without
   // scrolling: a mark across pages starts on a page that may be out of view.
   const [returnTo] = useState(() => document.activeElement);
@@ -118,7 +135,7 @@ export function TypePicker({ options, initial, onPick, onCancel, onAdjust }: Typ
         aria-label="Type for this mark"
         aria-expanded="true"
         aria-controls={listId}
-        aria-activedescendant={choices.length > 0 ? `${listId}-${activeIndex}` : undefined}
+        aria-activedescendant={choices.length > 0 ? optionId(activeIndex) : undefined}
         value={query}
         placeholder="Person, or a new type"
         onChange={(event) => {
@@ -130,21 +147,21 @@ export function TypePicker({ options, initial, onPick, onCancel, onAdjust }: Typ
       />
       {/* Not a Tab stop of its own, though it scrolls: the arrow keys move through it. */}
       <div id={listId} role="listbox" aria-label="Types" tabIndex={-1} className="mt-1 max-h-56 overflow-y-auto">
-        {ungrouped.map((choice) => (
-          <TypeOption key={choice.id} id={optionId(choice)} label={choice.label} active={choice === choices[activeIndex]} onPick={() => pick(choice)} />
+        {ungrouped.map(({ option, index }) => (
+          <TypeOption key={option.id} id={optionId(index)} label={option.label} active={index === activeIndex} onPick={() => pick(option)} />
         ))}
-        {groups.map(({ pack, options: packOptions }) => (
-          <div key={pack} role="group" aria-labelledby={`${listId}-${pack}`}>
-            <div id={`${listId}-${pack}`} role="presentation" className="px-2 pt-2 pb-0.5 text-xs font-semibold text-ink-muted">
+        {groups.map(({ pack, rows }) => (
+          <div key={pack} role="group" aria-labelledby={labelId(pack)}>
+            <div id={labelId(pack)} role="presentation" className="px-2 pt-2 pb-0.5 text-xs font-semibold text-ink-muted">
               {packNames[pack]}
             </div>
-            {packOptions.map((choice) => (
-              <TypeOption key={choice.id} id={optionId(choice)} label={choice.label} active={choice === choices[activeIndex]} onPick={() => pick(choice)} />
+            {rows.map(({ option, index }) => (
+              <TypeOption key={option.id} id={optionId(index)} label={option.label} active={index === activeIndex} onPick={() => pick(option)} />
             ))}
           </div>
         ))}
         {added !== undefined && (
-          <TypeOption id={optionId(added)} label={`Add “${added.label}” as a new type`} active={added === choices[activeIndex]} onPick={() => pick(added)} />
+          <TypeOption id={optionId(added.index)} label={`Add “${added.option.label}” as a new type`} active={added.index === activeIndex} onPick={() => pick(added.option)} />
         )}
       </div>
     </div>
