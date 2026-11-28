@@ -2471,7 +2471,8 @@ test golden`.
 
 #### C0 results and rules left out
 
-Slice C0 wrote this part on 28 Nov 2026. Each pack slice adds the rules it
+Slice C0 wrote this part on 28 Nov 2026, and amended it the same day with
+the author's decisions on its results. Each pack slice adds the rules it
 leaves out, with the reason, to the table "Rules left out" at the end.
 
 C0 adds no code. Its spike scripts stayed outside the repository, so each
@@ -2479,15 +2480,24 @@ result says how it was made, and the repository's own commands are given in
 full. Every test value and document was synthetic. Times were taken on one
 Apple M3 Pro laptop in Chrome 158.0.8127.37, through Playwright.
 
-**What these results change in the design.** In short, for the author:
+**What these results change in the design.** In short:
 
-*   `labelRow` is needed, so the `page` message carries boxes (C1, P0).
-*   Only 9 of the 23 validators' checks could be verified against the body
-    that issues the identifier, or its standard. Under G2 the other 14
-    validators are left out until a source is found. See item 7.
-*   A line end is not made a separator, but identifiers broken across a line
-    end are common in narrow table columns and in boxed form fields. The
-    risk "accepted" in Risks is larger than it reads. See item 4.
+*   `labelRow` is not built in this phase, by the author's decision, so the
+    `page` message carries no boxes. A label in a table drawn column by
+    column is not found. See item 2.
+*   A rule may rest on an existing public resource as well as on the issuer:
+    a published standard, Microsoft Purview's documentation, Presidio,
+    python-stdnum, stdnum-js, validator.js or the like (author, 28 Nov
+    2026). With that, 64 of the 65 identifiers have a source for their
+    format; the Indian bank account number has none and is a label rule.
+    22 of the 23 validators have a source for what they check: 21 check
+    digits, and the UK driving licence's date fields. The DEA number's
+    check method has none. See item 7.
+*   A line end is not made a separator. Identifiers broken across a line end
+    are common in narrow table columns and in boxed form fields; the author
+    has made reading them a research area for later. See item 4.
+*   The UPI handle list and the Purview keyword lists may be used, with
+    their source and terms recorded. See item 8.
 *   The audit exemption needs `overrides` with `unused-files` and
     `unused-exports`; `ignoreExports` covers only a new export in an
     existing file. The tool entries fit `supportEntry` better than `entry`.
@@ -2573,10 +2583,17 @@ In table c a value is followed, one character later, by the next pair's
 label. A rule that accepts a label after the value would take the wrong one,
 so `labelSide: before` should be the usual choice.
 
-**Decision.** `labelRow: needed`. C1 adds each character's box to the `page`
-message, and P0 adds the `labelRow` field. A table drawn row by row needs
-only the distance; 40 characters, the distance in the rule format's example,
+**Decision.** `labelRow` is not built in this phase, by the author's
+decision (28 Nov 2026): "a harder problem than to solve in this session".
+The `page` message carries no boxes. A rule uses a label within N
+characters, in the same block, before the value. A table drawn row by row
+needs only that; 40 characters, the distance in the rule format's example,
 covers every pair measured.
+
+What this misses, from the table above: in a table drawn column by column
+(table b), no label is found for any of its eight values. A rule that needs
+a label finds nothing there, and a rule with a checksum or a distinctive
+format finds the value without its label's support.
 
 **Column headers.** Not measured and not solved, as the brief asked. Table b
 shows what a header row is likely to meet: the reader gives whole columns in
@@ -2664,10 +2681,10 @@ digits have line ends and no separators between them.
 
 **Decision.** "One separator" does **not** include a line end. The design is
 unchanged. The risk in Risks, "an identifier broken across a line end is not
-found", is common in narrow columns and certain in comb fields. Joining a
-wrapped line to the next one when both start at the same left edge of one
-cell, or reading comb fields as one value, would need the boxes of item 2.
-That is a new piece of work for the author to decide on.
+found", is common in narrow columns and certain in comb fields. The author
+has decided that reading such values is a research area for later, with
+models that read layout: "In this phase lets do what can be done easily or
+in a vanilla way." This phase reads the page text as the reader gives it.
 
 ##### 5. Approval
 
@@ -2759,130 +2776,161 @@ production; `entry` also works. This differs from the design's guess of
 
 ##### 7. Facts
 
-Each fact was read on 28 Nov 2026, at the URL given, from the body that
-issues the identifier or from its published standard. Many official sites
-refuse automated reading; most of those were tried in a normal browser too.
-Some could not be read even so: `cms.gov` refused every page, `aba.com`
-showed a check for robots, which was not got round, and `gov.bc.ca` did not
-answer. The ATO's and Services Australia's pages were tried only by
-automated reading, and timed out. Where only a library's documentation or a
-third-party site stated a fact, it counts as not verified.
+**What counts as a source.** The author decided on 28 Nov 2026: "We
+piggybacking on existing regex pattern resources and validator resources to
+build our own." A rule may be written when its format, and for a checked
+rule its check method, is stated by an existing public resource: the
+issuer's page, a published standard, Microsoft Purview's documentation,
+Presidio, python-stdnum, stdnum-js, validator.js or the like. A third-party
+page counts too, named as what it is. A fact recalled with no source is not
+enough. The earlier wording, "verified at the body that issues it", is
+withdrawn.
 
-**The check-digit facts the workbook marks unverified**
+Every page below was read on 28 Nov 2026. Many official sites refuse
+automated reading; most of those were also tried in a normal browser. Some
+could not be read even so: `cms.gov` refused every page, `aba.com` showed a
+check for robots, which was not got round, and `gov.bc.ca` did not answer. A
+page not read no longer blocks a rule that has another source.
+
+**Read at the issuer or its standard.** The facts the workbook marks
+unverified: what the issuer or its standard states, where it could be read.
+"Not read at the issuer" means only that; the table after this one gives
+the source each rule rests on.
 
 | Fact | Result | Source |
 | --- | --- | --- |
 | SSN: area not 000, 666 or 900 to 999; group not 00; serial not 0000 | Verified. The page says "900 series" | https://secure.ssa.gov/poms.nsf/lnx/0110201035 |
 | EIN: format and valid prefixes | Prefixes verified (a table by campus). The written form 12-3456789 is not stated there | https://www.irs.gov/businesses/small-businesses-self-employed/how-eins-are-assigned-and-valid-ein-prefixes |
 | PTIN: "P" and 8 digits | Verified, IRM 2.3.63.2 | https://www.irs.gov/irm/part2/irm_02-003-063 |
-| ABA routing number: weights 3, 7, 1 | Not verified. Only third-party sources; the registrar's site blocked reading | https://www.aba.com/about-us/routing-number |
-| NPI: Luhn with the prefix 80840 | Not verified. The final rule states 10 positions with a check digit in the tenth, but not the method; the CMS check-digit paper could not be read | https://www.govinfo.gov/content/pkg/FR-2004-01-23/html/04-1149.htm |
-| Medicare Beneficiary Identifier format | Not verified. `cms.gov` refused every page | https://www.cms.gov/medicare/new-medicare-card |
-| US court case and docket numbers | Not verified. The US Courts page read states no format | https://www.uscourts.gov/court-records/find-a-case-pacer |
+| ABA routing number: weights 3, 7, 1 | Not read at the issuer. Only third-party sources; the registrar's site blocked reading | https://www.aba.com/about-us/routing-number |
+| NPI: Luhn with the prefix 80840 | Not read at the issuer. The final rule states 10 positions with a check digit in the tenth, but not the method; the CMS check-digit paper could not be read | https://www.govinfo.gov/content/pkg/FR-2004-01-23/html/04-1149.htm |
+| Medicare Beneficiary Identifier format | Not read at the issuer. `cms.gov` refused every page | https://www.cms.gov/medicare/new-medicare-card |
+| US court case and docket numbers | Not read at the issuer. The US Courts page read states no format | https://www.uscourts.gov/court-records/find-a-case-pacer |
 | NHS number: modulus 11 | Verified, with weights 10 to 2; 11 gives 0, 10 means invalid | https://www.datadictionary.nhs.uk/attributes/nhs_number.html |
-| UTR: is the first digit a check digit? | Not verified. HMRC says 10 digits, and its design pattern says 10 or 13. No HMRC page names a check digit | https://www.gov.uk/find-utr-number and https://design.tax.service.gov.uk/hmrc-design-patterns/unique-taxpayer-reference |
-| UK VAT number: modulus 97 | Not verified. HMRC states nine digits and names "modulus 97", but withholds the formula | https://www.gov.uk/hmrc-internal-manuals/enquiry-manual/em3058 and https://www.gov.uk/hmrc-internal-manuals/vat-agricultural-flat-rate-scheme/vatafrs2500 |
+| UTR: is the first digit a check digit? | Not read at the issuer. HMRC says 10 digits, and its design pattern says 10 or 13. No HMRC page names a check digit | https://www.gov.uk/find-utr-number and https://design.tax.service.gov.uk/hmrc-design-patterns/unique-taxpayer-reference |
+| UK VAT number: modulus 97 | Not read at the issuer. HMRC states nine digits and names "modulus 97", but withholds the formula | https://www.gov.uk/hmrc-internal-manuals/enquiry-manual/em3058 and https://www.gov.uk/hmrc-internal-manuals/vat-agricultural-flat-rate-scheme/vatafrs2500 |
 | Sort code and account number format | Verified: six-digit sorting code, eight-digit account number, in Vocalink's specification, version 9.20 of 4 Nov 2026 | https://www.vocalink.com/media/h3rou4er/validating-account-numbers-uk-modulus-checking-v920.pdf |
-| Aadhaar and Aadhaar Virtual ID: Verhoeff | Not verified. The UIDAI pages read do not state it, and the UIDAI pages that search results name for it return "not found" | https://uidai.gov.in/en/aadhaar-online-services |
+| Aadhaar and Aadhaar Virtual ID: Verhoeff | Not read at the issuer. The UIDAI pages read do not state it, and the UIDAI pages that search results name for it return "not found" | https://uidai.gov.in/en/aadhaar-online-services |
 | PAN format and holder-type letter | Verified: 5 letters, 4 digits, 1 letter; the fourth letter is one of A, B, C, F, G, H, J, L, P, T; the last letter is a check letter whose method is not published | https://www.incometaxindia.gov.in/w/how-pan-is-formed-and-how-it-gets-its-unique-identity- |
-| GSTIN: check character by modulus 36 | Not verified. Only third-party sources | none found |
-| Indian passport number format | Not verified. The page tried returns "not found" | https://www.passportindia.gov.in/AppOnlineProject/online/faqServicesAvailable |
-| Indian bank account number lengths | Not verified. RBI states no length | https://www.rbi.org.in/Scripts/FAQView.aspx?Id=60 |
+| GSTIN: check character by modulus 36 | Not read at the issuer. Only third-party sources | none found |
+| Indian passport number format | Not read at the issuer. The page tried returns "not found" | https://www.passportindia.gov.in/AppOnlineProject/online/faqServicesAvailable |
+| Indian bank account number lengths | Not read at the issuer. RBI states no length | https://www.rbi.org.in/Scripts/FAQView.aspx?Id=60 |
 | IFSC format | Verified: four letters for the bank, a 0, six characters for the branch | https://www.rbi.org.in/Scripts/FAQView.aspx?Id=60 |
-| UPI ID format | Not verified. NPCI's pages list handles but do not state the form of an ID | https://www.npci.org.in/product/upi/all-members |
+| UPI ID format | Not read at the issuer. NPCI's pages list handles but do not state the form of an ID | https://www.npci.org.in/product/upi/all-members |
 | TAN format | Verified: 4 letters, 5 digits, 1 letter; the first three letters are a jurisdiction code | https://www.incometaxindia.gov.in/w/tax-deduction-account-number |
-| UAN format | Not verified. The EPFO portal does not state the length | https://unifiedportal-mem.epfindia.gov.in/memberinterface/ |
-| ABHA number: format and check digit | Not verified. No ABDM page read states either. Third-party summaries of ABDM papers call it a random 14-digit number, with no check digit mentioned | https://abdm.gov.in/abha-number |
-| Voter ID (EPIC): format and check digit | Not verified. The Election Commission's sites gave no text | https://eci.gov.in/ |
+| UAN format | Not read at the issuer. The EPFO portal does not state the length | https://unifiedportal-mem.epfindia.gov.in/memberinterface/ |
+| ABHA number: format and check digit | Not read at the issuer. No ABDM page read states either. Third-party summaries of ABDM papers call it a random 14-digit number, with no check digit mentioned | https://abdm.gov.in/abha-number |
+| Voter ID (EPIC): format and check digit | Not read at the issuer. The Election Commission's sites gave no text | https://eci.gov.in/ |
 | Business Number: Luhn | Verified. CRA's worksheet applies the SIN formula to the first nine digits of a BN; the program account form is 9 digits, 2 letters, 4 digits | an archived CRA paper, https://bac-lac.wayback.archive-it.org/web/20061210041004/http:/www.cra-arc.gc.ca/eservices/magmedia/sin-e.pdf, and https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/business-registration/business-number-program-account/need-program-accounts.html |
-| BC Personal Health Number: check | Not verified. The province's specifications exist, but `gov.bc.ca` dropped every connection | https://www2.gov.bc.ca/assets/gov/health/practitioner-pro/software-development-guidelines/conformance-standards/vol-4c-app-rules-pnet.pdf |
+| BC Personal Health Number: check | Not read at the issuer. The province's specifications exist, but `gov.bc.ca` dropped every connection | https://www2.gov.bc.ca/assets/gov/health/practitioner-pro/software-development-guidelines/conformance-standards/vol-4c-app-rules-pnet.pdf |
 | ABN: modulus 89 | Verified, weights and steps as the workbook has them | https://abr.business.gov.au/Help/AbnFormat |
-| ACN: check | Not verified. ASIC states nine digits; the page named "digit check" gives no method | https://asic.gov.au/for-business/registering-a-company/steps-to-register-a-company/australian-company-numbers/australian-company-number-digit-check |
+| ACN: check | Not read at the issuer. ASIC states nine digits; the page named "digit check" gives no method | https://asic.gov.au/for-business/registering-a-company/steps-to-register-a-company/australian-company-numbers/australian-company-number-digit-check |
 | IBAN: modulus 97 | Verified: ISO 7064 MOD 97-10, first four characters moved to the end, remainder 1. Read in the 1997 edition's preview pages; SWIFT publishes the national formats | https://cdn.standards.iteh.ai/samples/21228/8c19005e318742e7ba49cd4fe544257c/ISO-13616-1997.pdf and https://www.swift.com/standards/data-standards/iban-international-bank-account-number |
 | BIC format | Verified: 4 characters, ISO 3166 country code, 2 characters, optional 3-character branch | https://www.swift.com/standards/data-standards/bic-business-identifier-code |
 | IMEI: Luhn | Verified: 8-digit TAC, 6-digit serial, a Luhn check digit (Annex B) | https://www.etsi.org/deliver/etsi_ts/123000_123099/123003/19.08.00_60/ts_123003v190800p.pdf |
 | Crypto wallet address formats | Verified from the published specifications: Bech32 and Bech32m (BIP-173, BIP-350), Base58Check, and Ethereum's EIP-55. No body issues these | https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki, https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki, https://eips.ethereum.org/EIPS/eip-55 |
 | LEI: modulus 97 | Verified: characters 19 and 20 are check digits by ISO 7064 MOD 97-10; valid when the remainder is 1 | https://cdn.standards.iteh.ai/samples/59771/b4526b6c9dc04897b014c659ed70ad27/ISO-17442-2012.pdf |
 | ISIN check | Verified: country code, 9 characters, check digit by the modulus 10 "Double-Add-Double" formula | https://anna-web.org/identifiers/ |
-| CUSIP check | Not verified. CUSIP Global Services states 9 characters with a check character, but not the method | https://www.cusip.com/identifiers.html |
+| CUSIP check | Not read at the issuer. CUSIP Global Services states 9 characters with a check character, but not the method | https://www.cusip.com/identifiers.html |
 
 The CRA worksheet is an archived copy, kept by Library and Archives Canada,
 of a 2006 CRA paper. It is the government's own text, but not a current
 page.
 
-**All 65 identifiers.** "Verified" means the facts its rule needs were read
-at the source above. "Format only" means the shape was verified but its
-check method was not, so the rule can be written but its validator cannot.
-"Not verified" means it was tried and failed. "Not in C0's list" means the
-design leaves it to its pack slice, which verifies it before writing it.
+**The source each of the 65 rests on.** "Issuer" and "standard" are the
+rows of the table above. Library sources are named by project: python-stdnum
+(LGPL 2.1 or later; its documentation at
+https://arthurdejong.org/python-stdnum/doc/ and its source at
+https://github.com/arthurdejong/python-stdnum), Presidio (MIT;
+https://presidio.dataprivacystack.org/supported_entities/ and its
+recognizers in https://github.com/data-privacy-stack/presidio, under
+`presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/`),
+stdnum-js (MIT; https://github.com/koblas/stdnum-js), validator.js (MIT;
+https://github.com/validatorjs/validator.js), and Microsoft Purview's
+definitions (https://learn.microsoft.com/en-us/purview/, page names below).
+A check method marked "source" was read in that project's code, not only in
+its documentation. The rules are written here from these statements; no
+library becomes a runtime dependency, as the Non-Goals require.
 
-| Identifier | Result |
-| --- | --- |
-| `payment-card` | Not in C0's list. The Luhn steps are verified in the IMEI standard, which takes them from ISO/IEC 7812; the card number lengths are not |
-| `iban` | Verified |
-| `email`, `phone`, `date-of-birth` | Not in C0's list. A date of birth has no issuing body; the author decides what verifies it |
-| `us-ssn` | Verified |
-| `us-itin` | Verified: starts with 9; fourth and fifth digits 50 to 65, 70 to 88, 90 to 92 or 94 to 99 (IRS Publication 4757, revised June 2026) |
-| `us-ein` | Partly verified: the prefixes are, the written form is not |
-| `us-ptin` | Verified |
-| `us-routing-number` | Not verified |
-| `us-bank-account` | Not verified: no body sets a format |
-| `us-passport` | Not verified: the State Department's page refused reading |
-| `us-drivers-license` | Not verified: each state issues its own |
-| `us-npi` | Format only: 10 digits with a check digit, method not read |
-| `us-dea-number` | Not verified: DEA's pages state no format or check |
-| `us-mbi` | Not verified |
-| `uk-nino` | Verified: two letters, six digits, A to D; the barred letters and prefixes are listed (https://www.gov.uk/hmrc-internal-manuals/national-insurance-manual/nim39110) |
-| `uk-nhs-number` | Verified |
-| `uk-utr` | Format only: 10 digits, or 13 in HMRC's design pattern |
-| `uk-vat-number` | Format only: 9 digits |
-| `uk-driving-licence` | Not verified: no DVLA page found states the format |
-| `uk-passport` | Not verified: HM Passport Office's page states no format |
-| `uk-sort-code-account` | Verified (the format; the modulus tables wait on their licence, as before) |
-| `uk-vehicle-registration` | Verified: two letters, two digits, three letters, since 2001 (https://www.gov.uk/displaying-number-plates) |
-| `in-aadhaar`, `in-aadhaar-vid` | Not verified |
-| `in-pan` | Verified |
-| `in-gstin` | Not verified |
-| `in-voter-id` | Not verified |
-| `in-passport` | Not verified |
-| `in-driving-licence` | Not verified: the Parivahan sites could not be reached |
-| `in-vehicle-registration` | Not verified: the ministry's site gave no text |
-| `in-bank-account` | Not verified |
-| `in-ifsc` | Verified |
-| `in-upi-id` | Not verified |
-| `in-tan` | Verified |
-| `in-uan` | Not verified |
-| `in-abha-number` | Not verified |
-| `ca-sin` | Verified: 9 digits; a temporary SIN starts with 9 (https://www.canada.ca/en/employment-social-development/services/sin.html); Luhn as in the CRA worksheet |
-| `ca-business-number` | Verified |
-| `ca-bc-phn` | Not verified |
-| `ca-bank-account` | Not verified: Payments Canada's pages state no format |
-| `ca-passport` | Not verified: the passport page states no format |
-| `ca-drivers-licence` | Not verified: each province issues its own |
-| `au-tfn` | Not verified: the ATO's pages refused reading or timed out |
-| `au-abn` | Verified |
-| `au-acn` | Format only: 9 digits |
-| `au-medicare-number` | Not verified: Services Australia's pages timed out |
-| `au-bank-account` | Not verified: the BSB page returns "not found" |
-| `au-passport` | Not verified: the passport site timed out |
-| `au-drivers-licence` | Not verified: each state issues its own |
-| `bic`, `lei`, `isin` | Verified |
-| `cusip` | Format only: 9 characters |
-| `crypto-wallet-address` | Verified |
-| `us-court-case-number` | Not verified |
-| `ip-address`, `url` | Not in C0's list |
-| `mac-address` | Verified: six octets, written in hexadecimal with hyphens (https://standards.ieee.org/wp-content/uploads/import/documents/tutorials/eui.pdf) |
-| `imei` | Verified |
-| `us-provider-tax-id` | Not in C0's list |
-| `health-insurance-member-id`, `insurance-claim-number`, `prescription-number` | Not verified: each insurer or pharmacy sets its own |
+| Identifier | Format and check, as the source states them | Source it rests on |
+| --- | --- | --- |
+| `payment-card` | 14 to 19 digits, Luhn | Purview `sit-defn-credit-card-number`; the Luhn steps also in the IMEI standard (ETSI TS 123 003, Annex B) |
+| `iban` | Country code, 2 check digits, up to 30 characters; MOD 97-10 | Standard: ISO 13616 (1997 preview); SWIFT's registry for each country's length |
+| `email` | Address form, RFC 822 validation | Presidio `EMAIL_ADDRESS`; validator.js `isEmail` |
+| `phone` | Per country | Presidio `PHONE_NUMBER`; validator.js `isMobilePhone` (en-US, en-GB, en-IN, en-CA, en-AU) |
+| `date-of-birth` | A date | Presidio `DATE_TIME`; validator.js `isDate`. No issuing body |
+| `us-ssn` | Area not 000, 666 or 900s; group not 00; serial not 0000 | Issuer: SSA POMS RM 10201.035 |
+| `us-itin` | Starts with 9; fourth and fifth digits 50 to 65, 70 to 88, 90 to 92, 94 to 99 | Issuer: IRS Publication 4757 (revised June 2026). Presidio's "7 or 8 as the fourth digit" disagrees; the issuer wins |
+| `us-ein` | Two digits, optional hyphen, seven digits; prefix from the IRS list | Issuer for the prefixes; python-stdnum `us.ein` source for the form |
+| `us-ptin` | P and 8 digits | Issuer: IRM 2.3.63.2 |
+| `us-routing-number` | 9 digits; weights 3, 7, 1, sum divisible by 10 | Presidio `aba_routing_recognizer.py` source; python-stdnum `us.rtn` source (the same check, as weights 7, 3, 9); Purview `sit-defn-aba-routing` |
+| `us-bank-account` | 6 to 17 digits (Purview), 8 to 17 (Presidio); no check | Purview `sit-defn-us-bank-account-number`; Presidio `US_BANK_NUMBER`. A label rule |
+| `us-passport` | 9 digits, or a letter and 8 digits | Purview `sit-defn-us-uk-passport-number`; stdnum-js passport table; Presidio `US_PASSPORT` |
+| `us-drivers-license` | Per state | Purview `sit-defn-us-drivers-license-number` (per-state patterns); Presidio `US_DRIVER_LICENSE` |
+| `us-npi` | 10 digits starting 1 or 2; Luhn over "80840" and the 10 digits | Presidio `us_npi_recognizer.py` source |
+| `us-dea-number` | Two letters and seven digits; the last is a check digit, method not stated | Purview `sit-defn-drug-enforcement-agency-number` |
+| `us-mbi` | 11 characters; digits at 1, 4, 7, 10, 11; letters at 2, 5, 8, 9 (no S, L, O, I, B, Z); letter or digit at 3, 6 | Presidio `us_mbi_recognizer.py` source; Purview `sit-defn-medicare-beneficiary-identifier-card` |
+| `uk-nino` | Two letters, six digits, A to D; barred letters and prefixes | Issuer: HMRC NIM39110 |
+| `uk-nhs-number` | 10 digits; modulus 11, weights 10 to 2 | Issuer: NHS data dictionary |
+| `uk-utr` | 10 digits; the first is a check digit from weights 6, 7, 8, 9, 10, 5, 4, 3, 2, modulus 11, mapped through "21987654321" | python-stdnum `gb.utr` source; HMRC for the length (10 or 13) |
+| `uk-vat-number` | 9 digits (12 with a branch); weights 8 to 2, 10, 1, modulus 97; remainder 0, or 42 or 55 when the first three digits are 100 or more | python-stdnum `gb.vat` source; HMRC for the length |
+| `uk-driving-licence` | 16 characters: 5 of surname, decade, month (plus 50), day, year, 2 initials, a digit, 2 letters; the DVLA check is not public | Presidio `uk_driving_licence_recognizer.py` source. Purview says 18 characters; Presidio's 16 matches the field layout |
+| `uk-passport` | Sources disagree: 2 letters and 7 digits (Presidio, from 2015); 9 digits (stdnum-js); a letter or digit and 8 digits (Purview) | Presidio `uk_passport_recognizer.py`; stdnum-js; Purview `sit-defn-us-uk-passport-number`. PK chooses and records why |
+| `uk-sort-code-account` | Six-digit sort code, eight-digit account | Operator: Vocalink specification 9.20 |
+| `uk-vehicle-registration` | Two letters, two digits, three letters, since 2001 | Issuer's guidance: GOV.UK; Presidio `UK_VEHICLE_REGISTRATION` for older forms |
+| `in-aadhaar` | 12 digits, not starting 0 or 1; Verhoeff | python-stdnum `in_.aadhaar` source; Purview `sit-defn-india-unique-identification-number` |
+| `in-aadhaar-vid` | 16 digits, not starting 0 or 1; Verhoeff | python-stdnum `in_.vid` source |
+| `in-pan` | 5 letters, 4 digits, 1 letter; fourth letter A, B, C, F, G, H, J, L, P or T | Issuer: Income Tax Department. Presidio's "12 characters" is wrong |
+| `in-gstin` | 2-digit state code, PAN, a character, Z, a check character by Luhn modulus 36 | python-stdnum `in_.gstin` source; Presidio `IN_GSTIN` |
+| `in-voter-id` | 3 letters, 7 digits; Luhn over the 7 digits | python-stdnum `in_.epic` source; Presidio `in_voter_recognizer.py`; Purview `sit-defn-india-voter-id-card` |
+| `in-passport` | A letter and 7 digits; also 2 letters and 6 digits (ePassport) | Presidio `in_passport_recognizer.py`; stdnum-js passport table |
+| `in-driving-licence` | 15 characters, letters and digits | Purview `sit-defn-india-drivers-license-number` |
+| `in-vehicle-registration` | State code, district number, series letters, 4 digits; BH series; per-state district tables | Presidio `in_vehicle_registration_recognizer.py` source |
+| `in-bank-account` | No fixed format; RBI states none | No source. A label rule (see below) |
+| `in-ifsc` | 4 letters, a 0, 6 characters | Issuer: RBI |
+| `in-upi-id` | A user part, `@`, a handle; letters, digits, dot and hyphen, varying by bank | Third-party page: Paytm, https://paytm.com/support/upi/upi-id-format-rules-valid-structure; handles from NPCI (item 8) |
+| `in-tan` | 4 letters, 5 digits, 1 letter | Issuer: Income Tax Department |
+| `in-uan` | 12 digits | Third-party page: DBS Bank, https://www.dbs.com/digibank/in/articles/save/what-is-uan-number |
+| `in-abha-number` | A random 14-digit number; no check digit stated | Government: Press Information Bureau, https://pib.gov.in/PressReleasePage.aspx?PRID=2003068 |
+| `ca-sin` | 9 digits, Luhn; not starting 0 or 8 | Issuer and CRA worksheet; python-stdnum `ca.sin` source |
+| `ca-business-number` | 9 digits, Luhn; with a program, 2 letters and 4 digits | Issuer (CRA); python-stdnum `ca.bn` source |
+| `ca-bc-phn` | 10 digits starting 9; weights 2, 4, 8, 5, 10, 9, 7, 3 on digits 2 to 9, each product modulo 11, check = (11 - sum) modulo 11 | python-stdnum `ca.bc_phn` source; stdnum-js `BC_BHN` |
+| `ca-bank-account` | 7 or 12 digits | Purview `sit-defn-canada-bank-account-number`. A label rule |
+| `ca-passport` | 2 letters and 6 digits | Purview `sit-defn-canada-passport-number`; stdnum-js passport table |
+| `ca-drivers-licence` | Per province | Purview `sit-defn-canada-drivers-license-number` |
+| `au-tfn` | 8 or 9 digits; weights 1, 4, 3, 7, 5, 8, 6, 9, 10, modulus 11; an 8-digit TFN uses the first eight weights | python-stdnum `au.tfn` source; Purview `sit-defn-australia-tax-file-number` |
+| `au-abn` | 11 digits; modulus 89 | Issuer: ABR |
+| `au-acn` | 9 digits; weights 8 to 1 on the first 8, check = (10 - sum modulo 10) modulo 10 | python-stdnum `au.acn` source; Presidio `AU_ACN`; ASIC for the length |
+| `au-medicare-number` | 10 digits, first 2 to 6; weights 1, 3, 7, 9, 1, 3, 7, 9 on digits 1 to 8, sum modulo 10 = digit 9 | Presidio `au_medicare_recognizer.py` source; Purview `sit-defn-australia-medical-account-number` |
+| `au-bank-account` | 6 to 10 digits, with or without a BSB | Purview `sit-defn-australia-bank-account-number`. A label rule |
+| `au-passport` | A letter and 7 digits, or 2 letters and 7 digits | stdnum-js passport table; Purview `sit-defn-australia-passport-number` |
+| `au-drivers-licence` | Per state | Purview `sit-defn-australia-drivers-license-number` |
+| `bic` | 4 characters, country code, 2 characters, optional 3 | Issuer: SWIFT |
+| `lei` | 20 characters; MOD 97-10 | Standard: ISO 17442 |
+| `isin` | Country code, 9 characters, Double-Add-Double modulus 10 | Issuer body: ANNA; python-stdnum `isin` source |
+| `cusip` | 9 characters; values doubled at even positions, digits summed, check = (10 - sum) modulo 10 | python-stdnum `cusip` source; CUSIP Global Services for the layout |
+| `crypto-wallet-address` | Bech32, Bech32m, Base58Check, EIP-55 | Specifications: BIP-173, BIP-350, EIP-55 |
+| `us-court-case-number` | Office, year, case type, number of 1 to 5 digits, as in 0:2010op00289; parts vary by court | Administrative Office of the US Courts, public user group notes of 11 May 2023, https://www.uscourts.gov/file/78483/download |
+| `ip-address` | IPv4 and IPv6 | Presidio `IP_ADDRESS`; Purview `sit-defn-ip-address`; validator.js `isIP` |
+| `url` | URL with a known top-level domain | Presidio `URL`; validator.js `isURL` |
+| `mac-address` | Six octets in hexadecimal | Issuer: IEEE Registration Authority |
+| `imei` | 8-digit TAC, 6-digit serial, Luhn | Standard: ETSI TS 123 003 |
+| `us-provider-tax-id` | A TIN or EIN | Presidio `US_PROVIDER_TAX_ID`; the EIN row above. A label rule |
+| `health-insurance-member-id` | No fixed format | Presidio `US_HEALTH_INSURANCE_MEMBER_ID`, found by context. A label rule |
+| `insurance-claim-number` | No fixed format | Presidio `US_CLAIM_NUMBER`, found by context. A label rule |
+| `prescription-number` | No fixed format | Presidio `US_PRESCRIPTION_NUMBER`, found by context. A label rule |
 
-**What this does to the 23 validators.** The checks verified are IBAN, NHS
-number, SIN, Business Number, ABN, LEI, ISIN and IMEI, and the Luhn steps
-the payment card uses: 9 of the 23. Under G2 the other 14 (routing number,
-NPI, DEA number, UTR, UK VAT number, UK driving licence, Aadhaar, Aadhaar
-Virtual ID, GSTIN, BC PHN, TFN, ACN, Australian Medicare number, CUSIP) are
-left out until a source is found. ABHA has no check digit that any source
-states, so PI adds no ABHA validator.
+**What this does to the 23 validators.** 21 have a stated check-digit
+method: the nine read at the issuer or its standard (IBAN, NHS number, SIN,
+Business Number, ABN, LEI, ISIN, IMEI, and Luhn for the card), and, from
+library source, the twelve others: routing number, NPI, UTR, UK VAT number,
+Aadhaar, Aadhaar Virtual ID, GSTIN, BC PHN, TFN, ACN, Australian Medicare
+number and CUSIP. The 22nd, the UK driving licence, has no public check
+digit; its validator checks the date fields, as Presidio's does. No source
+read states the DEA number's check method, so its validator is left out;
+the rule finds it by format and label. The ABHA number has no check digit
+in any source, so PI adds no ABHA validator. The voter ID has a Luhn check
+in python-stdnum, which PI may add.
 
 ##### 8. Lists
 
@@ -2892,42 +2940,29 @@ states, so PI adds no ABHA validator.
 | Indian bank codes (the first four letters of an IFSC) | RBI, "List of NEFT enabled bank Branches (Bank-wise IFSC)", one Excel file per bank, "updated as on November 15, 2026". https://www.rbi.org.in/Scripts/bs_viewcontent.aspx?Id=2009 | RBI's copyright policy allows reproduction "accurately and without modification", with RBI acknowledged as the source (https://www.rbi.org.in/Scripts/Disclaimer.aspx) | Not stated; the date shows it is kept current |
 | Microsoft Purview keyword lists | The pages list keywords, for example six for Aadhaar (https://learn.microsoft.com/en-us/purview/sit-defn-india-unique-identification-number) | Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse). No public source repository with an open licence was found for these pages | not relevant |
 
-**Decisions.** The keyword lists of Purview may **not** be copied. The bank
-codes can come from RBI's files, if the author accepts that a list of codes
-taken from them is a reproduction "without modification"; that is the
-author's call. The UPI handles have an official list, but its terms give no
-right to ship a copy, so the handles list needs NPCI's permission or the
-author's decision before PI ships it. Until then the UPI rule finds a UPI ID
-by its label.
+**Decisions.** By the author's decision (28 Nov 2026), all three may be used:
+"Anything that is publicly accessible but can't be copied just because of
+licence shall be copied. We will handle the licensing part later when we have
+some customers, say 100." Each list file records its `source` URL and, in
+`licence`, what the terms above say, so that the author can settle the
+licensing later. This does not change what the terms say: NPCI's and
+Microsoft Learn's terms grant no right to ship a copy, and RBI's allow only
+an unmodified reproduction with acknowledgement.
 
 ##### Rules left out
 
-A rule is left out until its format, and for a checked rule its check
-method, is verified at the body that issues it. "Format only" rows can be
-written as `labelled` rules without their validator, if the author agrees.
+A rule is left out only when no source of any kind states its format, or,
+for its validator, its check method. Rules with no fixed format are allowed
+as label rules: the value is found next to its label, with `needs:
+labelled`, and no validator. That covers the four bank account numbers, the
+provider tax ID, and the health insurance member, claim and prescription
+numbers. An identifier whose sources disagree (the UK passport number) is
+written by its pack slice, which records the choice.
 
 | Identifier | Reason | What would allow it later |
 | --- | --- | --- |
-| `us-routing-number` | Check not verified; the registrar's site blocks automated reading | The author reads the American Bankers Association's routing-number page in a browser |
-| `us-npi` (validator) | Luhn with 80840 not read at CMS | CMS's "NPI check digit" paper, read in a browser |
-| `us-dea-number` | No format or check stated by DEA | A DEA publication that states them |
-| `us-mbi` | `cms.gov` refused reading | CMS's "Understanding the MBI", read in a browser |
-| `us-court-case-number` | No US Courts page states a format | A court rule or a PACER page that states it |
-| `us-ein` (written form) | The form 12-3456789 not stated on the IRS page read | An IRS page or form that states it |
-| `us-bank-account`, `ca-bank-account`, `in-bank-account`, `au-bank-account` | No body sets a format | The author decides whether a label-only rule needs a format source |
-| `us-passport`, `uk-passport`, `in-passport`, `ca-passport`, `au-passport` | The issuers' pages refused reading or state no format | The issuer's page, read in a browser |
-| `us-drivers-license`, `ca-drivers-licence`, `au-drivers-licence` | Issued by each state or province | Each issuer's format, verified in the pack slice |
-| `uk-driving-licence`, `in-driving-licence` | No format read at DVLA or Parivahan | The issuer's page |
-| `uk-utr` (validator) | No HMRC page names a check digit | An HMRC specification |
-| `uk-vat-number` (validator) | HMRC names modulus 97 but withholds the formula | HMRC publishing it |
-| `in-aadhaar`, `in-aadhaar-vid` | UIDAI's current pages do not state the format or Verhoeff | A UIDAI document that states them |
-| `in-gstin` | Check not verified at GSTN or CBIC | A GSTN or CBIC specification |
-| `in-voter-id`, `in-uan`, `in-upi-id`, `in-abha-number`, `in-vehicle-registration` | Format not read at the issuer | The issuer's page, read in a browser |
-| `ca-bc-phn` | `gov.bc.ca` dropped every connection | The PharmaNet or Teleplan specification, read in a browser |
-| `au-tfn`, `au-medicare-number` | The ATO's and Services Australia's pages refused reading or timed out | The ATO's TFN declaration specification; Services Australia's check-digit page |
-| `au-acn` (validator) | ASIC's page gives no method | An ASIC page that does |
-| `cusip` (validator) | CUSIP Global Services names no method | The CUSIP standard (ANSI X9.6) |
-| `health-insurance-member-id`, `insurance-claim-number`, `prescription-number` | Each insurer or pharmacy sets its own format | The author decides whether a label-only rule is allowed |
+| `us-dea-number` (validator only) | No source read states how its check digit is computed; the rule itself is written, by format and label | A DEA publication or a library that states the method |
+| `in-bank-account` (format only) | No source states a format; the rule is written as a label rule | Nothing needed: it stays a label rule |
 
 ### 3. Target files, by slice
 
