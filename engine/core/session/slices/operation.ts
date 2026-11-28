@@ -48,7 +48,7 @@ const operationAfter: Partial<Record<SessionChange["type"], SessionState["operat
 };
 
 function saveAfter(save: SessionState["save"], change: SessionChange): SessionState["save"] {
-  if (changesRecord.has(change.type)) return "saving";
+  if (changesRecord.has(change.type) || change.type === "filing") return "saving";
   if (change.type === "saved") return "saved";
   return change.type === "saveFailed" ? "failed" : save;
 }

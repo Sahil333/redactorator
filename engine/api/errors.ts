@@ -42,6 +42,8 @@ export type ErrorCode =
   | "save-failed"
   // The documents' readings could not be had or searched, so nothing was approved.
   | "approval-failed"
+  // A fault while found values were made into marks: nothing was marked.
+  | "confirm-failed"
   // A run of Auto mode ended as failed.
   | DetectionErrorCode
   // Another operation runs. The app shows these where no state disables the control, as when setting the profile.

@@ -1,4 +1,4 @@
-import type { ComponentProps, RefObject } from "react";
+import { useEffect, useRef, type ComponentProps, type RefObject } from "react";
 import type { PageModel, PlacedImage } from "../engine/model/document";
 import type { PageIndex } from "../engine/model/geometry";
 import { CheckedBanner } from "./CheckedBanner";
@@ -6,7 +6,7 @@ import { baseName, savePdf } from "./download";
 import { DropZone } from "./DropZone";
 import { firstPage, markPages, type Mark } from "../engine/model/marks";
 import type { Tool } from "./marks";
-import { MarksPanel, marksPanelWidth } from "./MarksPanel";
+import { marksHeadingId, MarksPanel, marksPanelWidth } from "./MarksPanel";
 import { pageFrameId, PageScale, showMark } from "./pageGeometry";
 import { PageList } from "./PageList";
 import type { HiddenValue } from "../engine/model/project";
@@ -22,11 +22,28 @@ import { FindingsPanel } from "./FindingsPanel";
 import { usePageImages } from "./usePageImages";
 import { useZoom } from "./useZoom";
 import { ZoomControls } from "./ZoomControls";
-import type { OpenReview } from "./useFindings";
+import { FindingsDroppedNotice } from "./FindingsDroppedNotice";
+import type { DroppedNotice, OpenReview } from "./useFindings";
 import type { Marks } from "./useMarks";
 
 const THUMBNAILS_ID = "thumbnails";
 const MARKS_PANEL_ID = "marks-panel";
+
+/** Moves focus to the marks panel's heading, so a screen reader names the panel that is now there. */
+const focusMarksPanel = () => document.getElementById(marksHeadingId(MARKS_PANEL_ID))?.focus();
+
+/** The notice, whose Dismiss also moves focus to the marks panel, since the button goes with it. */
+function focusingAfterDismiss(notice: DroppedNotice | undefined): DroppedNotice | undefined {
+  return (
+    notice && {
+      ...notice,
+      onDismiss: () => {
+        notice.onDismiss();
+        focusMarksPanel();
+      },
+    }
+  );
+}
 
 /** The side panels' widths in CSS pixels. They outlast one document, so the app keeps them. */
 export interface PanelWidths {
@@ -79,6 +96,8 @@ interface WorkspaceProps {
   readonly marks: Marks;
   /** The document's open findings review, shown in the marks panel's place. */
   readonly findings: OpenReview | undefined;
+  /** The notice that the document's findings review was dropped, shown over its pages. */
+  readonly dropped: DroppedNotice | undefined;
   readonly review: Review;
   /** The document's images a box can spread over; undefined until they are read. */
   readonly images: readonly PlacedImage[] | undefined;
@@ -167,14 +186,17 @@ export function Workspace(props: WorkspaceProps) {
             />
           )}
           {output === undefined && (
-            <ReviewBanner
-              marks={newInOrder(marks.marks)}
-              from={review.newFrom}
-              onShow={(mark) => {
-                marks.highlight(mark.id);
-                showMark(mark.id);
-              }}
-            />
+            <>
+              <FindingsDroppedNotice notice={focusingAfterDismiss(props.dropped)} />
+              <ReviewBanner
+                marks={newInOrder(marks.marks)}
+                from={review.newFrom}
+                onShow={(mark) => {
+                  marks.highlight(mark.id);
+                  showMark(mark.id);
+                }}
+              />
+            </>
           )}
           <PageScale value={zoom.scale}>
             <PageList
@@ -205,8 +227,22 @@ export function Workspace(props: WorkspaceProps) {
   );
 }
 
+/**
+ * Once the document's findings panel has gone, confirmed or closed, its button that held focus has
+ * gone with it: focus moves to the marks panel that takes its place. Opening a document moves none.
+ */
+function useFocusAfterFindings(open: boolean) {
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    const closed = wasOpen.current && !open;
+    wasOpen.current = open;
+    if (closed && document.activeElement === document.body) focusMarksPanel();
+  }, [open]);
+}
+
 /** The marks panel at the right, or the findings panel in its place while a findings review is open, and the splitter that resizes it. */
 function SidePanel({ marks, review, findings, widths, onWidths, canMark, images, labelling }: WorkspaceProps) {
+  useFocusAfterFindings(findings !== undefined);
   const label = findings === undefined ? "Resize the marks panel" : "Resize the found values panel";
   return (
     <>

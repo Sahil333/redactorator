@@ -3,6 +3,10 @@
 import type { PageIndex } from "./geometry";
 import type { MarkType } from "./markTypes";
 
+/** Why a findings review was dropped, with a notice left in its place: a reader change, or the document's text changed. */
+export const droppedReasons = ["reader-changed", "text-changed"] as const;
+export type DroppedReason = (typeof droppedReasons)[number];
+
 /** `checked` is the strongest, `format` the weakest. */
 export const evidenceLevels = ["checked", "labelled", "format"] as const;
 export type EvidenceLevel = (typeof evidenceLevels)[number];

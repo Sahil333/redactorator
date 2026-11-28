@@ -11,13 +11,13 @@ import type { SessionView } from "../gate";
 import type { FindingsReview } from "./findings";
 import { storedTexts, type ReadingSource } from "./readings";
 
-/** What a run of Auto mode uses: the Session's gate, its project's stored page texts, how changes land, the detection worker, and the findings review it hands an ended run to. */
+/** What a run of Auto mode uses: the Session's gate, its project's stored page texts, how changes land, the detection worker, and the findings review it tells of a run that starts and hands one that ended to. */
 interface DetectionHost {
   readonly source: ReadingSource;
   allowed(command: "run" | "stop", document?: DocumentId): Result<SessionView>;
   dispatch(change: SessionChange): void;
   readonly client: DetectionClient;
-  readonly ended: FindingsReview["ended"];
+  readonly findings: Pick<FindingsReview, "started" | "ended">;
 }
 
 type Pages = Parameters<DetectionClient["run"]>[0]["pages"];
@@ -56,15 +56,16 @@ function hitsPerRule(hits: readonly Hit[]): RunRecord["hitsPerRule"] {
 /**
  * Runs of Auto mode, behind the gate: one at a time in a project, each searching one document's
  * stored page texts page by page in the detection worker. The pages that answered keep their hits
- * however the run ends; a run that failed before any did leaves the `run-failed` notice. `end`
- * stops a run and ends the worker, as the Session closes, and resolves once that run has ended.
+ * however the run ends. `end` stops a run and ends the worker, as the Session closes, and
+ * resolves once that run has ended.
  */
-export function detectionOf({ source, allowed, dispatch, client, ended }: DetectionHost): Session["detection"] & { end(): Promise<void> } {
+export function detectionOf({ source, allowed, dispatch, client, findings }: DetectionHost): Session["detection"] & { end(): Promise<void> } {
   let underWay: Promise<void> = Promise.resolve();
 
   async function search(document: DocumentId, profile: Profile, pages: Pages): Promise<void> {
     const run = crypto.randomUUID();
     dispatch({ type: "runStarted", document, run, pages: pages.length });
+    findings.started(document);
     const hits: Hit[] = [];
     const searched = new Set<PageIndex>();
     let errors = 0;
@@ -86,8 +87,7 @@ export function detectionOf({ source, allowed, dispatch, client, ended }: Detect
     const notSearched = pages.flatMap(({ index }) => (searched.has(index) ? [] : [index]));
     const record: RunRecord = { run, ...result, profile, pages: pages.length, notSearched, hitsPerRule: hitsPerRule(hits), errors };
     dispatch({ type: "runEnded", document, record });
-    if (searched.size === 0 && result.code !== undefined) dispatch({ type: "noticeSet", document, notice: { kind: "run-failed", code: result.code } });
-    else ended(document, record, hits);
+    findings.ended(document, record, hits);
   }
 
   return {

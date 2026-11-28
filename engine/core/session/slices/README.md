@@ -55,11 +55,11 @@ and the facade do that.
   - `firstDocuments`, `documents(part, change)`.
 - `detection.ts`
   - `DetectionPart`: per document, its run of Auto mode and the notice about
-    its last run that is not stored.
+    its last run or its dropped findings review.
   - `firstDetection`, `detection(part, change)`: `runStarted` sets the run
     running on page 1; each `pageSearched` moves it to the next page; `runEnded`
-    removes it; `noticeSet` sets the notice, which the next `runStarted`
-    clears.
+    removes it; `noticeSet` sets the notice, which the next `runStarted` or a
+    `noticeDismissed` clears.
 - `findings.ts`
   - `FindingsPart`: per document with an open findings review, its
     `OpenFindings`: the run's id, hits, how it ended and pages not searched,
@@ -123,7 +123,8 @@ and the facade do that.
   `marks.ts:counted`). The facade's output validity check compares against it.
 - Every change that alters the project record sets `save` to `"saving"`
   (`operation.ts:changesRecord`, `operation.ts:saveAfter`); `saved` and
-  `saveFailed` set `"saved"` and `"failed"`.
+  `saveFailed` set `"saved"` and `"failed"`. `filing`, a findings file
+  waiting to be written, sets `"saving"` too.
 - `operation` moves only on the changes listed in `operation.ts:operationAfter`
   (for example `planned` to `"confirming"`, `applyStarted` to `"applying"`,
   `findingsApplying` to `"marking"`, `findingsApplied` and

@@ -422,6 +422,45 @@ export async function workingCopy(page: Page, folder: string, file: string): Pro
   return path;
 }
 
+/** Writes `text` to the file at `path` in the browser's private storage, making its folders. */
+export async function writeStored(page: Page, path: string, text: string): Promise<void> {
+  await page.evaluate(
+    async ({ path, text }) => {
+      const names = path.split("/");
+      const name = names.pop() ?? "";
+      let at = await navigator.storage.getDirectory();
+      for (const each of names) at = await at.getDirectoryHandle(each, { create: true });
+      const writable = await (await at.getFileHandle(name, { create: true })).createWritable();
+      await writable.write(text);
+      await writable.close();
+    },
+    { path, text },
+  );
+}
+
+/**
+ * Makes the project kept in `folder` look as if an older build, with the reader tag `pdf-2`, had
+ * stored it: every file under its `pdf-3/` folder moves to `pdf-2/`. Read document ids first.
+ */
+export async function storeUnderOlderReader(page: Page, folder: string): Promise<void> {
+  await page.evaluate(async (folder) => {
+    let records = await navigator.storage.getDirectory();
+    for (const name of [folder, ".redactorator"]) records = await records.getDirectoryHandle(name);
+    async function copy(from: FileSystemDirectoryHandle, into: FileSystemDirectoryHandle) {
+      for await (const [name, handle] of from.entries()) {
+        if (handle instanceof FileSystemDirectoryHandle) await copy(handle, await into.getDirectoryHandle(name, { create: true }));
+        if (handle instanceof FileSystemFileHandle) {
+          const writable = await (await into.getFileHandle(name, { create: true })).createWritable();
+          await writable.write(await handle.getFile());
+          await writable.close();
+        }
+      }
+    }
+    await copy(await records.getDirectoryHandle("pdf-3"), await records.getDirectoryHandle("pdf-2", { create: true }));
+    await records.removeEntry("pdf-3", { recursive: true });
+  }, folder);
+}
+
 /** Every file in the browser's private storage, by path. */
 export async function storedFiles(page: Page): Promise<Map<string, Uint8Array>> {
   const files = await page.evaluate(async () => {

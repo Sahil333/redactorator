@@ -4,6 +4,7 @@ import type { DocumentHandle, EngineState } from "../../api/state";
 import { groundTruth } from "../../model/groundTruth";
 import { markedAgain, markKey, nextId, type Mark, type MarkTarget } from "../../model/marks";
 import { customTypeName, type MarkType } from "../../model/markTypes";
+import type { PageText } from "../../model/document";
 import type { DocumentId, Project, Settings } from "../../model/project";
 import { textTarget, type TextPieceRange, type Texts } from "../../model/selection";
 import type { Store } from "../../storage/store";
@@ -21,6 +22,9 @@ import { approvalOf } from "./effects/plan";
 import { profileOf } from "./effects/profile";
 import { anchorDocument, preparedFilesOf, updaterOf } from "./effects/reprepare";
 import { saver } from "./effects/save";
+import { readFindings, type StoredFindings } from "../stored/findings";
+import { recordsIn } from "../stored/projects";
+import { READER_TAG } from "../../pdf-protocol/messages";
 import { gate, type SessionView } from "./gate";
 import { canStep, validOutput } from "./selectors";
 import { firstParts, type SessionParts } from "./slices";
@@ -116,6 +120,19 @@ export function openSession(
     if (name !== undefined) host.addCustomType(name);
   }
 
+  /**
+   * Each document's findings files as the Session began, read from its start, so an update that
+   * another command starts meanwhile finds them too; kept until the document's marks are placed.
+   */
+  const stored = new Map<DocumentId, Promise<StoredFindings>>();
+  /** Opens a document's stored findings review, or shows its stored notice, once it is prepared. */
+  function prepared(document: DocumentId, texts: readonly PageText[]) {
+    const files = stored.get(document);
+    if (files === undefined) return;
+    stored.delete(document);
+    void files.then((read) => findings.reopened(document, read, texts));
+  }
+
   const updater = updaterOf({
     store,
     folder,
@@ -123,6 +140,7 @@ export function openSession(
     view,
     dispatch,
     change,
+    prepared,
     flush: saving.flush,
     // The open document's working copy was made again, or could not be: the worker's copy is
     // stale, and is let go. The app opens it again, and shows why when it can't be.
@@ -141,24 +159,28 @@ export function openSession(
   const approval = approvalOf({ source, view, allowed, dispatch, change });
   const adder = adderOf({ ...source, intake: host.intake, allowed, dispatch, change });
   const viewer = viewerOf({ source, view, allowed, dispatch });
-  const findings = findingsOf({ source, view, allowed, dispatch, change });
-  const detection = detectionOf({ source, allowed, dispatch, client: host.detection, ended: findings.ended });
+  const findings = findingsOf({ source, view, allowed, dispatch, change, file: saving.file, flush: saving.flush });
+  const detection = detectionOf({ source, allowed, dispatch, client: host.detection, findings });
   const profile = profileOf({ allowed, change });
 
   /**
    * Places each document's marks on the text its prepared files hold, and starts the update when
    * the project was just migrated or any document's files are missing or damaged. Checking on every
-   * open also finishes an update a crash cut short.
+   * open also finishes an update a crash cut short. Each document's stored findings review opens
+   * as its marks are placed, its files already read, before a user's run could start on it.
    */
   async function begin(): Promise<void> {
     let needed = opening.migrated;
+    const readerFolder = recordsIn(folder, READER_TAG);
+    for (const { id } of opening.project.documents) stored.set(id, readFindings(store, readerFolder, id));
     for (const document of opening.project.documents) {
-      const files = await preparedFilesOf(store, folder, document).catch(() => undefined);
+      const [files] = await Promise.all([preparedFilesOf(store, folder, document).catch(() => undefined), stored.get(document.id)]);
       const latest = view()?.parts.record.present.project.documents.find(({ id }) => id === document.id);
       if (files === undefined) needed = true;
-      else if (latest !== undefined) anchorDocument({ dispatch, change }, latest, files, false);
+      else if (latest !== undefined) anchorDocument({ dispatch, change, prepared }, latest, files, false);
     }
     if (needed && view() !== undefined) await updater.update();
+    stored.clear();
   }
 
   const step = (direction: "undo" | "redo") => (document: DocumentId) => {

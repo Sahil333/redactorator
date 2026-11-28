@@ -74,9 +74,9 @@ limit this folder to importing [engine/model](../model/README.md) and
 - `DocumentStatus`.
 - `DocumentDetection`: a document's `run` (`idle`, or `running` with the page
   being searched of how many), its open findings review's `findings` and the
-  pages not searched, a `notice` about its last run, `nextUndo` (an edit, or a
-  confirmed findings review with its counts), and `can` (`run`, `stop`,
-  `confirm`, `close`).
+  pages not searched, a `notice` about its last run or its dropped findings
+  review, `nextUndo` (an edit, or a confirmed findings review with its
+  counts), and `can` (`run`, `stop`, `confirm`, `close`, `dismiss`).
 - `DocumentHandle` and `ApprovalPlan`, which counts `unmarkedFindings`: the
   found values of the document's open findings review, which stay in the file.
 

@@ -40,11 +40,13 @@ export function profilePacks({ countries: chosenCountries, industries: chosenInd
   return packOrder.filter((pack) => chosen.has(pack));
 }
 
+export const runEndings = ["finished", "stopped", "failed"] as const;
+
 /** What one run did, kept after its findings review ends. It holds no value from the document. */
 export interface RunRecord {
   /** The run's id, a UUID made when it starts. */
   readonly run: string;
-  readonly ended: "finished" | "stopped" | "failed";
+  readonly ended: (typeof runEndings)[number];
   readonly code?: DetectionErrorCode;
   readonly profile: Profile;
   readonly packs: readonly { readonly id: PackId; readonly version: string }[];

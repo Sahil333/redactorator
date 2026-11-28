@@ -59,7 +59,9 @@ export type SessionChange =
   | { readonly type: "applied"; readonly tag: OutputTag; readonly bytes: Uint8Array<ArrayBuffer>; readonly shown: DocumentHandle }
   | { readonly type: "applyFailed" }
   | { readonly type: "outputDiscarded" }
-  /** Every change so far is written. */
+  /** A findings file waits to be written or removed: nothing is saved until it is. */
+  | { readonly type: "filing" }
+  /** Every change so far is written: the project record and the findings files. */
   | { readonly type: "saved" }
   | { readonly type: "saveFailed" }
   /** Closing began: no more commands are taken. */

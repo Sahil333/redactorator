@@ -8,6 +8,7 @@ browser or folder across app versions:
 - a project's `project.json`;
 - each document's text;
 - each document's images;
+- each document's findings review and the record of its last run;
 - the app's `settings.json`.
 
 Each file carries a `format` name and a `version`, and is checked as a whole
@@ -29,6 +30,20 @@ write project folders.
     `redactorator-images`, version 1.
   - `parseSettings(text)` and `settingsJson(settings)`: format
     `redactorator-settings`, version 1.
+  - `versioned`, `oneOf` and `parseProfile`, which `findings.ts` shares.
+- `findings.ts` (docs/designs/auto-mode.md, Technical Plan, section 5)
+  - `parseHits(text)` and `hitsJson(stored)`: format `redactorator-hits`,
+    version 1, `{ run, notSearched, hits }` (`StoredHits`). It holds the found
+    values' text.
+  - `parseState(text)` and `stateJson(state)`: format
+    `redactorator-findings-state`, version 1, `FindingsState`: `{ kind:
+    "open", run, changes }`, the user's changes by finding key, or `{ kind:
+    "dropped", reason }`, `"reader-changed"` or `"text-changed"`
+    (`DroppedReason`).
+  - `parseRun(text)` and `runJson(record)`: format `redactorator-run`,
+    version 1, a `RunRecord`. It holds no value from the document.
+  - Each parser returns undefined for a file it can't use, damaged or newer:
+    such a file is left alone.
 
 ## Invariants
 

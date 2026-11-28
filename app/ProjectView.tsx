@@ -356,6 +356,7 @@ export function ProjectView(props: ProjectViewProps) {
             onDismissError={failure.clear}
             marks={marking}
             findings={findings.review}
+            dropped={findings.dropped}
             review={reviewOf(session, props.opened, activeDocument)}
             images={images}
             tool={tool}
