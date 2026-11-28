@@ -19,7 +19,8 @@ export interface RegexMatch<R extends RegexRule> {
 export interface CompiledRules<R extends RegexRule> {
   /**
    * What `judge` makes of each match of each rule, leaving out the matches it rejects with
-   * undefined. One rule's kept matches come left to right and do not overlap. After a rejected
+   * undefined, rule by rule in the order given. One rule's kept matches come left to right and
+   * do not overlap. After a rejected
    * match the rule is tried again one character later, so a value is not lost because a longer
    * match that took it in was rejected.
    */

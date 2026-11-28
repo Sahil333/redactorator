@@ -1,5 +1,6 @@
 // The recognizer of this phase: a pack's rules as regular expressions over the page as written,
 // each match checked for its neighbours and by its validator.
+import { packOrder } from "../model/detection";
 import type { PageChar, PageText } from "../model/document";
 import type { Evidence, EvidenceLevel, Hit } from "../model/findings";
 import { pointBox, type PageIndex } from "../model/geometry";
@@ -68,13 +69,18 @@ function evidenceOf({ validator }: Loaded, value: string): Evidence | "error" {
   }
 }
 
-/** Runs the loaded packs' rules through `engine`, each checked by the validator it names in `validators`. */
+/**
+ * Runs the loaded packs' rules through `engine`, each checked by the validator it names in
+ * `validators`. Hits come rule by rule: the packs in `packOrder`, each pack's rules in the order
+ * they are written. The resolver breaks a tie between identifiers on one span by that order.
+ */
 export function patternRecognizer(engine: RegexEngine, validators: Readonly<Record<string, Validator>>): Recognizer {
   let compiled: CompiledRules<Loaded> | undefined;
 
   return {
     load(packs) {
-      compiled = engine.compile(packs.flatMap(({ rules }) => rules.map((rule) => loaded(rule, validators))));
+      const inOrder = [...packs].sort((a, b) => packOrder.indexOf(a.id) - packOrder.indexOf(b.id));
+      compiled = engine.compile(inOrder.flatMap(({ rules }) => rules.map((rule) => loaded(rule, validators))));
     },
     detect(page: PageIndex, chars: readonly string[]) {
       if (compiled === undefined) throw new Error("No packs are loaded");

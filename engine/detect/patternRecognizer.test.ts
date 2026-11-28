@@ -84,6 +84,23 @@ describe("a hit's text", () => {
   });
 });
 
+describe("hits on one span", () => {
+  test("come in pack order, then in the order of the rules in a pack, whatever order the packs are loaded in", () => {
+    const rule = (id: string): Rule => ({ id, identifier: id, pattern: "(\\d{6})", valueGroup: 1, needs: "format" });
+    const recognizer = patternRecognizer(jsRegexEngine, validators);
+    recognizer.load([
+      { id: "us", version: "000000000000", rules: [rule("us-second"), rule("us-third")] },
+      { id: "universal", version: "000000000000", rules: [rule("universal-first")] },
+    ]);
+    const { hits } = recognizer.detect(page(0), [..."No 123456"]);
+    expect(hits.map(({ rule: id, start, end }) => [id, start, end])).toEqual([
+      ["universal-first", 3, 9],
+      ["us-second", 3, 9],
+      ["us-third", 3, 9],
+    ]);
+  });
+});
+
 describe("a validator that throws", () => {
   const rule: Rule = { id: "test-number", identifier: "account-number", pattern: "(\\d{4})", valueGroup: 1, needs: "checked", validator: "faulty" };
   const faulty = (value: string) => {

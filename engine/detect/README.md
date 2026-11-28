@@ -61,6 +61,10 @@ expression over the page as written, with a value group, an optional
   validator gives `checksum` (`checked`), anything else `format`.
 - `notNextTo` is checked on the whole characters just before and after the
   value.
+- **Hits come in tie-break order:** the packs in `packOrder`, whatever order
+  `load` names them in, and each pack's rules in the order they are written.
+  The resolver breaks a tie between two identifiers on one span by this order
+  (`patternRecognizer.ts`).
 - One rule's kept matches come left to right without overlap. A match the
   recognizer rejects (by `notNextTo`, its validator or its evidence), or a
   match of length zero, moves the scan on by one character, so a value a
