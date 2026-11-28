@@ -3,7 +3,7 @@
 ## Overview
 
 The engine root. `createEngine` builds one engine over a PDF-worker channel, a
-project lock and the first store. It holds all engine state in one dispatcher
+function that starts detection workers, a project lock and the first store. It holds all engine state in one dispatcher
 and publishes it to the app as `EngineState`. The state holds a `revision`
 counter and four parts: the worker's status, the problems still shown, the
 Library (the project list, settings and the store), and at most one open
@@ -12,7 +12,7 @@ a worker channel through `ports.ts`.
 
 ## Interface
 
-- `createEngine.ts:createEngine(start: FirstStore & { worker: WorkerChannel; lock: LockPort }): Engine`
+- `createEngine.ts:createEngine(start: FirstStore & { worker: WorkerChannel; startDetectionWorker: () => WorkerChannel; lock: LockPort }): Engine`
   returns `{ getState, subscribe, library, session }` (the `Engine` facade from
   `engine/api/facade.ts`).
 - `dispatcher.ts:createDispatcher(initial, reduce): Dispatcher<S, R>` with
@@ -30,7 +30,7 @@ a worker channel through `ports.ts`.
   - [stored](./stored/README.md): projects and settings as kept in a Store.
   - [formats](./formats/README.md): versioned JSON encoders and parsers for the stored files.
   - [pdf-client](./pdf-client/README.md): the engine-side client for the PDF worker.
-  - [detect-client](./detect-client/README.md): the engine-side client for Auto mode's detection worker; a stand-in until the worker exists.
+  - [detect-client](./detect-client/README.md): the engine-side client for Auto mode's detection worker.
 
 ## Invariants
 
@@ -58,14 +58,16 @@ a worker channel through `ports.ts`.
   worker's own error. Every added file gets a new `newDocumentId()`, its
   SHA-256 (`hash.ts:sha256`) and what preparation made of it; intake stores
   nothing.
-- `.fallowrc.json`: the `core` zone may import only `model`, `storage`, `api`
-  and `pdf-protocol`.
+- `.fallowrc.json`: the `core` zone may import only `model`, `storage`, `api`,
+  `pdf-protocol` and `detect-protocol`.
 
 ## Side Effects
 
 - Starts the PDF-worker client over the host's `WorkerChannel`
   (`createEngine.ts`, `pdfClient(start.worker)`). Worker status changes are
   dispatched as `workerChanged`.
+- Builds the detection client over `start.startDetectionWorker` and gives it
+  to every Session (`createEngine.ts`). It starts no worker until a run.
 - Reads the bytes of chosen files, and hashes them with `crypto.subtle.digest`
   (`intake.ts:sha256`).
 - Store I/O, project locks and worker requests happen in the subdirectories'

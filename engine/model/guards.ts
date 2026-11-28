@@ -19,3 +19,5 @@ export function parseAll<T>(values: unknown, parse: (value: unknown) => T | unde
 }
 
 export const isText = (value: unknown): value is string => typeof value === "string";
+
+export const isName = (value: unknown): value is string => isText(value) && value !== "";
