@@ -39,6 +39,7 @@ stops the client.
   - the worker fails after it answered, sends a message that does not parse,
     or sends one the run does not wait for: `detector-failed`.
 - Each failure ends the worker, so nothing it sends later lands.
+- One run at a time: `run` while a run is going stops that run first.
 - The core sends `load`, then one `page`, and waits for its `hits` before the
   next. There is no timer: a page that never answers keeps the run going
   until `stop`.

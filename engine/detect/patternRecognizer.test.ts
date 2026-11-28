@@ -43,6 +43,11 @@ describe("the payment card rule", () => {
     expect(universal().detect(page(0), chars).hits).toEqual([]);
   });
 
+  test("finds a card number after another group of four digits, which a longer match took in", () => {
+    const chars = [..."Ref 2026 ", ...card];
+    expect(universal().detect(page(0), chars).hits.map(({ text }) => text)).toEqual([card]);
+  });
+
   test("does not join a value across a line end", () => {
     const chars = [..."4111 1111", "\n", ..."1111 1111"];
     expect(universal().detect(page(0), chars).hits).toEqual([]);

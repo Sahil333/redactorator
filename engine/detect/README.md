@@ -31,8 +31,9 @@ expression over the page as written, with a value group, an optional
   `detect(page, chars)` per page, returning `PageResult { hits, errors }`),
   `Rule`, `Pack`, `NotNextTo`, and `parsePack(value)`, which reads a compiled
   pack or gives `undefined`.
-- `regexEngine.ts`: `RegexEngine` (`compile(rules)` gives `scan(text)`, each
-  match with its rule, the span of the whole match and of the value group) and
+- `regexEngine.ts`: `RegexEngine` (`compile(rules)` gives `scan(text, judge)`,
+  which hands `judge` each match with its rule, the span of the whole match
+  and of the value group, and keeps what `judge` does not reject) and
   `jsRegexEngine`, JavaScript's `RegExp` with the flags `d`, `g` and `u`.
 - `patternRecognizer.ts:patternRecognizer(engine, validators)`: the pattern
   recognizer.
@@ -60,8 +61,10 @@ expression over the page as written, with a value group, an optional
   validator gives `checksum` (`checked`), anything else `format`.
 - `notNextTo` is checked on the whole characters just before and after the
   value.
-- One rule's matches come left to right without overlap. A match of length
-  zero moves the scan on by one character, so the loop ends
+- One rule's kept matches come left to right without overlap. A match the
+  recognizer rejects (by `notNextTo`, its validator or its evidence), or a
+  match of length zero, moves the scan on by one character, so a value a
+  longer rejected match took in is still found and the loop ends
   (`regexEngine.ts:scanOne`).
 - **Loading fails closed.** A pack id with no compiled pack, a pack that does
   not parse, a pattern that does not compile, a value group the pattern does

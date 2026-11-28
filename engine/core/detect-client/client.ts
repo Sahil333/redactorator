@@ -122,8 +122,16 @@ export function detectionClient(start: () => WorkerChannel): DetectionClient {
     return started;
   }
 
+  function stop(): void {
+    const packs = current?.packs ?? [];
+    endWorker();
+    finish({ ended: "stopped", packs });
+  }
+
   return {
     run(input) {
+      // One run at a time: a run still going is stopped, so its promise settles.
+      if (current !== undefined) stop();
       return new Promise((settle) => {
         const run = runs + 1;
         const started = workerOf();
@@ -136,11 +144,7 @@ export function detectionClient(start: () => WorkerChannel): DetectionClient {
         started.channel.post({ type: "load", run, packs: input.packs });
       });
     },
-    stop() {
-      const packs = current?.packs ?? [];
-      endWorker();
-      finish({ ended: "stopped", packs });
-    },
+    stop,
   };
 }
 

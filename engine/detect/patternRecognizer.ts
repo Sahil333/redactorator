@@ -80,18 +80,16 @@ export function patternRecognizer(engine: RegexEngine, validators: Readonly<Reco
       if (compiled === undefined) throw new Error("No packs are loaded");
       const view = textView(chars);
       const text = pageTextOf(chars);
-      const hits: Hit[] = [];
       let errors = 0;
-      for (const { rule: entry, value } of compiled.scan(view.text)) {
+      const hits = compiled.scan(view.text, ({ rule: entry, value }): Hit | undefined => {
         const { rule } = entry;
         const range = charRange(view, value.start, value.end);
-        if (range === undefined || (rule.notNextTo !== undefined && isNextTo(view.text, value, rule.notNextTo))) continue;
+        if (range === undefined || (rule.notNextTo !== undefined && isNextTo(view.text, value, rule.notNextTo))) return undefined;
         const evidence = evidenceOf(entry, view.text.slice(value.start, value.end));
         if (evidence === "error") errors++;
-        else if (strength[evidence.level] >= strength[rule.needs]) {
-          hits.push({ page, ...range, text: rangeText(text, range.start, range.end), identifier: rule.identifier, evidence: [evidence], rule: rule.id, recognizer: "pattern" });
-        }
-      }
+        if (evidence === "error" || strength[evidence.level] < strength[rule.needs]) return undefined;
+        return { page, ...range, text: rangeText(text, range.start, range.end), identifier: rule.identifier, evidence: [evidence], rule: rule.id, recognizer: "pattern" };
+      });
       return { hits, errors };
     },
   };
