@@ -68,7 +68,7 @@ function documentDetection(view: SessionView, document: DocumentId): DocumentDet
   const allows = (command: Parameters<typeof gate>[1]) => gate(view, command, document) === undefined;
   return {
     run,
-    ...(open === undefined ? {} : { findings: { findings: open.findings, notSearched: open.notSearched } }),
+    ...(open === undefined ? {} : { findings: { findings: open.findings, ended: open.ended, notSearched: open.notSearched } }),
     ...(notice === undefined ? {} : { notice }),
     // Every undo step is an edit until a findings review can be confirmed.
     ...(canStep(view, document, "undo") ? { nextUndo: { kind: "edit" } } : {}),
