@@ -1,15 +1,16 @@
 // Reasons for a unit test: the offset fault of textView.test.ts one step later, in the hits a
 // recognizer gives; a hit's text must be what rangeText reads on the stored page, or a stored
 // findings review would read as stale; a card after another group of four digits was missed
-// (found in review); hits on one span must come in the order the resolver breaks ties by; and a
-// validator that throws must cost one value, not the page.
+// (found in review); hits on one span must come in the order the resolver
+// breaks ties by; a validator that throws must cost one value, not the page; and the retry after a
+// rejected match counted one faulty value more than once (found in review).
 import { describe, expect, test } from "vitest";
 import type { PageChar, PageText } from "../model/document";
 import { isPageIndex, pointBox, type PageIndex } from "../model/geometry";
 import { rangeText } from "../model/pageText";
-import { compiledPacks } from "./packs/generated";
+import { loadPacks } from "./loadPacks";
 import { patternRecognizer } from "./patternRecognizer";
-import { parsePack, type Rule } from "./recognizer";
+import type { Rule } from "./recognizer";
 import { jsRegexEngine } from "./regexEngine";
 import { validators } from "./validators";
 
@@ -19,10 +20,10 @@ const page = (index: number): PageIndex => {
 };
 
 function universal() {
-  const pack = parsePack(compiledPacks.universal);
-  if (pack === undefined) throw new Error("The universal pack does not parse");
+  const loaded = loadPacks(["universal"]);
+  if (loaded === undefined) throw new Error("The universal pack does not load");
   const recognizer = patternRecognizer(jsRegexEngine, validators);
-  recognizer.load([pack]);
+  recognizer.load(loaded.packs, loaded.lists);
   return recognizer;
 }
 
@@ -48,6 +49,12 @@ describe("the payment card rule", () => {
   test("finds a card number after another group of four digits, which a longer match took in", () => {
     const chars = [..."Ref 2026 ", ...card];
     expect(universal().detect(page(0), chars).hits.map(({ text }) => text)).toEqual([card]);
+  });
+
+  test("offers a stretch of a longer number in groups that passes Luhn", () => {
+    // Accepted: from the characters alone this is the case above, a card after a year, and a
+    // missed card is the worse error (docs/designs/auto-mode.md, The Problem).
+    expect(universal().detect(page(0), [..."1111 4000 0000 0000 1232"]).hits.map(({ text }) => text)).toEqual(["4000 0000 0000 1232"]);
   });
 
   test("does not join a value across a line end", () => {
@@ -78,7 +85,7 @@ describe("a hit's text", () => {
   test("is what rangeText reads on the stored page, for a value across a line end", () => {
     const rule: Rule = { id: "test-name", identifier: "name", pattern: "([A-Z][a-z]+\\n[A-Z][a-z]+)", valueGroup: 1, needs: "format" };
     const recognizer = patternRecognizer(jsRegexEngine, validators);
-    recognizer.load([{ id: "universal", version: "000000000000", rules: [rule] }]);
+    recognizer.load([{ id: "universal", version: "000000000000", rules: [rule] }], []);
     const chars = [..."to Jane", "\n", ..."Roe."];
     const [hit] = recognizer.detect(page(0), chars).hits;
     expect(hit?.text).toBe("Jane Roe");
@@ -93,7 +100,7 @@ describe("hits on one span", () => {
     recognizer.load([
       { id: "us", version: "000000000000", rules: [rule("us-second"), rule("us-third")] },
       { id: "universal", version: "000000000000", rules: [rule("universal-first")] },
-    ]);
+    ], []);
     const { hits } = recognizer.detect(page(0), [..."No 123456"]);
     expect(hits.map(({ rule: id, start, end }) => [id, start, end])).toEqual([
       ["universal-first", 3, 9],
@@ -112,9 +119,16 @@ describe("a validator that throws", () => {
 
   test("costs that value only: it is counted, not offered, and the page goes on", () => {
     const recognizer = patternRecognizer(jsRegexEngine, { faulty });
-    recognizer.load([{ id: "universal", version: "000000000000", rules: [rule] }]);
+    recognizer.load([{ id: "universal", version: "000000000000", rules: [rule] }], []);
     const { hits, errors } = recognizer.detect(page(2), [..."1111 2222"]);
     expect(errors).toBe(1);
     expect(hits.map(({ text }) => text)).toEqual(["2222"]);
+  });
+
+  test("is counted once for a value the retry after a rejected match meets again", () => {
+    const grouped: Rule = { id: "test-grouped", identifier: "account-number", pattern: "(\\d{4}(?: \\d{4})*)", valueGroup: 1, needs: "checked", validator: "faulty" };
+    const recognizer = patternRecognizer(jsRegexEngine, { faulty: () => { throw new Error("A fault in the check"); } });
+    recognizer.load([{ id: "universal", version: "000000000000", rules: [grouped] }], []);
+    expect(recognizer.detect(page(0), [..."1111 2222 3333, 4444"]).errors).toBe(2);
   });
 });

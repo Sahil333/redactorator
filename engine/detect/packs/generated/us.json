@@ -1,5 +1,51 @@
 {
   "id": "us",
-  "version": "4f53cda18c2b",
-  "rules": []
+  "version": "0fa6b565143b",
+  "rules": [
+    {
+      "id": "us-bank-account",
+      "identifier": "us-bank-account",
+      "pattern": "(\\d{6,17})",
+      "valueGroup": 1,
+      "needs": "labelled",
+      "notNextTo": "letter-or-digit",
+      "labels": [
+        "Checking Account Number",
+        "Checking Account",
+        "Checking Account #",
+        "Checking Acct Number",
+        "Checking Acct #",
+        "Checking Acct No.",
+        "Checking Account No.",
+        "Bank Account Number",
+        "Bank Account #",
+        "Bank Acct Number",
+        "Bank Acct #",
+        "Bank Acct No.",
+        "Bank Account No.",
+        "Savings Account Number",
+        "Savings Account.",
+        "Savings Account #",
+        "Savings Acct Number",
+        "Savings Acct #",
+        "Savings Acct No.",
+        "Savings Account No.",
+        "Debit Account Number",
+        "Debit Account",
+        "Debit Account #",
+        "Debit Acct Number",
+        "Debit Acct #",
+        "Debit Acct No.",
+        "Debit Account No."
+      ],
+      "labelSide": "before",
+      "distance": 40,
+      "source": "Microsoft Purview, U.S. bank account number: 6 to 17 consecutive digits, no checksum, with a keyword from Keyword_usa_Bank_Account; the labels are that list. https://learn.microsoft.com/en-us/purview/sit-defn-us-bank-account-number",
+      "licence": "Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)",
+      "verified": {
+        "date": "2026-11-28",
+        "at": "https://learn.microsoft.com/en-us/purview/sit-defn-us-bank-account-number"
+      }
+    }
+  ]
 }

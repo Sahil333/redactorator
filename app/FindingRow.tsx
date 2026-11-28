@@ -4,21 +4,17 @@ import { markTypeLabel } from "../engine/model/markTypes";
 import { PageLink } from "./PageLink";
 import { pagesList, plural } from "./marks";
 
-/**
- * Why a finding was found, in the design's words. A hit does not carry the name of its label, its
- * list or its companion, which no rule has before slice P0: a list is named by the identifier, and
- * a label and a companion by nothing.
- */
-function reasonText({ kind }: Evidence, name: string): string {
-  switch (kind) {
+/** Why a finding was found, in the design's words. `name` is the finding's identifier's name. */
+function reasonText(evidence: Evidence, name: string): string {
+  switch (evidence.kind) {
     case "checksum":
       return "passed its check";
     case "list":
-      return `is a known ${name}`;
+      return `is a known ${evidence.list}`;
     case "label":
-      return "next to a label";
+      return `next to the label ${evidence.label}`;
     case "companion":
-      return "near a related value";
+      return `near a ${markTypeLabel(evidence.companion)}`;
     case "format":
       return `has the format of a ${name}`;
     case "model":

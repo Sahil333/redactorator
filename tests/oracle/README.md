@@ -68,6 +68,16 @@ uv run --project tests/oracle python tests/oracle/make_fixtures.py
 uv run --project tests/oracle python -m pytest tests/oracle
 ```
 
+`make_pack_fixtures.py` writes `fixtures/packs/<pack>.pdf` and
+`<pack>.truth.json` for each pack with rules, from the packs' YAML sources
+(PyYAML), reusing `make_fixtures.py`'s PDF helpers. Each example and near-miss
+is a line of its own block, a grouped number is written in seven ways, and
+python-stdnum checks each example and near-miss of a rule that names a
+`stdnum` module. `tests/e2e/packs.spec.ts` matches Auto mode's rows against the
+truth file. `pnpm packs` runs it after the pack compiler; `--check`, in
+`pnpm test:tools`, fails when a committed file differs. How to write a rule's
+examples: [tools/packs/README.md](../../tools/packs/README.md).
+
 Geometry in the app's box convention (MuPDF page space: points, origin top-left,
 rotation and crop applied):
 

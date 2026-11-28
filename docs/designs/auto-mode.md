@@ -2377,7 +2377,7 @@ pack: in
 rules:
   - id: in-ifsc
     identifier: in-ifsc
-    pattern: '([A-Z]{4}0[A-Z0-9]{6})'
+    pattern: '(([A-Z]{4})0[A-Z0-9]{6})'
     value: 1                      # which group is the value
     needs: checked                # checked | labelled | format
     labels: ["IFSC", "IFSC Code"]
@@ -2385,7 +2385,7 @@ rules:
     distance: 40
     notNextTo: letter-or-digit    # letter | digit | letter-or-digit
     validator: null
-    list: { name: in-bank-codes, part: [0, 4] }
+    list: { name: in-bank-codes, group: 2 }   # the group looked up in the list
     companion: null               # or { rule: in-ifsc, distance: 200 }
     yieldsTo: []
     source: "https://..."
@@ -2394,6 +2394,13 @@ rules:
     examples: ["HDFC0001234"]
     nearMisses: ["HDFC1001234"]
 ```
+
+Slice P0 made this format final; `tools/packs/README.md` gives every field,
+the forms an example and a near-miss can take, and what each check's failure
+means. P0 changed two things: a list is looked up by a group of the pattern
+(`group`), not by a slice of the value, so that a handle after an `@` or a
+top-level domain can be looked up too; and a rule may name a python-stdnum
+module in `stdnum`, which only the fixture generator reads.
 
 *   **Named pieces.** A pattern may use `{sep}` for one separator and `{sep?}`
     for one optional separator. The compiler expands both from the matcher's

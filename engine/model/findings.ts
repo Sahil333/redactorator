@@ -3,19 +3,25 @@
 import type { PageIndex } from "./geometry";
 import type { MarkType } from "./markTypes";
 
-export const evidenceKinds = ["checksum", "list", "label", "companion", "format", "model"] as const;
-export type EvidenceKind = (typeof evidenceKinds)[number];
-
 /** `checked` is the strongest, `format` the weakest. */
 export const evidenceLevels = ["checked", "labelled", "format"] as const;
 export type EvidenceLevel = (typeof evidenceLevels)[number];
 
-export interface Evidence {
-  readonly kind: EvidenceKind;
-  readonly level: EvidenceLevel;
-  /** For a `label`: which of the rule's labels matched. */
-  readonly label?: number;
-}
+/** The kinds of evidence that carry nothing but their level. */
+export const plainEvidenceKinds = ["checksum", "format", "model"] as const;
+
+/**
+ * Why a value was found. A label, a list and a companion carry the rule's own words, so the panel
+ * can name them; never text read from the page.
+ */
+export type Evidence =
+  | { readonly kind: (typeof plainEvidenceKinds)[number]; readonly level: EvidenceLevel }
+  /** `label`: the rule's label that matched, as the pack writes it. */
+  | { readonly kind: "label"; readonly level: EvidenceLevel; readonly label: string }
+  /** `list`: the list's name for the user, such as "Indian bank code". */
+  | { readonly kind: "list"; readonly level: EvidenceLevel; readonly list: string }
+  /** `companion`: the identifier of the value found beside this one. */
+  | { readonly kind: "companion"; readonly level: EvidenceLevel; readonly companion: MarkType };
 
 /** One match by one recognizer: `start` and `end` index the page's `chars` for the value only, and `text` is what `rangeText` reads there. */
 export interface Hit {

@@ -1,0 +1,97 @@
+# How to write a rule: tools/packs/README.md.
+pack: in
+rules:
+  - id: in-ifsc
+    identifier: in-ifsc
+    # Four letters for the bank, a 0, six letters or digits for the branch. Group 2 is the bank.
+    pattern: '(([A-Z]{4})0[A-Z0-9]{6})'
+    value: 1
+    needs: labelled
+    labels: ["IFSC", "IFSC Code", "IFS Code"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    list: { name: in-bank-codes, group: 2 }
+    source: "RBI, NEFT FAQ 4: an 11-character code, the first four letters the bank, the fifth a 0, the last six the branch. https://www.rbi.org.in/Scripts/FAQView.aspx?Id=60"
+    licence: "RBI's copyright policy allows reproduction accurately and without modification, with RBI acknowledged as the source (https://www.rbi.org.in/Scripts/Disclaimer.aspx)"
+    verified: { date: "2026-11-28", at: "https://www.rbi.org.in/Scripts/FAQView.aspx?Id=60" }
+    examples:
+      # A known bank, labelled.
+      - "HDFC0001234"
+      # A known bank, no label: the list alone.
+      - { value: "SBIN0004321", line: "Branch {value}" }
+      # A bank not on the list, labelled: the label alone.
+      - "QWXZ0123456"
+    nearMisses:
+      # The fifth character is not 0.
+      - "HDFC1001234"
+      # A bank not on the list, and no label.
+      - { value: "QWXZ0001234", line: "Branch {value}" }
+
+  - id: in-aadhaar
+    identifier: in-aadhaar
+    # 12 digits in groups of four, the first not 0 or 1.
+    pattern: '([2-9]\d{3}{sep?}\d{4}{sep?}\d{4})'
+    value: 1
+    needs: checked
+    notNextTo: letter-or-digit
+    validator: aadhaar
+    stdnum: in_.aadhaar
+    # A number labelled UAN can pass the Aadhaar check by chance.
+    yieldsTo: [in-uan]
+    source: "python-stdnum in_.aadhaar: 12 digits, the first 2 to 9, not a palindrome, Verhoeff check digit; Microsoft Purview, India unique identification (Aadhaar) number: 12 digits with optional spaces or dashes. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/aadhaar.py"
+    licence: "python-stdnum is LGPL 2.1 or later; the rule is written from its statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/in_/aadhaar.py" }
+    examples:
+      - "2345 6789 0124"
+      - "3765 4321 0981"
+    nearMisses:
+      # Fails the Verhoeff check.
+      - "2345 6789 0125"
+      # Starts with 1.
+      - "1345 6789 0124"
+
+  - id: in-uan
+    identifier: in-uan
+    # 12 digits, found next to a label.
+    pattern: '(\d{4}{sep?}\d{4}{sep?}\d{4})'
+    value: 1
+    needs: labelled
+    labels: ["UAN", "UAN No", "Universal Account Number"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "DBS Bank India: the Universal Account Number (UAN) is a 12-digit number the EPFO allots. https://www.dbs.bank.in/digibank/in/articles/save/what-is-uan-number"
+    licence: "A bank's public article; its terms were not read"
+    verified: { date: "2026-11-28", at: "https://www.dbs.bank.in/digibank/in/articles/save/what-is-uan-number" }
+    examples:
+      - "1001 2345 6789"
+      # Passes the Aadhaar check too: the Aadhaar rule gives way.
+      - "2000 1234 5671"
+    nearMisses:
+      # No label.
+      - { value: "1009 8765 4321", line: "Member {value}" }
+
+  - id: in-bank-account
+    identifier: in-bank-account
+    # 9 to 18 digits, found next to a label or near an IFSC.
+    pattern: '(\d{9,18})'
+    value: 1
+    needs: labelled
+    labels: ["Account No", "Account Number", "A/c No", "Bank Account"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    companion: { rule: in-ifsc, distance: 40 }
+    # "Universal Account Number" holds the label "Account Number".
+    yieldsTo: [in-uan]
+    source: "RBI, Report of the Technical Committee to Examine Uniform Routing Code and Account Number Structure (16 Jan 2013), section 2.9: each bank has its own structure, 9 to 18 digits long. https://www.rbi.org.in/scripts/PublicationReportDetails.aspx?ID=695"
+    licence: "RBI's copyright policy allows reproduction accurately and without modification, with RBI acknowledged as the source (https://www.rbi.org.in/Scripts/Disclaimer.aspx)"
+    verified: { date: "2026-11-28", at: "https://www.rbi.org.in/scripts/PublicationReportDetails.aspx?ID=695" }
+    examples:
+      - "50100023456789"
+      # No label: the IFSC beside it.
+      - { value: "001234567890123", line: "Credited to {value} at {companion}" }
+    nearMisses:
+      # Neither a label nor an IFSC.
+      - { value: "98765432101", line: "Ref {value}" }

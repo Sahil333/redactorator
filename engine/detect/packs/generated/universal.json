@@ -1,20 +1,34 @@
 {
   "id": "universal",
-  "version": "eccf735a38e9",
+  "version": "40d5da0ff0d3",
   "rules": [
     {
       "id": "payment-card",
       "identifier": "payment-card",
-      "pattern": "(\\d{14,19}|\\d{4}(?:(?:[^\\S\\n]|[\\-.\\u2010-\\u2015\\u2212])\\d{4}){2,3}(?:(?:[^\\S\\n]|[\\-.\\u2010-\\u2015\\u2212])\\d{1,3})?|\\d{4}(?:[^\\S\\n]|[\\-.\\u2010-\\u2015\\u2212])\\d{6}(?:[^\\S\\n]|[\\-.\\u2010-\\u2015\\u2212])\\d{4,5})",
+      "pattern": "(\\d{14,19}|\\d{4}(?:(?:(?!\\n)[\\s\\-.\\u2010-\\u2015\\u2212])\\d{4}){2,3}(?:(?:(?!\\n)[\\s\\-.\\u2010-\\u2015\\u2212])\\d{1,3})?|\\d{4}(?:(?!\\n)[\\s\\-.\\u2010-\\u2015\\u2212])\\d{6}(?:(?!\\n)[\\s\\-.\\u2010-\\u2015\\u2212])\\d{4,5})",
       "valueGroup": 1,
       "needs": "checked",
       "notNextTo": "letter-or-digit",
       "validator": "card",
-      "source": "https://learn.microsoft.com/en-us/purview/sit-defn-credit-card-number",
-      "licence": "public documentation",
+      "source": "Microsoft Purview, credit card number: 14 to 19 digits, formatted or unformatted, passing the Luhn test. https://learn.microsoft.com/en-us/purview/sit-defn-credit-card-number",
+      "licence": "Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)",
       "verified": {
         "date": "2026-11-28",
         "at": "https://learn.microsoft.com/en-us/purview/sit-defn-credit-card-number"
+      }
+    },
+    {
+      "id": "email",
+      "identifier": "email",
+      "pattern": "((?<![A-Za-z0-9.!#$%&'*+/=?^_`{|}~-])[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63})",
+      "valueGroup": 1,
+      "needs": "format",
+      "notNextTo": "letter-or-digit",
+      "source": "Presidio's email recognizer: a local part, an @, and a domain with at least one dot. https://raw.githubusercontent.com/data-privacy-stack/presidio/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/generic/email_recognizer.py",
+      "licence": "Presidio is MIT-licensed",
+      "verified": {
+        "date": "2026-11-28",
+        "at": "https://raw.githubusercontent.com/data-privacy-stack/presidio/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/generic/email_recognizer.py"
       }
     }
   ]

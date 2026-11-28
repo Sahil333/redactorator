@@ -1,11 +1,17 @@
 {
   "ignorePatterns": ["vendor/**"],
-  "supportEntry": ["engine/globals.ts"],
+  "supportEntry": ["engine/globals.ts", "tools/**/*.ts"],
   "health": {
     "coverage": "coverage/coverage-final.json"
   },
-  // The same exemption for a new export in an existing file: P0's pack compiler reads it.
-  "ignoreExports": [{ "file": "engine/model/match.ts", "exports": ["joinerClass"] }],
+  // mod97 and weightedSum are for the pack slices' validators (docs/designs/auto-mode.md, slice
+  // P0); the first slice to use one removes it here.
+  "ignoreExports": [{ "file": "engine/detect/validators/shared.ts", "exports": ["mod97", "weightedSum"] }],
+  // A standing exemption, chosen by the owner on 28 Nov 2026: the tools run under Node in
+  // `pnpm test:tools`, and the coverage file this audit reads counts browser tests only, so their
+  // CRAP scores rest on fallow's estimate for untested code. Their cyclomatic and cognitive limits
+  // still hold.
+  "overrides": [{ "files": ["tools/**"], "rules": { "complexity-crap": "warn" } }],
   "boundaries": {
     "coverage": { "requireAllFiles": true, "allowUnmatched": ["*.config.ts", "engine/globals.ts"] },
     "zones": [
@@ -23,7 +29,8 @@
       { "name": "detect", "patterns": ["engine/detect/**"] },
       { "name": "host-browser", "patterns": ["engine/host-browser/**"] },
       { "name": "app", "patterns": ["app/**"] },
-      { "name": "tests", "patterns": ["tests/**"] }
+      { "name": "tests", "patterns": ["tests/**"] },
+      { "name": "tools", "patterns": ["tools/**/*.ts"] }
     ],
     "rules": [
       { "from": "model", "allow": [] },
@@ -40,7 +47,8 @@
       { "from": "detect", "allow": ["model", "detect-protocol"] },
       { "from": "host-browser", "allow": ["model", "storage", "pdf-protocol", "api", "core"] },
       { "from": "app", "allow": ["model", "storage", "api", "host-browser"] },
-      { "from": "tests", "allow": ["model", "storage", "pdf-protocol", "detect-protocol", "api", "core", "pdf-apply", "pdf", "detect", "host-browser", "app"] }
+      { "from": "tests", "allow": ["model", "storage", "pdf-protocol", "detect-protocol", "api", "core", "pdf-apply", "pdf", "detect", "host-browser", "app"] },
+      { "from": "tools", "allow": ["model", "detect"] }
     ]
   }
 }
