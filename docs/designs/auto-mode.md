@@ -2993,6 +2993,9 @@ written by its pack slice, which records the choice.
 | --- | --- | --- |
 | `us-dea-number` (validator only) | No source read states how its check digit is computed; the rule itself is written, by format and label | A DEA publication or a library that states the method |
 | `in-bank-account` (format only) | No source states a format; the rule is written as a label rule | Nothing needed: it stays a label rule |
+| `uk-sort-code-account` (validator only) | Vocalink's modulus checks need its weight table, a row of weights for each sort code range, which changes every few months; a validator looks nothing up, and the design names no list for it. The sort code and the account number are written as label rules, the account number with the sort code as its companion | A list of Vocalink's weight table, and a way for a check to read it |
+| `uk-utr` (13-digit check only) | HMRC's design pattern allows 13 digits but no source says which ten carry the check; the 13-digit form is written as a label rule | A source that says where the 10-digit UTR sits in the 13 |
+| `uk-vehicle-registration` (Northern Ireland and dateless forms) | Presidio gives the current, prefix and suffix forms only; the GOV.UK guidance on number plates (INF104) could not be read | A source that states those forms |
 
 ### 3. Target files, by slice
 
