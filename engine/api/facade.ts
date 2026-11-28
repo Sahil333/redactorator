@@ -1,4 +1,5 @@
 import type { PageText, Pixels, PlacedImage, Source } from "../model/document";
+import type { Profile } from "../model/detection";
 import type { Box, PageIndex } from "../model/geometry";
 import type { DocumentFacts, GroundTruth } from "../model/groundTruth";
 import type { MarkType } from "../model/markTypes";
@@ -100,6 +101,29 @@ export interface Session {
     /** Back to editing. */
     discard(): Result<void>;
   };
+  /** Auto mode's run on one document; one run at a time in a project. */
+  readonly detection: {
+    /** Starts a run; `profile` replaces the project's for this run only. */
+    run(document: DocumentId, profile?: Profile): Result<void>;
+    /** Ends the run; the pages already searched keep their hits. */
+    stop(document: DocumentId): Result<void>;
+  };
+  /** A document's open findings review; a finding is named by its key. */
+  readonly findings: {
+    setTicked(document: DocumentId, key: string, ticked: boolean): Result<void>;
+    /** Picks another candidate, by its index: another identifier for the same span. */
+    choose(document: DocumentId, key: string, candidate: number): Result<void>;
+    /** Moves the finding's edges to the range shown at one place; the engine applies them at every place. */
+    setEdges(document: DocumentId, key: string, page: PageIndex, start: number, end: number): Result<void>;
+    /** Makes the marks and the rejected values, and ends the findings review. The app asks first. */
+    confirm(document: DocumentId): Promise<Result<{ readonly values: number; readonly marks: number }>>;
+    /** Ends the findings review and keeps nothing. The app asks first. */
+    close(document: DocumentId): Promise<Result<void>>;
+    /** Removes the document's stored notice. */
+    dismissNotice(document: DocumentId): Result<void>;
+  };
+  /** What Auto mode looks for in the project. Not undone; no document goes back to review. */
+  readonly profile: { set(profile: Profile): Result<void> };
   readonly labelling: {
     /** Not undoable. */
     link(document: DocumentId, markId: number, linkId: string): Result<void>;

@@ -1,4 +1,5 @@
 import type { Brand } from "./brand";
+import type { Profile } from "./detection";
 import type { Appearance, RemovalKind } from "./document";
 import type { ImageAnchor } from "./images";
 import type { Mark } from "./marks";
@@ -39,6 +40,8 @@ export interface ProjectDocument {
   readonly shown: readonly string[];
   /** What preparing it removed, by kind, as the approval dialog last listed it: a later approval lists only other kinds. */
   readonly removedSeen: readonly RemovalKind[];
+  /** Keys of values the user unticked in a confirmed findings review: Auto mode does not offer them again here. */
+  readonly rejected: readonly string[];
 }
 
 /**
@@ -64,6 +67,8 @@ export interface Project {
   readonly archived: boolean;
   readonly documents: readonly ProjectDocument[];
   readonly hidden: readonly HiddenValue[];
+  /** What Auto mode looks for; absent until the user chooses. */
+  readonly profile?: Profile;
 }
 
 export interface Settings {

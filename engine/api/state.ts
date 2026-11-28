@@ -2,7 +2,9 @@ import type { Change, Reach } from "../model/spread";
 import type { DocumentId, Project, Settings } from "../model/project";
 import type { PageModel, RemovalKind } from "../model/document";
 import type { ReaderErrorCode } from "../model/errors";
-import type { EngineError } from "./errors";
+import type { Finding } from "../model/findings";
+import type { PageIndex } from "../model/geometry";
+import type { EngineError, ErrorCode } from "./errors";
 
 /** The engine's state: one immutable value, the same object until something changes. */
 export interface EngineState {
@@ -56,8 +58,8 @@ export interface SessionState {
   readonly folder: string;
   /** `failed` until the next write lands: the next change, or a flush, tries again. */
   readonly save: "saved" | "saving" | "failed";
-  /** Adding, approving, applying and updating documents for a new build run one at a time. */
-  readonly operation: "idle" | "adding" | "planning" | "confirming" | "applying" | "updating";
+  /** Adding, approving, applying, marking confirmed findings and updating documents for a new build run one at a time. */
+  readonly operation: "idle" | "adding" | "planning" | "confirming" | "applying" | "marking" | "updating";
   /** The approval waiting for the user to read its heads-up, while confirming. */
   readonly approval?: ApprovalPlan;
   /** The document open in the PDF worker. */
@@ -80,6 +82,23 @@ export interface SessionState {
   readonly newFrom: readonly string[];
   /** Per document, once it is read: what preparing it removed, its lost marks' ids, and why it could not be prepared again, if it could not. */
   readonly documentStatus: ReadonlyMap<DocumentId, DocumentStatus>;
+  /** Auto mode, per document of the project. */
+  readonly detection: ReadonlyMap<DocumentId, DocumentDetection>;
+}
+
+/** A document's run of Auto mode, its findings review, and what the app may do with them now. */
+export interface DocumentDetection {
+  /** While running: the page being searched, of `pages`. */
+  readonly run: { readonly state: "idle" } | { readonly state: "running"; readonly page: number; readonly pages: number };
+  /** Present while a findings review is open; `notSearched`: the pages a run that ended early did not reach. */
+  readonly findings?: { readonly findings: readonly Finding[]; readonly notSearched: readonly PageIndex[] };
+  readonly notice?:
+    | { readonly kind: "nothing-found"; readonly notSearched: readonly PageIndex[] }
+    | { readonly kind: "run-failed"; readonly code: ErrorCode }
+    | { readonly kind: "dropped"; readonly reason: "reader-changed" | "text-changed" };
+  /** What undo on this document takes back: an edit, or a confirmed findings review and its counts. Absent when there is nothing to undo. */
+  readonly nextUndo?: { readonly kind: "edit" } | { readonly kind: "findings"; readonly values: number; readonly marks: number };
+  readonly can: { readonly run: boolean; readonly stop: boolean; readonly confirm: boolean; readonly close: boolean };
 }
 
 export interface DocumentStatus {
@@ -105,4 +124,6 @@ export interface ApprovalPlan {
   readonly here: Change;
   /** What preparing the approved document removed, by kind, that no earlier approval of it listed. */
   readonly removed: readonly RemovalKind[];
+  /** The found values of the document's open findings review, ticked or not: they are not marked and stay in the file. */
+  readonly unmarkedFindings: number;
 }

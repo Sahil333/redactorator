@@ -54,6 +54,28 @@ describe("parseProject", () => {
     expect(parseProject(projectJson(approved))).toEqual(approved);
   });
 
+  test("reads a file of any version without a profile or rejected values as having no profile and nothing rejected", () => {
+    const document = { id: "d1", file: "a.pdf", sha256: "00", pages: 1, marks: [], review: "not-started", download: "none", shown: [] };
+    const stored = (version: number) =>
+      JSON.stringify({ format: "redactorator-project", version, id: "p1", name: "Letters", created: "2026-11-21T00:00:00.000Z", archived: false, hidden: [], documents: [document] });
+    for (const version of [1, 2, 3]) {
+      const project = parseProject(stored(version));
+      if (typeof project === "string") throw new Error(project);
+      expect(project).not.toHaveProperty("profile");
+      expect(project.documents[0]?.rejected).toEqual([]);
+    }
+  });
+
+  test("reads back a profile and rejected values, and calls a profile with an unknown choice damaged", () => {
+    const project = parseProject(versionOne);
+    if (typeof project === "string") throw new Error(project);
+    const [first, ...rest] = project.documents;
+    if (first === undefined) throw new Error("No document");
+    const chosen: Project = { ...project, profile: { countries: ["us", "in"], industries: [] }, documents: [{ ...first, rejected: ["123456789", "jane@example.com"] }, ...rest] };
+    expect(parseProject(projectJson(chosen))).toEqual(chosen);
+    expect(parseProject(projectJson(chosen).replace('"in"]', '"nz"]'))).toBe("damaged");
+  });
+
   test("leaves a newer version alone, and calls a broken one damaged", () => {
     expect(parseProject(versionOne.replace('"version":1', '"version":4'))).toBe("newer");
     expect(parseProject(versionOne.replace('"review"', '"x"').replace('"version":1', '"version":2'))).toBe("damaged");

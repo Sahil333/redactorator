@@ -1,5 +1,6 @@
 import type { Engine, IncomingFile, Session } from "../api/facade";
 import type { EngineState, Problem } from "../api/state";
+import { notStarted } from "./detect-client/client";
 import { createDispatcher } from "./dispatcher";
 import { intake } from "./intake";
 import type { LibraryChange } from "./library/changes";
@@ -89,6 +90,8 @@ export function createEngine(start: FirstStore & { readonly worker: WorkerChanne
     },
     dispatch: (from, change, ...effects) => dispatcher.dispatch({ type: "session", from, change }, ...effects),
     client,
+    // Until the detection worker exists, no run starts.
+    detection: notStarted,
     intake: take,
     addCustomType: (name) => addCustomType(name),
   };

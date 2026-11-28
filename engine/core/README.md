@@ -30,6 +30,7 @@ a worker channel through `ports.ts`.
   - [stored](./stored/README.md): projects and settings as kept in a Store.
   - [formats](./formats/README.md): versioned JSON encoders and parsers for the stored files.
   - [pdf-client](./pdf-client/README.md): the engine-side client for the PDF worker.
+  - [detect-client](./detect-client/README.md): the engine-side client for Auto mode's detection worker; a stand-in until the worker exists.
 
 ## Invariants
 

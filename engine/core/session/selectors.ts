@@ -1,4 +1,4 @@
-import type { DocumentStatus, SessionState } from "../../api/state";
+import type { DocumentDetection, DocumentStatus, SessionState } from "../../api/state";
 import type { DocumentId } from "../../model/project";
 import { newFrom, reachOf } from "../../model/spread";
 import { gate, type SessionView } from "./gate";
@@ -61,6 +61,21 @@ function documentStatus({ parts }: SessionView): ReadonlyMap<DocumentId, Documen
   );
 }
 
+/** Auto mode on `document`: its run, its findings review, the notice about its last run, and what the gate allows. */
+function documentDetection(view: SessionView, document: DocumentId): DocumentDetection {
+  const { run, notice } = view.parts.detection.get(document) ?? { run: { state: "idle" } };
+  const open = view.parts.findings.get(document);
+  const allows = (command: Parameters<typeof gate>[1]) => gate(view, command, document) === undefined;
+  return {
+    run,
+    ...(open === undefined ? {} : { findings: { findings: open.findings, notSearched: open.notSearched } }),
+    ...(notice === undefined ? {} : { notice }),
+    // Every undo step is an edit until a findings review can be confirmed.
+    ...(canStep(view, document, "undo") ? { nextUndo: { kind: "edit" } } : {}),
+    can: { run: allows("run"), stop: run.state === "running" && allows("stop"), confirm: allows("confirmFindings"), close: allows("closeFindings") },
+  };
+}
+
 /** The open Session's part of the published state. */
 export function sessionState(view: SessionView, folder: string): SessionState {
   const { project } = view.parts.record.present;
@@ -80,5 +95,6 @@ export function sessionState(view: SessionView, folder: string): SessionState {
     reach: reachOf(project),
     newFrom: document === undefined ? [] : newFrom(project, document),
     documentStatus: documentStatus(view),
+    detection: new Map(project.documents.map(({ id }) => [id, documentDetection(view, id)])),
   };
 }

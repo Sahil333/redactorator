@@ -52,7 +52,7 @@ The files are encoded and decoded by [`../formats`](../formats/README.md).
     - `createProject(store, name, added, tag)`
     - `duplicateProject(store, read, tag)`
     - `writeOriginals(store, stored, added, tag)`: returns the new
-      `ProjectDocument`s.
+      `ProjectDocument`s, each with no marks and nothing `rejected`.
     - `savePrepared(store, folder, tag, id, prepared)`: a document's working
       copy, text and images.
   - Moving and importing:

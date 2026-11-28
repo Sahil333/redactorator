@@ -1,6 +1,7 @@
 // The stored formats: a project's `project.json`, the text of each of its documents, and the
 // app's `settings.json`. All are read from storage the user's browser keeps across app
 // versions, so each carries a version and is checked whole when read.
+import { countries, industries, type Profile } from "../../model/detection";
 import { isReaderTag, type PageChar, type PageText, type PlacedImage, type ReaderTag, type RemovalKind } from "../../model/document";
 import { isPageIndex, parseBox, pointBox } from "../../model/geometry";
 import { isOffset, isPositiveNumber, isRecord, isText, parseAll } from "../../model/guards";
@@ -26,6 +27,8 @@ const SETTINGS_FORMAT = "redactorator-settings";
 // image anchors, so its boxes are anchored when their document is next approved. From Phase 3 a
 // text piece may carry its letters; one without them, as every version 3 file before, reads as "".
 // A document may carry the removed kinds its approval dialog listed; one without, as before, lists none.
+// From Phase 4 a project may carry a profile and a document its rejected values; a file of any
+// version without them has no profile and nothing rejected.
 const PROJECT_VERSION = 3;
 // Version 1 had no reader tag and no removed kinds; it is read only to migrate marks from it.
 const TEXT_VERSION = 2;
@@ -103,9 +106,19 @@ function parseDocument(value: unknown, version: number): ProjectDocument | undef
   const { pages } = value;
   const marks = parseAll(value.marks, (mark) => parseMark(mark, version));
   const review = marks && parseReview(value, version, marks);
-  return marks && review && isOffset(pages) && pages > 0
-    ? { id: value.id, file: value.file, sha256: value.sha256, pages, marks, ...review }
+  const rejected = value.rejected === undefined ? [] : parseStrings(value.rejected);
+  return marks && review && rejected && isOffset(pages) && pages > 0
+    ? { id: value.id, file: value.file, sha256: value.sha256, pages, marks, ...review, rejected }
     : undefined;
+}
+
+/** An optional profile: absent, or one that parses. */
+function optionalProfile(value: unknown): { profile?: Profile } | undefined {
+  if (value === undefined) return {};
+  if (!isRecord(value)) return undefined;
+  const chosenCountries = parseAll(value.countries, (each) => oneOf(countries, each));
+  const chosenIndustries = parseAll(value.industries, (each) => oneOf(industries, each));
+  return chosenCountries && chosenIndustries && { profile: { countries: chosenCountries, industries: chosenIndustries } };
 }
 
 function parseHiddenValue(value: unknown): HiddenValue | undefined {
@@ -134,9 +147,10 @@ export function parseProject(text: string): Project | StoredFileProblem {
   const { data, version } = stored;
   const documents = parseAll(data.documents, (document) => parseDocument(document, version));
   const hidden = version === 1 ? [] : parseAll(data.hidden, parseHiddenValue);
+  const profile = optionalProfile(data.profile);
   const { id, name, created, archived } = data;
-  if (!documents || !hidden || !isText(id) || !isText(name) || !isText(created) || typeof archived !== "boolean") return "damaged";
-  return { id, name, created, archived, documents, hidden };
+  if (!documents || !hidden || !profile || !isText(id) || !isText(name) || !isText(created) || typeof archived !== "boolean") return "damaged";
+  return { id, name, created, archived, documents, hidden, ...profile };
 }
 
 export const projectJson = (project: Project): string =>

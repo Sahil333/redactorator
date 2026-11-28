@@ -11,7 +11,21 @@ export interface OperationPart {
 export const firstOperation: OperationPart = { operation: "idle", save: "saved", closing: false };
 
 /** The records that change the project record: each is saved as it is made. */
-const changesRecord = new Set<SessionChange["type"]>(["markAdded", "markRetyped", "markRemoved", "keptHere", "linked", "undo", "redo", "approved", "documentsAdded", "downloaded", "reanchored"]);
+const changesRecord = new Set<SessionChange["type"]>([
+  "markAdded",
+  "markRetyped",
+  "markRemoved",
+  "keptHere",
+  "linked",
+  "undo",
+  "redo",
+  "approved",
+  "documentsAdded",
+  "downloaded",
+  "reanchored",
+  "findingsApplied",
+  "profileSet",
+]);
 
 /** What the Session does after each record that starts or ends an operation. */
 const operationAfter: Partial<Record<SessionChange["type"], SessionState["operation"]>> = {
@@ -28,6 +42,8 @@ const operationAfter: Partial<Record<SessionChange["type"], SessionState["operat
   applyFailed: "idle",
   updateStarted: "updating",
   updateFinished: "idle",
+  findingsApplying: "marking",
+  findingsApplied: "idle",
 };
 
 function saveAfter(save: SessionState["save"], change: SessionChange): SessionState["save"] {
