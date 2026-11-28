@@ -19,7 +19,8 @@ function confirmLabel(ticked: number, all: number): string {
  * A document's open findings review, in the marks panel's place: every found value, strongest
  * evidence first, to tick or untick, then confirm. Confirming and closing come with slice R1.
  */
-export function FindingsPanel({ id, width, review: { findings, notSearched } }: FindingsPanelProps) {
+export function FindingsPanel({ id, width, review }: FindingsPanelProps) {
+  const { findings } = review;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const ticked = findings.filter((finding) => finding.ticked).length;
 
@@ -37,7 +38,7 @@ export function FindingsPanel({ id, width, review: { findings, notSearched } }: 
         <span className="text-xs text-ink-muted">{plural(findings.length, "value")}</span>
       </div>
       <p className="mx-4 mb-2 text-ink-muted">Found values are removed only once you confirm.</p>
-      <NotSearched pages={notSearched} />
+      <NotSearched run={review} />
       <ul className="min-h-0 flex-1 overflow-y-auto border-t border-rule">
         {findings.map((finding) => (
           <FindingRow key={finding.key} finding={finding} />

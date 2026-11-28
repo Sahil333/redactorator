@@ -501,13 +501,13 @@ export interface DetectionWorkerScope {
 }
 
 /**
- * Serves `fake` in place of the detection worker's script, run in the worker's scope. It must
- * call `acted` before the test ends.
+ * Serves `fake` in place of the detection worker's script, run in the worker's scope with `args`
+ * copied in as JSON. It must call `acted` before the test ends.
  */
-export async function fakeDetection(page: Page, fake: (scope: DetectionWorkerScope, acted: () => void) => void): Promise<void> {
+export async function fakeDetection<A extends unknown[]>(page: Page, fake: (scope: DetectionWorkerScope, acted: () => void, ...args: A) => void, ...args: A): Promise<void> {
   const fakes = await fakesOf(page);
   if (fakes.detection !== undefined) throw new Error("The detection worker is already faked");
-  const detection = { script: `(${String(fake)})(globalThis, () => (${String(acted)})("fakeDetection"));`, served: false };
+  const detection = { script: `(${String(fake)})(globalThis, () => (${String(acted)})("fakeDetection"), ...${JSON.stringify(args)});`, served: false };
   fakes.detection = detection;
   fakes.expected.add("fakeDetection");
   await page.route("**/assets/detectWorker-*.js", async (route) => {

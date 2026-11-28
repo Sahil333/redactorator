@@ -7,7 +7,7 @@ export type DetectionPart = ReadonlyMap<DocumentId, Pick<DocumentDetection, "run
 
 export const firstDetection: DetectionPart = new Map();
 
-/** Runs of Auto mode: the page each is on, counted from 1, and the notice a run with nothing to offer leaves. A new run clears the notice. */
+/** Runs of Auto mode: the page each is on, counted from 1, and the notice a run that opened no findings review leaves. A new run clears the notice. */
 export function detection(part: DetectionPart, change: SessionChange): DetectionPart {
   switch (change.type) {
     case "runStarted":
