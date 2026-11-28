@@ -52,14 +52,17 @@ and the facade do that.
 - `detection.ts`
   - `DetectionPart`: per document, its run of Auto mode and the notice about
     its last run that is not stored.
-  - `firstDetection`, `detection(part, change)`: returns its part unchanged
-    until the detection worker exists.
+  - `firstDetection`, `detection(part, change)`: `runStarted` sets the run
+    running on page 1; each `pageSearched` moves it to the next page; `runEnded`
+    removes it; `noticeSet` sets the notice, which the next `runStarted`
+    clears.
 - `findings.ts`
   - `FindingsPart`: per document with an open findings review, its
     `OpenFindings`: the run's id, hits and pages not searched, the user's
     changes by finding key, and the resolver's findings.
-  - `firstFindings`, `findings(part, change)`: returns its part unchanged
-    until a run can end with hits.
+  - `firstFindings`, `findings(part, change)`: `findingsOpened` opens a
+    findings review, `findingsResolved` replaces its findings, and
+    `findingsClosed` ends it.
 
 ## Invariants
 

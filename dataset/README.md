@@ -15,13 +15,17 @@ document generator. Real-world documents and their labels never enter this repos
 
 - `schema_version`: 1. A file in an older version must be migrated, never guessed at.
 - `document`: `source` (where the file came from), `licence`, `country` (US, UK, CA,
-  AU, NZ, IE), `format` (born-digital-pdf, scanned-pdf, image, text), `split`
+  AU, NZ, IE, IN), `format` (born-digital-pdf, scanned-pdf, image, text), `split`
   (development or test), `sha256` of the file's bytes, and `box_unit`: `pt` for
   PDFs, `px` for images, `none` for text.
-- `entities`: one per spelling. `type` is a DET-1 type, `signature`, `photo` or
-  `other`, or `custom:<name>` for a type the labeller typed in. `value` is the text,
-  and is left out for a box with no text behind it (a signature, a photo).
-  Spellings of the same person or thing share a `link_id`.
+- `entities`: one per spelling. `type` is a general type (a DET-1 type, `signature`,
+  `photo` or `other`, in `$defs.generalType`), an identifier that Auto mode finds
+  (such as `us-ssn` or `in-aadhaar`, in `$defs.identifierType`), or `custom:<name>`
+  for a type the labeller typed in. Six general types are identifiers too (`email`,
+  `phone`, `date-of-birth`, `payment-card`, `ip-address`, `url`) and are listed
+  once, as general types. `value` is the text, and is left out for a box with no
+  text behind it (a signature, a photo). Spellings of the same person or thing
+  share a `link_id`.
 - `occurrences`: each place an entity appears. `page` is zero-based. `boxes` are the
   authority. `start` and `end` (end exclusive) are offsets in the page text, given
   for text and left out for a box with no text behind it.
