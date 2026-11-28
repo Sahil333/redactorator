@@ -1,6 +1,139 @@
 # How to write a rule: tools/packs/README.md.
+#
+# Many US numbers are nine digits. A rule whose own check is weak (the EIN's prefix list, the
+# routing number's and the NPI's check digits) gives way to a rule that has a label on the same
+# span, so a labelled SSN is not named an EIN by chance. No rule gives way in a circle: two rules
+# that gave way to each other would both drop a value that both labels touch.
 pack: us
 rules:
+  - id: us-ssn
+    identifier: us-ssn
+    # Three, two and four digits: the area not 000, 666 or 9xx, the group not 00, the serial not 0000.
+    pattern: '((?!000|666|9)\d{3}{sep?}(?!00)\d{2}{sep?}(?!0000)\d{4})'
+    value: 1
+    needs: labelled
+    # Purview's Keyword_ssn, and the names IRS forms give a taxpayer's number (W-9, 1099: "TIN").
+    labels: ["Social Security Number", "Social Security No", "Social Security", "SSA Number", "Soc Sec", "SSN", "SSNS", "SS#", "SSID", "TIN", "Taxpayer Identification Number", "Tax ID"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    # A provider's SSN on a claim is the provider's tax ID.
+    yieldsTo: [us-provider-tax-id]
+    stdnum: us.ssn
+    source: "SSA, POMS RM 10201.035: an SSN is never assigned with the area 000, 666 or in the 900 series, the group 00 or the serial 0000; Microsoft Purview, U.S. social security number: nine digits, formatted ddd-dd-dddd or ddd dd dddd or unformatted, found with a keyword from Keyword_ssn at every confidence level. https://secure.ssa.gov/poms.nsf/lnx/0110201035 and https://learn.microsoft.com/en-us/purview/sit-defn-us-social-security-number"
+    licence: "SSA's page is a US federal government page, its terms not read; Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://secure.ssa.gov/poms.nsf/lnx/0110201035" }
+    examples:
+      - "536-22-4187"
+      - "401 73 9265"
+    nearMisses:
+      - { value: "000-12-3456", line: "SSN: {value}" }
+      - { value: "171-00-4567", line: "SSN: {value}" }
+      - { value: "289-45-0000", line: "SSN: {value}" }
+
+  - id: us-itin
+    identifier: us-itin
+    # A 9, two digits, then the fourth and fifth digits 50 to 65, 70 to 88, 90 to 92 or 94 to 99.
+    pattern: '(9\d{2}{sep?}(?:5\d|6[0-5]|7\d|8[0-8]|9[0-24-9]){sep?}\d{4})'
+    value: 1
+    needs: labelled
+    # Purview's Keyword_itin.
+    labels: ["Individual Taxpayer Identification Number", "Individual Taxpayer", "ITIN", "ITINs", "I.T.I.N.", "Taxpayer", "Tax Payer", "Tax Identification", "Tax ID", "TaxID", "TIN", "SSN", "Social Security"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    yieldsTo: [us-provider-tax-id]
+    # No stdnum: python-stdnum's us.itin allows the fourth and fifth digits 70 to 99 only, but the
+    # IRS added 50 to 65 (Publication 4757), so an example in that range would fail it.
+    source: "IRS, Publication 4757 (Rev. 6-2026): all valid ITINs are nine digits in the format of the SSN, beginning with a 9, the 4th and 5th digits ranging from 50 to 65, 70 to 88, 90 to 92 and 94 to 99; Microsoft Purview, U.S. individual taxpayer identification number: the same ranges, optionally formatted with spaces or dashes, keywords from Keyword_itin. https://www.irs.gov/pub/irs-pdf/p4757.pdf and https://learn.microsoft.com/en-us/purview/sit-defn-us-individual-taxpayer-identification-number"
+    licence: "IRS publications are US federal government works, their terms not read; Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://www.irs.gov/pub/irs-pdf/p4757.pdf" }
+    examples:
+      - "923-55-4410"
+      - "987 91 2034"
+    nearMisses:
+      # The fourth and fifth digits are not in a range the IRS gives.
+      - { value: "967-93-4512", line: "ITIN: {value}" }
+      - { value: "971-66-2208", line: "ITIN: {value}" }
+
+  - id: us-routing-number
+    identifier: us-routing-number
+    # Nine digits, plain or written 4-4-1, starting 00 to 12, 21 to 32, 61 to 72 or 80.
+    pattern: '((?:0\d|1[0-2]|2[1-9]|3[0-2]|6[1-9]|7[0-2]|80)\d{2}{sep?}\d{4}{sep?}\d)'
+    value: 1
+    needs: labelled
+    # Purview's Keyword_aba_routing.
+    labels: ["ABA Routing Number", "ABA Number", "ABA", "ABARoutingNumber", "American Bank Association Routing Number", "Bank Routing Number", "BankRoutingNumber", "Routing Transit Number", "Routing Number", "Routing No", "Routing #", "RTN"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    validator: abaRouting
+    # It does not give way to us-ein, whose label can reach it from the pair before. Where both
+    # are checked, this rule comes first, and the EIN stays a candidate.
+    yieldsTo: [us-ssn, us-itin, us-passport, us-drivers-license, us-bank-account, us-provider-tax-id, health-insurance-member-id, insurance-claim-number, prescription-number]
+    stdnum: us.rtn
+    source: "Microsoft Purview, ABA routing number: nine digits, the first two in the ranges 00-12, 21-32, 61-72 or 80, then two digits, an optional hyphen, four digits, an optional hyphen and a digit, with a checksum; found without a keyword at low confidence; Presidio aba_routing_recognizer.py: the check, weights 3, 7, 1 repeated, the sum divisible by 10. https://learn.microsoft.com/en-us/purview/sit-defn-aba-routing and https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/aba_routing_recognizer.py"
+    licence: "Presidio is MIT-licensed; Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://learn.microsoft.com/en-us/purview/sit-defn-aba-routing" }
+    examples:
+      - "263194575"
+      # No label: the check alone.
+      - { value: "0812-4637-5", line: "Bank {value}" }
+      # No label, and 32 is also an EIN prefix: the routing number comes first.
+      - { value: "320018471", line: "Bank {value}" }
+      # The pair before lends an EIN label: both are checked, and the routing number comes first.
+      - { value: "221483079", line: "EIN: 46-2738190 Routing No: {value}" }
+    nearMisses:
+      # Fails the check, and no label.
+      - { value: "0812-4637-6", line: "Bank {value}" }
+
+  - id: us-ein
+    identifier: us-ein
+    # Two digits, an optional separator, seven digits. Group 2 is the prefix.
+    pattern: '((\d{2}){sep?}\d{7})'
+    value: 1
+    needs: labelled
+    labels: ["Employer Identification Number", "Employer ID Number", "Employer ID", "Federal Employer Identification Number", "FEIN", "EIN", "Federal EIN", "Federal Tax ID", "Federal ID Number", "Tax ID", "TIN", "Taxpayer Identification Number"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    list: { name: us-ein-prefixes, group: 2 }
+    # Most two-digit numbers are EIN prefixes, so the prefix gives way to any label.
+    yieldsTo: [us-ssn, us-itin, us-passport, us-drivers-license, us-bank-account, us-provider-tax-id, health-insurance-member-id, insurance-claim-number, prescription-number]
+    stdnum: us.ein
+    source: "python-stdnum us.ein: two digits, an optional hyphen and seven digits, the prefix one the IRS lists; IRS, How EINs are assigned and valid EIN prefixes: the valid prefixes by campus. The labels are the names IRS forms give the number (W-2 box b, W-9, 1099). https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/us/ein.py and https://www.irs.gov/businesses/small-businesses-self-employed/how-eins-are-assigned-and-valid-ein-prefixes"
+    licence: "python-stdnum is LGPL 2.1 or later; the rule is written from its statements, no code is copied. The IRS page is a US federal government page, its terms not read"
+    verified: { date: "2026-11-28", at: "https://www.irs.gov/businesses/small-businesses-self-employed/how-eins-are-assigned-and-valid-ein-prefixes" }
+    examples:
+      - "27-1048563"
+      # No label: the prefix alone.
+      - { value: "84-2716390", line: "Employer {value}" }
+    nearMisses:
+      # 07 is not a prefix, and no label.
+      - { value: "07-1234567", line: "Employer {value}" }
+
+  - id: us-ptin
+    identifier: us-ptin
+    # "P" and eight digits.
+    pattern: '([Pp]{sep?}\d{8})'
+    value: 1
+    needs: format
+    labels: ["PTIN", "Preparer Tax Identification Number", "Preparer's PTIN"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    stdnum: us.ptin
+    source: "IRS, IRM 2.3.63.2: the format for a PTIN is \"P\" followed by 8 numerics; python-stdnum us.ptin: P and eight digits, a hyphen allowed after the P. https://www.irs.gov/irm/part2/irm_02-003-063"
+    licence: "The Internal Revenue Manual is a US federal government work, its terms not read"
+    verified: { date: "2026-11-28", at: "https://www.irs.gov/irm/part2/irm_02-003-063" }
+    examples:
+      - "P01234567"
+      # No label: the format alone.
+      - { value: "P-20481357", line: "Preparer {value}" }
+    nearMisses:
+      - "P1234567"
+      - "Q01234567"
+
   - id: us-bank-account
     identifier: us-bank-account
     # No fixed format and no check: 6 to 17 digits found next to a label.
@@ -19,8 +152,141 @@ rules:
       - "000123456789"
       - "98765432109876543"
       - "31450092001876"
+      # The pair before lends a routing label, and the routing check fails: the routing rule gives way.
+      - { value: "123456781", line: "Routing No: 210034565 Checking Account: {value}" }
     nearMisses:
       # Too short, though labelled.
       - "12345"
       # No label.
       - { value: "555123456789", line: "Invoice {value}" }
+
+  - id: us-passport
+    identifier: us-passport
+    # A letter or a digit, then eight digits.
+    pattern: '([A-Z0-9]\d{8})'
+    value: 1
+    needs: labelled
+    # Purview's Keywords_eu_passport_number and Keywords_uk_eu_passport_number, US for UK.
+    labels: ["Passport Number", "Passport Numbers", "PassportNumber", "Passport No", "Passport #", "PassportID", "Passports", "Passport", "US Passport"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Microsoft Purview, U.S. / U.K. passport number: nine characters, one letter or digit then eight digits, no checksum, found with a passport keyword; Presidio us_passport_recognizer.py: nine digits, or a letter and eight digits (the next-generation passport). https://learn.microsoft.com/en-us/purview/sit-defn-us-uk-passport-number and https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_passport_recognizer.py"
+    licence: "Presidio is MIT-licensed; Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://learn.microsoft.com/en-us/purview/sit-defn-us-uk-passport-number" }
+    examples:
+      - "412839057"
+      - "C03178246"
+    nearMisses:
+      - "41283905"
+      - "4128390571"
+
+  - id: us-drivers-license
+    identifier: us-drivers-license
+    # The format depends on the state: letters and digits, 4 or more, with a hyphen or, between
+    # digits, a separator inside it, and at least one digit among its first 41 characters.
+    pattern: '((?=(?:[A-Za-z0-9]{sep?}){3}[A-Za-z0-9])(?=[A-Za-z0-9-]{0,40}\d)[A-Za-z0-9]{1,20}(?:(?:-|(?<=\d){sep}(?=\d))[A-Za-z0-9]{1,20}){0,6})'
+    value: 1
+    needs: labelled
+    # Purview's Keyword_us_drivers_license, one spelling of each, and the abbreviations of
+    # Keyword_us_drivers_license_abbreviations that name a licence; "ID" and "identification
+    # number" are left out, as Purview needs a state's name beside them. "License Number", "License
+    # No" and "License" catch "Driver’s License" written with a curly apostrophe, which no label
+    # can hold: the fixture's font cannot write it.
+    labels: ["Driver's License Number", "Driver's License", "Driver's Lic", "Drivers License", "Drivers Lic", "Driver License", "Driver Lic", "DriversLicense", "DriverLicense", "DriverLic", "DL", "DLS", "DLN", "CDL", "CDLS", "LIC#", "License Number", "License No", "License"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Microsoft Purview, U.S. driver's license number: the format depends on the state (for New York, nine digits formatted ddd ddd ddd), found with a keyword from Keyword_us_drivers_license or an abbreviation with the state's name; Presidio us_driver_license_recognizer.py: the states' forms, one or two letters and 1 to 18 digits, digits and letters in the orders the states use, or 6 to 14 or 16 digits, matched ignoring case. The pattern takes in every form Presidio lists of four characters or more. https://learn.microsoft.com/en-us/purview/sit-defn-us-drivers-license-number and https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_driver_license_recognizer.py"
+    licence: "Presidio is MIT-licensed; Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://learn.microsoft.com/en-us/purview/sit-defn-us-drivers-license-number" }
+    examples:
+      - "D4827163"
+      - "482 716 395"
+      - "S530-4821-7790"
+    nearMisses:
+      # Too short, though labelled.
+      - "D48"
+      # No label.
+      - { value: "D4827199", line: "Ref {value}" }
+
+  - id: us-npi
+    identifier: us-npi
+    # Ten digits starting 1 or 2, plain or written 4-3-3.
+    pattern: '([12]\d{3}{sep?}\d{3}{sep?}\d{3})'
+    value: 1
+    needs: labelled
+    # Presidio's context words.
+    labels: ["National Provider Identifier", "National Provider ID", "NPI Number", "NPI", "Provider Identifier", "Provider ID"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    validator: npi
+    yieldsTo: [us-drivers-license, us-bank-account, health-insurance-member-id, insurance-claim-number, prescription-number]
+    source: "Presidio us_npi_recognizer.py: 10 digits starting 1 or 2, plain or 4-3-3 with spaces or hyphens, the last a Luhn check digit computed with the prefix 80840; its context words. https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_npi_recognizer.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_npi_recognizer.py" }
+    examples:
+      - "1462839519"
+      # No label: the check alone.
+      - { value: "2739 504 183", line: "Rendering {value}" }
+    nearMisses:
+      # Fails the check, and no label.
+      - { value: "1462839518", line: "Rendering {value}" }
+      # Starts with 3.
+      - "3462839512"
+
+  - id: us-dea-number
+    identifier: us-dea-number
+    # A registrant letter, the last name's first letter or a 9, seven digits. Either case.
+    pattern: '([A-HJ-MPR-UXa-hj-mpr-ux][A-Za-z9]\d{7})'
+    value: 1
+    needs: labelled
+    # Purview's Keyword_dea_number.
+    labels: ["DEA Number", "DEA No", "DEA Registration Number", "DEA", "Drug Enforcement Administration", "Drug Enforcement Agency"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    validator: deaNumber
+    # A DEA-shaped value labelled as a passport, licence or PTIN is that, though it pass the check.
+    yieldsTo: [us-ptin, us-passport, us-drivers-license, health-insurance-member-id, insurance-claim-number, prescription-number]
+    source: "Microsoft Purview, Drug Enforcement Agency (DEA) number: two letters and seven digits, the first letter a registrant code (A, B, F, G, M, P or R), the second the first letter of the registrant's last name or the digit 9, the last digit a check digit, not case-sensitive. Wikipedia, DEA number: the registrant codes A to H, J to M, P, R to U and X. The check, which Purview does not give: Oracle, Siebel ePharma Handheld Guide (2003), \"Validating the DEA Number\", and Wikipedia: the first, third and fifth digits plus twice the second, fourth and sixth, whose last digit is the check digit. https://learn.microsoft.com/en-us/purview/sit-defn-drug-enforcement-agency-number, https://en.wikipedia.org/wiki/DEA_number and https://docs.oracle.com/cd/E05554_01/books/HHPharmWIN/HHSalesWINAppsAdmin21.html"
+    licence: "Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse); Wikipedia's text is CC BY-SA 4.0; Oracle's guide states no terms on the page read"
+    verified: { date: "2026-11-28", at: "https://docs.oracle.com/cd/E05554_01/books/HHPharmWIN/HHSalesWINAppsAdmin21.html" }
+    examples:
+      - "BJ6125341"
+      - "fm4419025"
+      # No label: the check alone. A 9 for a business address.
+      - { value: "G93058270", line: "Prescriber {value}" }
+    nearMisses:
+      # Fails the check, and no label.
+      - { value: "BJ6125342", line: "Prescriber {value}" }
+      # Q is not a registrant code.
+      - "QJ6125341"
+
+  - id: us-mbi
+    identifier: us-mbi
+    # 11 characters: digits at 1, 4, 7, 10 and 11, the first not 0; letters but S, L, O, I, B and
+    # Z at 2, 5, 8 and 9; either at 3 and 6; a separator allowed after 4 and after 7.
+    pattern: '([1-9][AC-HJKMNP-RT-Yac-hjkmnp-rt-y][AC-HJKMNP-RT-Yac-hjkmnp-rt-y0-9]\d{sep?}[AC-HJKMNP-RT-Yac-hjkmnp-rt-y][AC-HJKMNP-RT-Yac-hjkmnp-rt-y0-9]\d{sep?}[AC-HJKMNP-RT-Yac-hjkmnp-rt-y]{2}\d{2})'
+    value: 1
+    needs: format
+    # Purview's Keyword_mbi_card.
+    labels: ["Medicare Beneficiary Identifier", "Medicare Beneficiary Number", "Medicare Beneficiary No", "Medicare Beneficiary #", "MBI"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Microsoft Purview, Medicare beneficiary identifier (MBI) card: 11 characters, a digit 1 to 9, a letter, a letter or digit, a digit, an optional hyphen, a letter, a letter or digit, a digit, an optional hyphen, two letters, two digits, the letters excluding S, L, O, I, B and Z; found without a keyword at medium confidence; Presidio us_mbi_recognizer.py: the same positions, matched ignoring case. https://learn.microsoft.com/en-us/purview/sit-defn-medicare-beneficiary-identifier-card and https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_mbi_recognizer.py"
+    licence: "Presidio is MIT-licensed; Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://learn.microsoft.com/en-us/purview/sit-defn-medicare-beneficiary-identifier-card" }
+    examples:
+      - "5N02-WK7-RT61"
+      - "3AC7DF9GH12"
+      - "6kd8-hm4-tn27"
+      # No label: the format alone.
+      - { value: "8TX4-UV2-WY93", line: "Card {value}" }
+    nearMisses:
+      # S is not used.
+      - { value: "5S02-WK7-RT61", line: "Card {value}" }
+      # The first digit is 0.
+      - { value: "0N02WK7RT61", line: "Card {value}" }

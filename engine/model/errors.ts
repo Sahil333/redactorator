@@ -9,4 +9,6 @@ export const writerErrorCodes = ["apply-failed", "check-failed", "mark-lost", "e
 export type WriterErrorCode = (typeof writerErrorCodes)[number];
 
 /** Why a run of Auto mode ended as failed. */
-export type DetectionErrorCode = "detector-not-started" | "recognizer-failed" | "detector-failed";
+export const detectionErrorCodes = ["detector-not-started", "recognizer-failed", "detector-failed"] as const;
+
+export type DetectionErrorCode = (typeof detectionErrorCodes)[number];

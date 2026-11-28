@@ -35,7 +35,7 @@ function parseEvidence(value: unknown): Evidence | undefined {
   return plain && { kind: plain, level };
 }
 
-function parseHit(value: unknown): Hit | undefined {
+export function parseHit(value: unknown): Hit | undefined {
   if (!isRecord(value)) return undefined;
   const { page, start, end, text, identifier, rule, recognizer } = value;
   const evidence = parseAll(value.evidence, parseEvidence);

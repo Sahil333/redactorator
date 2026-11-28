@@ -28,9 +28,11 @@ interface UpdateHost {
   flush(): Promise<boolean>;
   /** Runs once the update has finished, with the documents it made again. */
   updated(documents: ReadonlySet<DocumentId>): void;
+  /** Runs as each document's marks are placed on its prepared page texts, before anything else can act on it. */
+  prepared(document: DocumentId, texts: readonly PageText[]): void;
 }
 
-const pagesOf = (texts: readonly PageText[]): ReadonlyMap<PageIndex, PageText> =>
+export const pagesOf = (texts: readonly PageText[]): ReadonlyMap<PageIndex, PageText> =>
   new Map(texts.flatMap((text, index) => (isPageIndex(index) ? [[index, text] as const] : [])));
 
 /** A document's marks placed again on `texts`, and the ids of those that could not be; the same array when none moved. */
@@ -64,9 +66,12 @@ export async function preparedFilesOf(store: Store, folder: string, document: Pr
   return { texts: texts.pages, removed: texts.removed, working };
 }
 
-/** Dispatches what a document's prepared files say: its removed kinds and lost marks, and its marks placed again when they moved. */
+/**
+ * Dispatches what a document's prepared files say: its removed kinds and lost marks, and its marks
+ * placed again when they moved; then tells `prepared`.
+ */
 export function anchorDocument(
-  host: Pick<UpdateHost, "dispatch" | "change">,
+  host: Pick<UpdateHost, "dispatch" | "change" | "prepared">,
   document: ProjectDocument,
   { texts, removed }: { readonly texts: readonly PageText[]; readonly removed: readonly RemovalKind[] },
   workingChanged: boolean,
@@ -74,6 +79,7 @@ export function anchorDocument(
   const again = placed(document.marks, texts);
   host.dispatch({ type: "documentPrepared", document: document.id, removed, lost: again.lost });
   if (workingChanged || again.marks !== document.marks) host.change({ type: "reanchored", document: document.id, marks: again.marks, workingChanged });
+  host.prepared(document.id, texts);
 }
 
 /** Why the worker refused to prepare a document again; any failure that is not the reader's own counts as preparation failing. */

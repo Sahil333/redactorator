@@ -3,6 +3,7 @@ import type { Session } from "../engine/api/facade";
 import type { DocumentDetection, SessionState } from "../engine/api/state";
 import type { EngineError, Result } from "../engine/api/errors";
 import type { Profile } from "../engine/model/detection";
+import type { DroppedReason } from "../engine/model/findings";
 import type { DocumentId } from "../engine/model/project";
 import { errorText } from "./errors";
 
@@ -17,6 +18,15 @@ export interface OpenReview extends NonNullable<DocumentDetection["findings"]> {
   readonly close: () => void;
 }
 
+/** The open document's notice that its findings review was dropped, with Run and Dismiss. */
+export interface DroppedNotice {
+  readonly reason: DroppedReason;
+  readonly canRun: boolean;
+  readonly canDismiss: boolean;
+  readonly onRun: () => void;
+  readonly onDismiss: () => void;
+}
+
 /** Auto mode as the app shows it: the open document's run and findings review, and the project's run in progress. */
 export interface Findings {
   /** The open document's; undefined while none is open. */
@@ -25,6 +35,8 @@ export interface Findings {
   readonly running: { readonly document: DocumentId; readonly page: number; readonly pages: number } | undefined;
   /** The open document's findings review; undefined while none is open. */
   readonly review: OpenReview | undefined;
+  /** The open document's notice of a dropped findings review; undefined while it has none. */
+  readonly dropped: DroppedNotice | undefined;
   /** Why the open document's last Run, Confirm or Close was refused. */
   readonly refusal: string | undefined;
   /** The first Run on a project with no profile: the chooser asks for one, then the run starts. */
@@ -85,10 +97,25 @@ export function useFindings(session: Session, detection: SessionState["detection
     close: () => ending(session.findings.close),
   };
 
+  const notice = here?.notice;
+  const dropped: DroppedNotice | undefined =
+    notice?.kind === "dropped"
+      ? {
+          reason: notice.reason,
+          canRun: here?.can.run === true,
+          canDismiss: here?.can.dismiss === true,
+          onRun: () => run(),
+          onDismiss: () => {
+            if (active !== undefined) session.findings.dismissNotice(active);
+          },
+        }
+      : undefined;
+
   return {
     here,
     running,
     review,
+    dropped,
     refusal: refused?.document === active ? refused?.text : undefined,
     asking,
     run,

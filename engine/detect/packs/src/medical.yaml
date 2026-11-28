@@ -1,3 +1,134 @@
 # How to write a rule: tools/packs/README.md.
+#
+# Member, claim and prescription numbers have no fixed format: each payer and pharmacy makes its
+# own. Their rules take letters and digits next to a label: at least six, with a digit among the
+# first 41, hyphens anywhere and other separators only between digits, so a label's value never
+# runs on into the next word.
 pack: medical
-rules: []
+rules:
+  - id: us-provider-tax-id
+    identifier: us-provider-tax-id
+    # An EIN (group 2 is its prefix) or an SSN.
+    pattern: '((\d{2}){sep?}\d{7}|\d{3}{sep?}\d{2}{sep?}\d{4})'
+    value: 1
+    needs: labelled
+    # Presidio's labels, and the CMS-1500's box 25.
+    labels: ["Billing Provider Tax ID", "Rendering Provider Tax ID", "Healthcare Provider Tax ID", "Provider Organization Tax ID", "Provider Tax ID", "Provider Tax Number", "Provider Tax Identification Number", "Provider TIN", "Provider EIN", "Billing Provider", "Federal Tax I.D. Number"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    list: { name: us-ein-prefixes, group: 2 }
+    # A number with a valid prefix gives way to a label that names it otherwise.
+    yieldsTo: [health-insurance-member-id, insurance-claim-number, prescription-number]
+    source: "Presidio UsProviderTaxIdRecognizer (us_healthcare_admin_recognizers.py): CMS uses a provider's EIN or SSN as the billing provider tax ID; Presidio matches an EIN with a valid IRS prefix after a provider tax ID label, and, more weakly, alone. The SSN form is CMS's, as Presidio states it. https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py" }
+    examples:
+      - "46-3958271"
+      # A provider's SSN.
+      - "472-81-3065"
+      # No label: the EIN prefix alone.
+      - { value: "33-8172645", line: "Payee {value}" }
+    nearMisses:
+      # 96 is not an EIN prefix, and no label.
+      - { value: "96-1234567", line: "Payee {value}" }
+
+  - id: health-insurance-member-id
+    identifier: health-insurance-member-id
+    pattern: '((?=(?:[A-Za-z0-9]{sep?}){5}[A-Za-z0-9])(?=[A-Za-z0-9-]{0,40}\d)[A-Za-z0-9]{1,20}(?:(?:-|(?<=\d){sep}(?=\d))[A-Za-z0-9]{1,20}){0,6})'
+    value: 1
+    needs: labelled
+    # Presidio's context words as labels, and the CMS-1500's box 1a. "Insured" catches "Insured’s"
+    # written with a curly apostrophe, which no label can hold: the fixture's font cannot write it.
+    labels: ["Member ID", "Member Number", "Member No", "Member", "Subscriber ID", "Subscriber Number", "Subscriber", "Policy Number", "Policy No", "Policy ID", "Insurance ID", "Insured's ID Number", "Insured's I.D. Number", "Insured"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio us_health_insurance_member_id_recognizer.py: member and subscriber IDs are payer-specific with no universal format or checksum; Medicaid T-MSIS allows up to 20 characters; found next to member, subscriber, insurance or policy. Presidio's own pattern also needs a letter; this rule takes all-digit IDs too, which cards print. https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_health_insurance_member_id_recognizer.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_health_insurance_member_id_recognizer.py" }
+    examples:
+      - "W2837461509"
+      - "MBR-44718290"
+      - "8471 2093 66"
+      # Nine digits with an EIN prefix: the provider tax ID gives way.
+      - "612048375"
+    nearMisses:
+      # Five characters.
+      - "AB123"
+      # No label.
+      - { value: "ZQ84720193", line: "Ref {value}" }
+
+  - id: insurance-claim-number
+    identifier: insurance-claim-number
+    pattern: '((?=(?:[A-Za-z0-9]{sep?}){5}[A-Za-z0-9])(?=[A-Za-z0-9-]{0,40}\d)[A-Za-z0-9]{1,20}(?:(?:-|(?<=\d){sep}(?=\d))[A-Za-z0-9]{1,20}){0,6})'
+    value: 1
+    needs: labelled
+    # Presidio's labels.
+    labels: ["Claim Number", "Claim No", "Claim ID", "Claim", "Medical Claim", "Healthcare Claim"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio UsClaimNumberRecognizer (us_healthcare_admin_recognizers.py): CMS prescribes no universal format for a claim number; Presidio takes 6 to 15 digits, with an optional CLM prefix, after claim, medical claim or healthcare claim and #, no, number or id. This rule also takes letters, as payers write them. https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py" }
+    examples:
+      - "CLM-0048213977"
+      - "4815 2093 7714"
+      - "2026A1184039"
+      # Nine digits with an EIN prefix: the provider tax ID gives way.
+      - "518204736"
+    nearMisses:
+      - { value: "88304219", line: "Ref {value}" }
+
+  - id: insurance-claim-number-prefixed
+    identifier: insurance-claim-number
+    # CLM and 6 to 15 digits, with no label.
+    pattern: '([Cc][Ll][Mm]-?\d{6,15})'
+    value: 1
+    needs: format
+    notNextTo: letter-or-digit
+    source: "Presidio UsClaimNumberRecognizer, its weak prefixed pattern: CLM, an optional hyphen, 6 to 15 digits, matched ignoring case. https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py" }
+    examples:
+      - { value: "CLM8830421957", line: "Ref {value}" }
+    nearMisses:
+      # Five digits.
+      - { value: "CLM-12345", line: "Ref {value}" }
+
+  - id: prescription-number
+    identifier: prescription-number
+    pattern: '((?=(?:[A-Za-z0-9]{sep?}){5}[A-Za-z0-9])(?=[A-Za-z0-9-]{0,40}\d)[A-Za-z0-9]{1,20}(?:(?:-|(?<=\d){sep}(?=\d))[A-Za-z0-9]{1,20}){0,6})'
+    value: 1
+    needs: labelled
+    # Presidio's labels.
+    labels: ["Prescription Number", "Prescription No", "Prescription ID", "Prescription", "Rx Number", "Rx No", "Rx ID", "Rx"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio UsPrescriptionNumberRecognizer (us_healthcare_admin_recognizers.py): CMS defines the prescription or service reference number as a pharmacy-assigned alphanumeric value with no universal format; Presidio takes 6 to 12 digits, with an optional RX prefix, after Rx or prescription and #, no, number or id. This rule also takes letters, as CMS allows. https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py" }
+    examples:
+      - "7310482"
+      - "RX-55190274"
+      - "P0294817"
+    nearMisses:
+      # Five digits.
+      - "73104"
+
+  - id: prescription-number-prefixed
+    identifier: prescription-number
+    # RX and 6 to 12 digits, with no label.
+    pattern: '([Rr][Xx]-?\d{6,12})'
+    value: 1
+    needs: format
+    notNextTo: letter-or-digit
+    source: "Presidio UsPrescriptionNumberRecognizer, its weak prefixed pattern: RX, an optional hyphen, 6 to 12 digits, matched ignoring case. https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/eb93051b60b7daa44b4b8b1acdcce60522bacc8a/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/us/us_healthcare_admin_recognizers.py" }
+    examples:
+      - { value: "RX61027384", line: "Ref {value}" }
+    nearMisses:
+      - { value: "RX-12345", line: "Ref {value}" }

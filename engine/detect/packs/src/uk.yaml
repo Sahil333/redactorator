@@ -1,3 +1,360 @@
 # How to write a rule: tools/packs/README.md.
 pack: uk
-rules: []
+rules:
+  - id: uk-nino
+    identifier: uk-nino
+    # Two prefix letters (never D, F, I, Q, U or V, and O never second; BG, GB, KN, NK, NT, TN and ZZ
+    # not used), six digits in pairs, and a suffix of A to D. Not case-sensitive, as Purview says.
+    pattern: '((?![Bb][Gg]|[Gg][Bb]|[Kk][Nn]|[Nn][Kk]|[Nn][Tt]|[Tt][Nn]|[Zz][Zz])[A-CEGHJ-PR-TW-Za-ceghj-pr-tw-z][A-CEGHJ-NPR-TW-Za-ceghj-npr-tw-z]{sep?}\d{2}{sep?}\d{2}{sep?}\d{2}{sep?}[A-Da-d])'
+    value: 1
+    needs: format
+    labels: ["National Insurance number", "National Insurance No", "NI number", "NI No", "NINO", "NI"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "HMRC, National Insurance Manual NIM39110: 2 letters, 6 numbers and a final letter, always A, B, C or D; D, F, I, Q, U and V are not used as either prefix letter, O not as the second; the prefixes BG, GB, KN, NK, NT, TN and ZZ are not to be used. Microsoft Purview, U.K. national insurance number: not case-sensitive, with or without spaces or dashes; the labels are drawn from its Keyword_uk_nino and Presidio's uk_nino_recognizer.py context. https://www.gov.uk/hmrc-internal-manuals/national-insurance-manual/nim39110"
+    licence: "GOV.UK: all content is available under the Open Government Licence v3.0, except where otherwise stated, © Crown copyright. Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse). Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://www.gov.uk/hmrc-internal-manuals/national-insurance-manual/nim39110" }
+    examples:
+      - "JG 10 37 59 A"
+      - "CE 29 48 61 B"
+      - "ST630492D"
+      # Lower case.
+      - "pr 58 16 04 a"
+    nearMisses:
+      # Q is never a prefix letter: HMRC's own example prefix.
+      - "QQ 12 34 56 A"
+      # A prefix not to be used.
+      - "GB 48 26 91 C"
+      - "Zz 37 10 52 A"
+      # O is never the second letter.
+      - "JO 48 21 07 B"
+      # The suffix is A to D.
+      - "JG 10 37 59 E"
+
+  - id: uk-nhs-number
+    identifier: uk-nhs-number
+    # 10 digits, written 3, 3 and 4. The check is the NHS's; a label alone also finds a value, so
+    # that a mistyped number next to its label is not missed.
+    pattern: '(\d{3}{sep?}\d{3}{sep?}\d{4})'
+    value: 1
+    needs: labelled
+    labels: ["NHS number", "NHS No", "NHS", "Patient number", "Patient No", "Patient ID"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    validator: nhsNumber
+    stdnum: gb.nhs
+    # A 10-digit UTR can pass the NHS check by chance; next to a UTR label it is a UTR.
+    yieldsTo: [uk-utr]
+    source: "NHS Data Dictionary, NHS Number: 10 digits, the tenth a modulus 11 check digit with weights 10 to 2, 11 giving 0 and 10 invalid (read by slice C0 on 2026-11-28; it refused this slice's reader); the same check in python-stdnum gb.nhs; NHS website: a 10-digit number, for example 485 777 3456. The labels are drawn from Microsoft Purview's Keyword_uk_nhs_number and Keyword_uk_nhs_number1. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/gb/nhs.py"
+    licence: "python-stdnum is LGPL 2.1 or later; the rule is written from its statements, no code is copied. The NHS pages are © Crown copyright. Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/gb/nhs.py" }
+    examples:
+      - "626 018 1590"
+      - "785 995 2890"
+      # No label: the check alone.
+      - { value: "413 721 5901", line: "Patient letter {value}" }
+      # Passes the UTR check too: next to an NHS label, the NHS rule comes first.
+      - "743 883 1701"
+    nearMisses:
+      # Fail the check, and no label.
+      - { value: "192 815 9013", line: "Ref {value}" }
+      - { value: "724 595 7117", line: "Ref {value}" }
+
+  - id: uk-utr
+    identifier: uk-utr
+    # 10 digits, often written 5 and 5, with or without a K at either end. The value leaves the K
+    # out, so the digits are one value however it is written; the lookarounds keep any other letter
+    # away. The check comes from python-stdnum, not from HMRC, so a label alone also finds a value.
+    pattern: '(?<![A-Za-z0-9])[Kk]?(\d{5}{sep?}\d{5})[Kk]?(?![A-Za-z0-9])'
+    value: 1
+    needs: labelled
+    labels: ["UTR", "Unique Taxpayer Reference", "Self Assessment UTR", "Corporation Tax UTR", "Partnership UTR", "Tax reference", "Taxpayer reference", "Reference"]
+    labelSide: before
+    distance: 40
+    notNextTo: digit
+    validator: utr
+    stdnum: gb.utr
+    source: "python-stdnum gb.utr: 10 digits, the first a check digit, '21987654321' at the sum of the other nine weighted 6, 7, 8, 9, 10, 5, 4, 3, 2, modulo 11. HMRC's design pattern: 10 or 13 digits, with or without spaces, and 10 or 13 digits that start or end with a k; it might be called 'reference', 'UTR' or 'official use'; the labels follow its headings. GOV.UK, Find your UTR number: sometimes called a 'tax reference'. https://design.tax.service.gov.uk/hmrc-design-patterns/unique-taxpayer-reference/"
+    licence: "python-stdnum is LGPL 2.1 or later; the rule is written from its statements, no code is copied. GOV.UK and HMRC's design system: Open Government Licence v3.0, © Crown copyright"
+    verified: { date: "2026-11-28", at: "https://design.tax.service.gov.uk/hmrc-design-patterns/unique-taxpayer-reference/" }
+    examples:
+      - "62427 31672"
+      - { value: "2505877065", line: "{label}: {value}K" }
+      - { value: "5014193141", line: "{label}: K{value}" }
+      # No label: the check alone.
+      - { value: "9871378905", line: "Return for {value}" }
+    nearMisses:
+      # Fails the check, and no label.
+      - { value: "87741 21547", line: "Ref {value}" }
+
+  - id: uk-utr-13
+    identifier: uk-utr
+    # The 13-digit form, with or without a K at either end. No source says which 10 of its digits
+    # carry the check, so it is found by its label alone.
+    pattern: '(?<![A-Za-z0-9])[Kk]?(\d{13})[Kk]?(?![A-Za-z0-9])'
+    value: 1
+    needs: labelled
+    labels: ["UTR", "Unique Taxpayer Reference", "Self Assessment UTR", "Corporation Tax UTR", "Partnership UTR", "Tax reference", "Taxpayer reference", "Reference"]
+    labelSide: before
+    distance: 40
+    notNextTo: digit
+    source: "HMRC's design pattern: a UTR can be 10 or 13 digits long, with or without spaces, and may start or end with a k; it gives no check and does not say which digits the extra three are. https://design.tax.service.gov.uk/hmrc-design-patterns/unique-taxpayer-reference/"
+    licence: "HMRC's design system: Open Government Licence v3.0, © Crown copyright"
+    verified: { date: "2026-11-28", at: "https://design.tax.service.gov.uk/hmrc-design-patterns/unique-taxpayer-reference/" }
+    examples:
+      - "8150236479012"
+      - { value: "3062948175204", line: "{label}: K{value}" }
+    nearMisses:
+      # No label.
+      - { value: "4093817265310", line: "Ref {value}" }
+
+  - id: uk-vat-number
+    identifier: uk-vat-number
+    # 9 digits written 3, 4 and 2, and a 3-digit branch after them; the branch is taken only where it
+    # ends the number, so a number after the VAT number on its line does not lose it. The value leaves
+    # out the GB or XI in front, so the digits are one value however it is written; notNextTo is digit
+    # for that.
+    pattern: '(\d{3}{sep?}\d{4}{sep?}\d{2}(?:{sep?}\d{3}(?!\d))?)'
+    value: 1
+    needs: labelled
+    labels: ["VAT registration number", "VAT Reg No", "VAT Reg", "VAT number", "VAT No", "VAT"]
+    labelSide: before
+    distance: 40
+    notNextTo: digit
+    validator: vatNumber
+    stdnum: gb.vat
+    source: "HMRC Enquiry Manual EM3058: all UK VAT registration numbers have nine digits, the last two calculated by a standard formula from the other seven; HMRC VATAFRS2500 names it the modulus 97 check. python-stdnum gb.vat: 9 digits, or 12 with a branch; weights 8 to 2, 10 and 1, modulo 97, remainder 0, or 42 or 55 when the first three digits are 100 or more. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/gb/vat.py"
+    licence: "python-stdnum is LGPL 2.1 or later; the rule is written from its statements, no code is copied. GOV.UK: Open Government Licence v3.0, © Crown copyright"
+    verified: { date: "2026-11-28", at: "https://www.gov.uk/hmrc-internal-manuals/enquiry-manual/em3058" }
+    examples:
+      - { value: "584 4950 03", line: "{label}: GB {value}" }
+      - { value: "684 9243 37", line: "{label} GB{value}" }
+      # Remainder 55.
+      - "314 8774 00"
+      # Under 100 0000 00: remainder 0.
+      - "075 1832 65"
+      # With a branch.
+      - "923 8430 25 561"
+      # A longer number after it on the line.
+      - { value: "844 5738 97", line: "{label}: GB {value} 2026" }
+      # No label: the check alone.
+      - { value: "739 3217 65", line: "Supplier GB {value}" }
+    nearMisses:
+      # Fail the check, and no label.
+      - { value: "100 9164 49", line: "Order {value}" }
+      # Remainder 42 is allowed only from 100 0000 00 up.
+      - { value: "020 7858 27", line: "Order {value}" }
+
+  - id: uk-vat-number-department
+    identifier: uk-vat-number
+    # A government department's or health authority's number: GD or HA and 3 digits, or GD8888 or
+    # HA8888, 3 digits and 2 check digits.
+    pattern: '((?:GD|HA){sep?}(?:8888\d{5}|\d{3}))'
+    value: 1
+    needs: labelled
+    labels: ["VAT registration number", "VAT Reg No", "VAT Reg", "VAT number", "VAT No", "VAT"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    validator: vatDepartment
+    stdnum: gb.vat
+    source: "python-stdnum gb.vat: a 5-character number for government departments (GD and under 500) or health authorities (HA and 500 or more), and an 11-character form GD8888 or HA8888, 3 digits, and those 3 digits modulo 97. https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/gb/vat.py"
+    licence: "python-stdnum is LGPL 2.1 or later; the rule is written from its statements, no code is copied"
+    verified: { date: "2026-11-28", at: "https://github.com/arthurdejong/python-stdnum/blob/master/stdnum/gb/vat.py" }
+    examples:
+      - "GD 214"
+      - "HA731"
+      - "GD888821420"
+      # No label: the check alone.
+      - { value: "HA888873152", line: "Supplier {value}" }
+    nearMisses:
+      # A government department is under 500, and no label.
+      - { value: "GD 731", line: "Ref {value}" }
+      # The check digits are wrong, and no label.
+      - { value: "HA888873153", line: "Ref {value}" }
+
+  - id: uk-driving-licence
+    identifier: uk-driving-licence
+    # 16 characters: 5 of surname padded with 9s, 6 digits of birth date, 2 initials, 3 more; then,
+    # in Purview's 18-character form, 2 more digits. The validator checks the date fields.
+    pattern: '([A-Z9]{5}\d{6}[A-Z9]{2}[A-Z0-9]{3}(?:\d{2})?)'
+    value: 1
+    needs: labelled
+    # "Licence" and "License" alone also match "Driver’s licence" written with a curly apostrophe,
+    # which "Driver's licence" does not.
+    labels: ["Driving licence number", "Driving licence no", "Driving licence", "Driving license", "Driver's licence", "Driver's license", "Licence number", "License number", "Licence", "License", "DL number", "DL no", "DVLA"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    validator: drivingLicence
+    source: "Presidio uk_driving_licence_recognizer.py: 16 characters, surname (letters padded with trailing 9s), decade digit, month (01 to 12, or 51 to 62), day (01 to 31), year digit, two initials (or 9), a digit and two check characters; the DVLA check is not public, so only the fields are checked. Microsoft Purview, U.K. driver's license number: 18 characters, ending in digits. The labels are drawn from Presidio's context and Purview's Keywords_eu_driver's_license_number. https://github.com/data-privacy-stack/presidio/blob/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/uk/uk_driving_licence_recognizer.py"
+    licence: "Presidio is MIT-licensed. Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/uk/uk_driving_licence_recognizer.py" }
+    examples:
+      - "JONES710238AB9CD"
+      # Month 62: a woman born in December.
+      - "SMITH862157JK1XY"
+      # A short surname padded with 9s, and one initial.
+      - "LEE99905071A92BC"
+      # Purview's 18 characters.
+      - "BROWN607304CD12345"
+      # No label: the date fields alone.
+      - { value: "WRIGH804129PT3LM", line: "Holder {value}" }
+    nearMisses:
+      # Month 13, day 32, and a surname of 9s only; none has a label.
+      - { value: "JONES713238AB9CD", line: "Ref {value}" }
+      - { value: "TAYLO705328MN4PQ", line: "Ref {value}" }
+      - { value: "99999710238AB9CD", line: "Ref {value}" }
+
+  - id: uk-passport
+    identifier: uk-passport
+    # The sources disagree, and a missed value is the worse error, so every form they give is found:
+    # 2 letters and 7 digits (Presidio), a letter and 8 digits (Purview), 9 digits (stdnum-js, which
+    # accepts separators between them). No check digit, so it needs a label.
+    pattern: '([A-Z]{2}\d{7}|[A-Z]\d{8}|\d{3}{sep?}\d{3}{sep?}\d{3})'
+    value: 1
+    needs: labelled
+    labels: ["Passport number", "Passport No", "Passport", "UK passport", "British passport", "Travel document"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "stdnum-js gb/passport.ts: nine numeric digits, separators ' -./,' removed before the check. Microsoft Purview, U.S./U.K. passport number: one letter or digit, then eight digits, no checksum. Presidio uk_passport_recognizer.py: from 2015, 2 letters and 7 digits. The labels are drawn from Presidio's context and Purview's Keywords_eu_passport_number and Keywords_uk_eu_passport_number. https://github.com/koblas/stdnum-js/blob/main/src/gb/passport.ts"
+    licence: "stdnum-js and Presidio are MIT-licensed. Microsoft Learn's terms allow informational, non-commercial or personal use, without changes, with the copyright notice (https://learn.microsoft.com/en-us/legal/termsofuse)"
+    verified: { date: "2026-11-28", at: "https://github.com/koblas/stdnum-js/blob/main/src/gb/passport.ts" }
+    examples:
+      - "LP4827163"
+      - "M73920481"
+      - "583 920 147"
+      - "107364829"
+    nearMisses:
+      # No label.
+      - { value: "482 739 105", line: "Ref {value}" }
+      # Too short.
+      - "LP482716"
+
+  - id: uk-sort-code
+    identifier: uk-sort-code-account
+    # Six digits in pairs. No check of its own, so it needs a label.
+    pattern: '(\d{2}{sep?}\d{2}{sep?}\d{2})'
+    value: 1
+    needs: labelled
+    labels: ["Sort code", "Sort code no", "Sorting code", "S/C"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Vocalink, Validating account numbers: UK modulus checking, version 9.20 of 4 Nov 2026: a six-digit sorting code with an eight-digit account number. The modulus checks need Vocalink's weight table for each sorting code range and are not used. https://www.vocalink.com/media/h3rou4er/validating-account-numbers-uk-modulus-checking-v920.pdf"
+    licence: "© Vocalink Limited 2026. All rights reserved; marked PUBLIC, submitted strictly for information purposes"
+    verified: { date: "2026-11-28", at: "https://www.vocalink.com/media/h3rou4er/validating-account-numbers-uk-modulus-checking-v920.pdf" }
+    examples:
+      - "20-45-77"
+      - "40 11 62"
+      - "309634"
+    nearMisses:
+      # No label.
+      - { value: "60-83-71", line: "Ref {value}" }
+      # Five digits.
+      - "20-45-7"
+
+  - id: uk-account-number
+    identifier: uk-sort-code-account
+    # Eight digits as standard, 6 to 10 at some banks, and National Westminster's 10 with a hyphen
+    # after the second; only a hyphen or dash there, and not right after a digit and a dash, so a sort
+    # code's last pair is never taken in. Found next to a label or near a sort code.
+    pattern: '((?<!\d[\-\u2010-\u2015\u2212])\d{2}[\-\u2010-\u2015\u2212]\d{8}|\d{6,10})'
+    value: 1
+    needs: labelled
+    labels: ["Account number", "Account No", "Acc No", "A/C No", "Account"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    companion: { rule: uk-sort-code, distance: 40 }
+    source: "Vocalink, Validating account numbers: UK modulus checking, version 9.20 of 4 Nov 2026, section 2.1.2: a standard account number of eight digits; ten-digit numbers at National Westminster (with a hyphen between the second and third digits), the Co-operative Bank and Leeds Building Society, nine at Santander, and seven and six digits in general. https://www.vocalink.com/media/h3rou4er/validating-account-numbers-uk-modulus-checking-v920.pdf"
+    licence: "© Vocalink Limited 2026. All rights reserved; marked PUBLIC, submitted strictly for information purposes"
+    verified: { date: "2026-11-28", at: "https://www.vocalink.com/media/h3rou4er/validating-account-numbers-uk-modulus-checking-v920.pdf" }
+    examples:
+      - "31926819"
+      - "0422773308"
+      - { value: "62-48190375", asWritten: true }
+      - "419027365"
+      - "4419025"
+      - "551903"
+      # No label: the sort code beside it.
+      - { value: "70219384", line: "Sort code {companion}, {value}" }
+      # The sort code and a space before it.
+      - { value: "53810926", line: "Sort code {companion} {value}" }
+      - { value: "27094361", line: "Sort code {companion}-{value}" }
+    nearMisses:
+      # Neither a label nor a sort code.
+      - { value: "83920174", line: "Ref {value}" }
+      # Eleven digits.
+      - "48201937562"
+
+  - id: uk-vehicle-registration
+    identifier: uk-vehicle-registration
+    # Since 2001: two area letters, the age identifier (02 to 29 for March, 51 to 79 for September)
+    # and three random letters. Its shape is distinctive, so the format alone finds it.
+    pattern: '([A-HJ-PR-Y]{2}(?:0[2-9]|[12]\d|5[1-9]|[67]\d){sep?}[A-HJ-PR-Z]{3})'
+    value: 1
+    needs: format
+    labels: ["Vehicle registration", "Registration number", "Registration mark", "Reg no", "VRN", "Number plate"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio uk_vehicle_registration_recognizer.py, current format (2001 on): 2 area letters, a 2-digit age identifier and 3 random letters, the age identifier 02 to 29 or 51 to 79; the labels are drawn from its context. https://github.com/data-privacy-stack/presidio/blob/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/uk/uk_vehicle_registration_recognizer.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/uk/uk_vehicle_registration_recognizer.py" }
+    examples:
+      - "LK72 XRT"
+      - "BD26 HWN"
+      - "YS09PLM"
+    nearMisses:
+      # Age identifier 35 is never issued.
+      - "LK35 XRT"
+      # I is not a random letter.
+      - "LK72 XIT"
+
+  - id: uk-vehicle-registration-prefix
+    identifier: uk-vehicle-registration
+    # 1983 to 2001: a year letter, 1 to 3 digits and 3 letters. Common in other text, so it needs a label.
+    pattern: '([A-HJ-NPR-TV-Y]\d{1,3}{sep?}[A-HJ-PR-Y][A-HJ-PR-Z]{2})'
+    value: 1
+    needs: labelled
+    labels: ["Vehicle registration", "Registration number", "Registration mark", "Reg no", "VRN", "Number plate"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio uk_vehicle_registration_recognizer.py, prefix format (1983 to 2001): a year letter, 1 to 3 digits and 3 letters. https://github.com/data-privacy-stack/presidio/blob/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/uk/uk_vehicle_registration_recognizer.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/uk/uk_vehicle_registration_recognizer.py" }
+    examples:
+      - "P482 KLT"
+      - "R7 FHW"
+    nearMisses:
+      # No label.
+      - { value: "P483 KLT", line: "Ref {value}" }
+      # I is not a year letter.
+      - "I482 KLT"
+
+  - id: uk-vehicle-registration-suffix
+    identifier: uk-vehicle-registration
+    # 1963 to 1983: 3 letters, 1 to 3 digits and a year letter. It needs a label.
+    pattern: '([A-HJ-PR-Z]{3}{sep?}\d{1,3}{sep?}[A-HJ-NPR-TV-Y])'
+    value: 1
+    needs: labelled
+    labels: ["Vehicle registration", "Registration number", "Registration mark", "Reg no", "VRN", "Number plate"]
+    labelSide: before
+    distance: 40
+    notNextTo: letter-or-digit
+    source: "Presidio uk_vehicle_registration_recognizer.py, suffix format (1963 to 1983): 3 letters, 1 to 3 digits and a year letter. https://github.com/data-privacy-stack/presidio/blob/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/uk/uk_vehicle_registration_recognizer.py"
+    licence: "Presidio is MIT-licensed"
+    verified: { date: "2026-11-28", at: "https://github.com/data-privacy-stack/presidio/blob/main/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/uk/uk_vehicle_registration_recognizer.py" }
+    examples:
+      - "KTW 418F"
+      - "HMP 52R"
+    nearMisses:
+      # No label.
+      - { value: "KTW 419F", line: "Ref {value}" }
+      # I is not a year letter.
+      - "KTW 418I"

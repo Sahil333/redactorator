@@ -50,6 +50,7 @@ const sentences: Partial<Record<ErrorCode, (data: (key: string) => string) => st
   "original-missing": (data) => `${data("file")} is missing from the project's folder, so it can't be shown. Add the file again with Add documents.`,
   "save-failed": () => "Your latest changes could not be saved. Check that the disk has space; the next change tries again.",
   "approval-failed": () => "The documents' text could not be read, so nothing was approved. Reload the page and approve again.",
+  "confirm-failed": () => "The found values could not be marked because of an error. Nothing was marked; try again.",
   "busy-adding": () => "Documents are being added. Try again once they are in the project.",
   "busy-approving": () => "A document is being approved. Try again once the approval is done.",
   "busy-applying": () => "A preview is being made. Try again once it is shown.",
