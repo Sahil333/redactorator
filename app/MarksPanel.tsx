@@ -12,6 +12,9 @@ import { TypePicker } from "./TypePicker";
 
 export const marksPanelWidth: PanelWidth = { initial: 288, min: 240, max: 480 };
 
+/** The id of the heading of the marks panel whose id is `panel`, where focus goes when the panel takes over. */
+export const marksHeadingId = (panel: string) => `${panel}-heading`;
+
 interface MarksPanelProps {
   readonly id: string;
   readonly width: number;
@@ -260,7 +263,7 @@ export function MarksPanel({ id, width, marks, hidden, reach, images, highlighte
   return (
     <aside id={id} aria-label="Marks" className="flex min-h-0 shrink-0 flex-col bg-paper-raised" style={{ width }}>
       <div className="flex items-baseline justify-between px-4 pt-4 pb-2">
-        <h2 ref={headingRef} tabIndex={-1} className="font-display font-semibold text-lg">
+        <h2 id={marksHeadingId(id)} ref={headingRef} tabIndex={-1} className="font-display font-semibold text-lg">
           Marks
         </h2>
         <span className="text-xs text-ink-muted">{plural(marks.length, "mark")}</span>

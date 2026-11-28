@@ -436,3 +436,23 @@ test("a found value that runs across a line end is removed on both lines", async
   await expect(marks(page)).toHaveText([/4333 3333 3333 3339.*Payment card/]);
   await judgedWithAndWithoutTypes(page, shapesPdf, [{ check: "absent", values: [...acrossLines] }, { check: "kept", values: ["Paid with card", "on 3 May"] }, { check: "structure" }]);
 });
+
+test("once Confirm or Close takes the findings panel away, focus is on the marks panel's heading", async ({ page }) => {
+  const marksHeading = page.getByRole("complementary", { name: "Marks" }).getByRole("heading", { name: "Marks" });
+  await openApp(page);
+  await openPdf(page, pagesPdf);
+  await chooseProfile(page, []);
+  await runAuto(page, 3);
+  await confirmButton(page).focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("dialog", { name: "Mark 3 values for removal?" }).getByRole("button", { name: "Confirm" }).press("Enter");
+  await expect(marksHeading).toBeFocused();
+
+  await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("dialog", { name: "Remove the 3 marks Auto mode made for 3 values?" }).getByRole("button", { name: "Remove marks" }).click();
+  await runAuto(page, 3);
+  await findingsPanel(page).getByRole("button", { name: "Close" }).focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("dialog", { name: "Close without marking?" }).getByRole("button", { name: "Close" }).press("Enter");
+  await expect(marksHeading).toBeFocused();
+});

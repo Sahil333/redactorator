@@ -67,9 +67,14 @@ The app has three screens:
 - `useFindings`, `Findings`, `OpenReview` (useFindings.ts): reads `detection`
   from the state for the open document and the project's run in progress, and
   wraps `detection.run` and `detection.stop`, and for the open findings review
-  `findings.setTicked`, `confirm` and `close`. It keeps the sentence for a
-  refused Run, Confirm or Close, and whether the chooser must ask for a profile
-  first.
+  `findings.setTicked`, `confirm` and `close`, and for a dropped findings
+  review's notice `findings.dismissNotice` (`DroppedNotice`). It keeps the
+  sentence for a refused Run, Confirm or Close, and whether the chooser must
+  ask for a profile first.
+- `FindingsDroppedNotice` (FindingsDroppedNotice.tsx): over the pages of a
+  document whose findings review was dropped, the sentence for its reason from
+  the design's wording table (a reader change, or its text changed), with Run
+  Auto mode and Dismiss. Dismiss moves focus to the marks panel's heading.
 - `FindingsPanel` (FindingsPanel.tsx): the open findings review, in the marks
   panel's place: "Found values", the instruction line, the line about pages
   not searched, the rows, Close and the confirm button, whose label states the
@@ -201,6 +206,10 @@ The app has three screens:
   not a status, so the top bar's page status stays the only one. Focus left
   with nowhere to go as Run gives way to Stop, or Stop to Run, moves to the
   button that takes its place; the findings panel takes it only then too.
+  Once Confirm or Close takes the findings panel away, focus left with nowhere
+  to go moves to the marks panel's heading, so a screen reader names the
+  panel now there; opening a document moves no focus
+  (`Workspace.tsx:useFocusAfterFindings`).
 - `CheckedBanner.tsx`: Download is disabled while a save runs, so only one save
   runs at a time.
 - `TopBar.tsx:EditingActions`: Approve and Export labels are disabled while

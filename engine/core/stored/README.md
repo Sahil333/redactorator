@@ -20,6 +20,11 @@ an older build still finds the project as it last saw it
 - `<folder>/.redactorator/<tag>/working/<documentId>.not-redacted.pdf`: its
   working copy, which holds every marked value until export, so its name says
   so.
+- `<folder>/.redactorator/<tag>/findings/<documentId>.hits.json`,
+  `.state.json` and `.run.json`: its open findings review's hits, that
+  review's state or the notice left in its place, and the record of its last
+  run (docs/designs/auto-mode.md, Technical Plan, section 5). The hits hold
+  the found values' text; the run record holds no value.
 
 Everything in a tag folder but `project.json` is derived from the original, so
 any of it that is missing or damaged is made again by preparing that document.
@@ -43,9 +48,15 @@ The files are encoded and decoded by [`../formats`](../formats/README.md).
       folder's project file; else the newest older tag folder's, the highest
       number below this build's; else the root one.
     - `listProjects(store, tag)`
+  - `recordsIn(folder, source)`: the folder of a project's records from a tag
+    folder or the root, which the findings paths are built from.
   - Migrating: `migrateToTag(store, read, tag)` copies a project read from an
     older folder into the tag folder, with each text piece's letters filled
-    by `migratePieces` from the older stored text; `inTag(store, read, tag)`
+    by `migratePieces` from the older stored text. It copies no findings
+    file: each document whose older folder holds a readable hits file gets a
+    state file of kind `dropped`, reason `reader-changed`, in the tag folder.
+    Open, rename, archive, duplicate and import all reach it through
+    `inTag`, or call it. `inTag(store, read, tag)`
     is the project as kept in the tag folder, migrated first when need be.
   - Making and saving projects (all into the tag folder only):
     - `saveProject(store, stored, tag)`
@@ -65,6 +76,14 @@ The files are encoded and decoded by [`../formats`](../formats/README.md).
   - Settings: `loadSettings(store)` (returns `defaultSettings` when the file is
     absent) and `saveSettings(store, settings)`.
   - `nameFromFile(file)`: strips a trailing `.pdf`.
+
+- `findings.ts`
+  - `findingsFiles(readerFolder, document)`: the paths of a document's three
+    findings files.
+  - `readFindings(store, readerFolder, document)`: `StoredFindings`, each file
+    parsed, or undefined when it is missing, can't be read or doesn't parse;
+    `readHits` reads the hits file alone. Writes and removals go through the
+    Session's save queue (`../session/effects/save.ts`).
 
 ## Invariants
 

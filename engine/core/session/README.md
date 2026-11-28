@@ -87,7 +87,10 @@ parts into the published `SessionState`.
   rejected values; or `findingsNotApplied`, after which a hit that no longer
   reads drops the findings review with the notice `text-changed`, and missing
   stored texts start the update and leave the review open
-  (`effects/findings.ts:marking`).
+  (`effects/findings.ts:marking`). A fault while the marks are built ends the
+  operation too, and the confirm resolves with `confirm-failed`; it never
+  rejects (`effects/findings.ts:confirm`). The review's stored files are
+  deleted only once the project holding the marks is saved.
 - While documents are prepared again for this build, `add`, `mark`, `history`,
   `open`, `apply`, `approve`, `confirm`, `addDocuments` and `markDownloaded`
   and Auto mode's commands are refused with `busy-updating`
@@ -99,7 +102,12 @@ parts into the published `SessionState`.
   prepared files in the tag folder, places its marks again on that text, and
   starts the update when the project was just migrated or any document's
   files are missing or damaged (`facade.ts:begin`). Closing waits for the
-  update.
+  update. It also starts reading every document's findings files at once, and
+  opens a document's stored findings review, or shows its stored notice, as
+  its marks are placed, with its files already read, so no run can start on
+  it before; a document the update prepares again, whichever command started
+  the update, opens its review once that is done (`facade.ts:prepared`). No
+  run starts.
 - `history`, `apply` and `approve` need the PDF worker started; a mark needs
   only the page text the Session holds and is refused only while the worker is
   starting; `documents.add` is refused with `worker-not-ready` once the worker

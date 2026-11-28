@@ -28,6 +28,8 @@ import {
 } from "../../model/project";
 import type { LockPort } from "../ports";
 import type { Store } from "../../storage/store";
+import { stateJson } from "../formats/findings";
+import { findingsFiles, readHits } from "./findings";
 
 const RECORDS = ".redactorator";
 const SETTINGS_FILE = `${RECORDS}/settings.json`;
@@ -38,7 +40,8 @@ const decoder = new TextDecoder();
 /** Where a project's records were read from: a reader tag's folder, or `.redactorator/` itself, as builds before reader tags wrote them. */
 export type ProjectSource = ReaderTag | "root";
 
-const recordsIn = (folder: string, source: ProjectSource) => inFolder(folder, source === "root" ? RECORDS : `${RECORDS}/${source}`);
+/** The folder of a project's records from `source`: its reader folder, or `.redactorator/` itself. */
+export const recordsIn = (folder: string, source: ProjectSource) => inFolder(folder, source === "root" ? RECORDS : `${RECORDS}/${source}`);
 const projectFile = (folder: string, source: ProjectSource) => `${recordsIn(folder, source)}/project.json`;
 const textFile = (folder: string, source: ProjectSource, id: DocumentId) => `${recordsIn(folder, source)}/text/${id}.json`;
 const imagesFile = (folder: string, source: ProjectSource, id: DocumentId) => `${recordsIn(folder, source)}/images/${id}.json`;
@@ -158,7 +161,9 @@ async function oldTexts(store: Store, folder: string, source: ProjectSource, doc
 /**
  * Copies the project read from an older `source` into this build's tag folder, with each text
  * piece's letters filled from the older build's stored text (`migratePieces`). The older files
- * are left as they are.
+ * are left as they are. No findings file is copied, since its positions belong to the older
+ * reader: a document whose older folder holds a readable hits file gets a state file of kind
+ * `dropped` instead, the notice the user sees on opening it. No run starts.
  */
 export async function migrateToTag(store: Store, { folder, project, source }: ReadProject, tag: ReaderTag): Promise<ReadProject> {
   const documents = await Promise.all(
@@ -168,6 +173,10 @@ export async function migrateToTag(store: Store, { folder, project, source }: Re
       return { ...document, marks };
     }),
   );
+  for (const { id } of project.documents) {
+    if ((await readHits(store, recordsIn(folder, source), id)) !== undefined)
+      await store.write(findingsFiles(recordsIn(folder, tag), id).state, stateJson({ kind: "dropped", reason: "reader-changed" }));
+  }
   const migrated = { folder, project: { ...project, documents } };
   await saveProject(store, migrated, tag);
   return { ...migrated, source: tag };

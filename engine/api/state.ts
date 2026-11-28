@@ -3,7 +3,7 @@ import type { DocumentId, Project, Settings } from "../model/project";
 import type { PageModel, RemovalKind } from "../model/document";
 import type { RunRecord } from "../model/detection";
 import type { ReaderErrorCode } from "../model/errors";
-import type { Finding } from "../model/findings";
+import type { DroppedReason, Finding } from "../model/findings";
 import type { PageIndex } from "../model/geometry";
 import type { EngineError, ErrorCode } from "./errors";
 
@@ -97,10 +97,10 @@ export interface DocumentDetection {
   readonly notice?:
     | { readonly kind: "nothing-found"; readonly ended: RunRecord["ended"]; readonly notSearched: readonly PageIndex[] }
     | { readonly kind: "run-failed"; readonly code: ErrorCode }
-    | { readonly kind: "dropped"; readonly reason: "reader-changed" | "text-changed" };
+    | { readonly kind: "dropped"; readonly reason: DroppedReason };
   /** What undo on this document takes back: an edit, or a confirmed findings review and its counts. Absent when there is nothing to undo. */
   readonly nextUndo?: { readonly kind: "edit" } | { readonly kind: "findings"; readonly values: number; readonly marks: number };
-  readonly can: { readonly run: boolean; readonly stop: boolean; readonly confirm: boolean; readonly close: boolean };
+  readonly can: { readonly run: boolean; readonly stop: boolean; readonly confirm: boolean; readonly close: boolean; readonly dismiss: boolean };
 }
 
 export interface DocumentStatus {

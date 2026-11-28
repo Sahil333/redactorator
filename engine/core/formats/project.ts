@@ -38,7 +38,7 @@ const SETTINGS_VERSION = 1;
 /** Why a stored file could not be used. Shown to the user. */
 export type StoredFileProblem = "damaged" | "newer";
 
-const oneOf = <T extends string>(options: readonly T[], value: unknown): T | undefined => options.find((option) => option === value);
+export const oneOf = <T extends string>(options: readonly T[], value: unknown): T | undefined => options.find((option) => option === value);
 const parseStrings = (value: unknown) => parseAll(value, (each) => (isText(each) ? each : undefined));
 
 function parsePiece(value: unknown): TextPiece | undefined {
@@ -112,13 +112,18 @@ function parseDocument(value: unknown, version: number): ProjectDocument | undef
     : undefined;
 }
 
-/** An optional profile: absent, or one that parses. */
-function optionalProfile(value: unknown): { profile?: Profile } | undefined {
-  if (value === undefined) return {};
+export function parseProfile(value: unknown): Profile | undefined {
   if (!isRecord(value)) return undefined;
   const chosenCountries = parseAll(value.countries, (each) => oneOf(countries, each));
   const chosenIndustries = parseAll(value.industries, (each) => oneOf(industries, each));
-  return chosenCountries && chosenIndustries && { profile: { countries: chosenCountries, industries: chosenIndustries } };
+  return chosenCountries && chosenIndustries && { countries: chosenCountries, industries: chosenIndustries };
+}
+
+/** An optional profile: absent, or one that parses. */
+function optionalProfile(value: unknown): { profile?: Profile } | undefined {
+  if (value === undefined) return {};
+  const profile = parseProfile(value);
+  return profile && { profile };
 }
 
 function parseHiddenValue(value: unknown): HiddenValue | undefined {
@@ -129,7 +134,7 @@ function parseHiddenValue(value: unknown): HiddenValue | undefined {
 }
 
 /** The record inside a stored file of `format`, and its version, once that is one this app reads. */
-function versioned(text: string, format: string, newest: number): { data: Record<string, unknown>; version: number } | StoredFileProblem {
+export function versioned(text: string, format: string, newest: number): { data: Record<string, unknown>; version: number } | StoredFileProblem {
   let data: unknown;
   try {
     data = JSON.parse(text);

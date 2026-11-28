@@ -72,7 +72,7 @@ function documentDetection(view: SessionView, document: DocumentId): DocumentDet
     ...(open === undefined ? {} : { findings: { findings: open.findings, ended: open.ended, notSearched: open.notSearched } }),
     ...(notice === undefined ? {} : { notice }),
     ...(nextUndo === undefined ? {} : { nextUndo }),
-    can: { run: allows("run"), stop: run.state === "running" && allows("stop"), confirm: allows("confirmFindings"), close: allows("closeFindings") },
+    can: { run: allows("run"), stop: run.state === "running" && allows("stop"), confirm: allows("confirmFindings"), close: allows("closeFindings"), dismiss: allows("dismissNotice") },
   };
 }
 

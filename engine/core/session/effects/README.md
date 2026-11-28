@@ -55,10 +55,13 @@ records that the [slices](../slices/README.md) reduce.
     damaged.
   - `anchorDocument(host, document, files, workingChanged)`: dispatches
     `documentPrepared`, and `reanchored` when its marks moved or its working
-    copy changed.
+    copy changed, then calls `host.prepared(document, texts)`, which opens the
+    document's stored findings review.
 - `save.ts`
-  - `saver({ store, folder, latest, dispatch })`: returns `flush()` and
-    `changed()` for one Session's project record.
+  - `saver({ store, folder, latest, dispatch })`: returns `flush()`,
+    `changed()` for one Session's project record, and `file(path, content)`,
+    which queues a write of a findings file, or its removal when `content` is
+    undefined, and dispatches `filing`.
 - `detect.ts`
   - `detectionOf(host)`: builds `Session["detection"]` (`run`, `stop`) plus
     `end()`. `run` refuses with `no-profile` when neither the project nor the
@@ -67,27 +70,36 @@ records that the [slices](../slices/README.md) reduce.
     the original gone too it refuses with `original-missing`. It asks the gate
     again, then dispatches `runStarted`, sends the pages through
     `DetectionClient.run`, dispatches `pageSearched` as each answers and
-    `runEnded` with the run's record, and hands the run to `host.ended`. A
-    run that failed before any page answered, such as one whose worker could
-    not start, could not load its packs or failed on the first page, sets the
-    `run-failed` notice with its code instead.
+    `runEnded` with the run's record, and hands the run to
+    `host.findings.ended`. It tells `host.findings.started` as the run
+    starts, so a stored notice goes.
     `stop` ends the worker when a run is on that document. `end()` ends the
     worker and resolves once a run in progress has ended, for `close`.
 - `findings.ts`
-  - `findingsOf(host)`: builds `Session["findings"]` plus `ended(document,
-    record, hits)`, `landed(change)` and `settled()`. `ended` runs the
-    resolver on a run's hits and opens a findings review (`findingsOpened`),
-    or, when nothing is left to offer, sets the `nothing-found` notice. Both
-    carry how the run ended and the pages it did not search. `landed` runs
+  - `findingsOf(host)`: builds `Session["findings"]` plus `started(document)`,
+    `ended(document, record, hits)`, `reopened(document, stored, texts)`,
+    `landed(change)` and `settled()`. `started` removes the document's state
+    file. `ended` stores the run record, then runs the resolver on the run's
+    hits and opens a findings review (`findingsOpened`), storing the hits and
+    a state file with no changes; or, when nothing is left to offer, sets the
+    `nothing-found` notice. Both carry how the run ended and the pages it did
+    not search. A run that failed before any page answered, such as one whose
+    worker could not start, could not load its packs or failed on the first
+    page, sets the `run-failed` notice with its code instead. `reopened`
+    opens a review from its stored files, with no run, once the document's
+    marks are placed on its prepared page texts (see Invariants). `landed` runs
     the resolver again on an open findings review after `approved`,
     `documentPrepared` or `reanchored` changed its document's marks, and ends
     it (`findingsClosed`) when no finding is left. `setTicked` dispatches
-    `findingChanged` and resolves again; a key that is no finding is refused
-    with `unknown-finding`. `confirm` follows section 4's steps 1 to 4
-    (`marking`), and resolves with the values and marks it made; `close`
-    dispatches `findingsClosed`. Choosing, edges and notices still refuse with
-    `no-findings` once the gate allows them (slices R2 and R3). `settled()`
-    resolves once no confirm is under way, for `close`.
+    `findingChanged`, resolves again and stores the state; a key that is no
+    finding is refused with `unknown-finding`. `confirm` follows section 4's
+    steps 1 to 5 (`marking`), and resolves with the values and marks it made,
+    or with `confirm-failed` when building the marks threw; `close`
+    dispatches `findingsClosed` and deletes the review's files.
+    `dismissNotice` dispatches `noticeDismissed`, and removes the state file
+    of a `dropped` notice. Choosing and edges still refuse with `no-findings`
+    once the gate allows them (slice R3). `settled()` resolves once no
+    confirm is under way, for `close`.
 - `profile.ts`
   - `profileOf(host)`: builds `Session["profile"]`. `set` dispatches
     `profileSet` through `change`, so the project is saved.
@@ -147,7 +159,28 @@ records that the [slices](../slices/README.md) reduce.
 - Project saves run one after another, so an older project never lands after
   a newer one; changes made during a save are saved together next, and a failed
   save is retried by the next change or flush (`save.ts:saver`, `writing`,
-  `queued`, `unsaved`).
+  `queued`, `unsaved`). Findings files are written in the same rounds, after
+  the project and only once it landed, each path's latest content in the order
+  it was last asked for; one that fails waits, with those after it, for the
+  next round. `saved` is dispatched only once both are written, so the saving
+  indicator, `Session.flush` and `Session.close` cover the findings files
+  (`save.ts:saveFiles`, `files`).
+- A findings review is stored in the reader folder, under `findings/`: the
+  hits file once, when a run ends with something to offer; the state file
+  then, and on each change; and the run record when every run ends, whatever
+  its outcome, never deleted by a review ending (`findings.ts:ended`,
+  `storeState`). Confirm deletes the hits, then the state, only once the save
+  of its marks succeeded; Close and a review that ends by itself delete them
+  in the same order; a dropped review writes the `dropped` state, then
+  deletes the hits (`findings.ts:marking`, `forget`, `drop`).
+- When the Session begins, a document's stored review opens exactly when its
+  hits file can be read and every hit's text still reads at its place in the
+  prepared page texts; a hit that no longer reads drops the review with the
+  `text-changed` notice. Its changes come from a state file of kind `open` of
+  the same run, and none from one of another run; how its run ended from a run
+  record of the same run. A `dropped` state file with no hits file is a
+  notice. A file this build can't read is left alone (`findings.ts:reopened`,
+  `stored/findings.ts:readFindings`).
 - A reading is never read again from the original here: a missing or damaged
   one starts the update and throws `ReadingUnavailable`, so nothing is
   approved (`readings.ts:readingOf`). A document whose original is gone has no
@@ -169,8 +202,9 @@ records that the [slices](../slices/README.md) reduce.
   `findOriginal` (`readings.ts`, `reprepare.ts`); `readTexts` and
   `findOriginal` through `readings.ts:storedTexts` (`detect.ts`,
   `findings.ts`).
-- Storage writes through `Store`: `saveProject` (`save.ts`), `writeOriginals`
-  (`add.ts`), and `savePrepared` (`reprepare.ts`), all into the tag folder.
+- Storage writes through `Store`: `saveProject` and the findings files
+  (`save.ts`, asked for by `findings.ts`), `writeOriginals` (`add.ts`), and
+  `savePrepared` (`reprepare.ts`), all into the tag folder.
 - PDF worker calls through `PdfClient`: `open`, `text`, `render` (`open.ts`),
   `apply` (`apply.ts`), `prepare` (`reprepare.ts`) and `match`
   (`readings.ts:findPlaces`, used by `add.ts` and `plan.ts`).
@@ -180,8 +214,9 @@ records that the [slices](../slices/README.md) reduce.
   `approvalCancelled`, `addStarted`, `documentsAdded`, `addFailed`, `saved`,
   `saveFailed`, `updateStarted`, `updateFinished`, `documentPrepared`,
   `preparationFailed`, `reanchored`, `profileSet`, and Auto mode's records,
-  among them `findingChanged`, `findingsApplying`, `findingsApplied`,
-  `findingsNotApplied`, `findingsClosed` and `noticeSet`.
+  among them `findingsOpened`, `findingChanged`, `findingsApplying`,
+  `findingsApplied`, `findingsNotApplied`, `findingsClosed`, `noticeSet`,
+  `noticeDismissed` and `filing`.
 - No network requests are made in this directory.
 
 ## Verification
