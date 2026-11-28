@@ -6,10 +6,11 @@
     reviews".
 *   **Date:** 2026-11-28
 
-This document can be read without any other. Its source is the brainstorm's
-brief, kept beside it as `docs/designs/auto-mode-brief.md`. "Brief S24" or
-"brief A8" in brackets points to that brief's decision register, to show where
-a decision came from. Where the two differ, this document takes precedence.
+This document can be read without any other. It came from a brainstorm, whose
+brief is the author's working file and is not part of the repository. "Brief
+S24" or "brief A8" in brackets points to that brief's decision register, to
+show where a decision came from. Where the two differ, this document takes
+precedence.
 
 --------------------------------------------------------------------------------
 
@@ -1946,8 +1947,6 @@ its own piece of work and is not fixed here.
 
 ## Additional Resources
 
-*   `docs/designs/auto-mode-brief.md`: the brainstorm's brief, with its
-    decision register.
 *   `docs/designs/composable-engine.md`: section 5 describes the Session;
     section 11 is the sketch of findings this design builds on.
 *   `docs/designs/pdf-leak-suite.md`: the reader folders, the writer and the
@@ -1959,8 +1958,8 @@ its own piece of work and is not fixed here.
     and are not edited here.
 
 The author's working files are not part of the repository and are not needed
-to read this document: the workbook the 65 identifiers were chosen from, and
-the reports of the two design reviews.
+to read this document: the brainstorm's brief, the workbook the 65 identifiers
+were chosen from, and the reports of the two design reviews.
 
 --------------------------------------------------------------------------------
 
