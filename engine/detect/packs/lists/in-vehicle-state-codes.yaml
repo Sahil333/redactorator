@@ -1,3 +1,12 @@
-# A placeholder: its pack slice fills it (tools/packs/README.md, "Add a list").
+# The two letters that open an Indian vehicle registration number: the state or union territory,
+# with the codes no longer issued that old plates still carry. Taken from Presidio's India vehicle
+# registration recognizer, which lists them as `in_states`, `in_union_territories`,
+# `in_old_states`, `in_old_union_territories` and `in_non_standard_state_or_ut`, and joins them
+# all into `two_factor_registration_prefix`; the entries are that set, sorted.
+# To refresh: read the same sets at a newer commit, update the commit and `read`, run `pnpm packs`.
 name: in-vehicle-state-codes
-entries: []
+title: Indian vehicle state code
+source: "Presidio, presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py at commit 24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777: the union of its state, union territory, old state, old union territory and non-standard codes. https://github.com/data-privacy-stack/presidio/blob/24c8d8f3c3d435f55a8b9d9f32bb1edd4f635777/presidio-analyzer/presidio_analyzer/predefined_recognizers/country_specific/india/in_vehicle_registration_recognizer.py"
+licence: "Presidio is MIT-licensed"
+read: "2026-11-28"
+entries: [AN, AP, AR, AS, BR, CG, CH, CT, DD, DH, DL, DN, GA, GJ, HP, HR, JH, JK, KA, KL, LA, LD, MH, ML, MN, MP, MZ, NL, OD, OR, PB, PY, RJ, SK, TN, TR, TS, UA, UK, UL, UP, UT, WB]
