@@ -87,7 +87,18 @@ Used inside the folder:
   above 140, white otherwise. The label's font size is the smaller of
   0.7 × box height and the size at which its Helvetica AFM widths
   (`redact.ts:HELVETICA_WIDTHS`, 600 for other characters) fill 0.9 × box
-  width; it is centred in the box.
+  width; it is centred in the box (`redact.ts:typePlace`).
+- **Marks may overlap, and a label is never printed under another box.** A
+  redaction whose label's letters would lie under another redaction's box
+  prints none: its `printed` is empty (`redact.ts:typesInTheClear`). The
+  letters are taken as the label's width, from 0.74 × its font size above the
+  baseline to 0.2 × below it, the reach of Helvetica's brackets. The check
+  reads a printed letter at the centre of its font box, which MuPDF puts
+  0.39 × the font size above the baseline, inside that reach. So nested marks
+  both print nothing, a wide box whose middle is clear still prints, and
+  boxes that only touch, or overlap along an edge as closely set lines do,
+  print as before. Every box is still drawn, and everything under it removed
+  (`tests/e2e/overlapping-marks.spec.ts`).
 - **Existing page content is isolated.** `drawBoxes` wraps the page's existing
   `Contents` in `q`/`Q`, so a graphics state it leaves set cannot move the
   boxes. The boxes are drawn through the inverse of the page transform.
@@ -113,7 +124,7 @@ Used inside the folder:
   - `check-failed`, with the page: a non-whitespace glyph overlaps a box with
     its `body` and its centre is not inside any box, or the glyphs centred in
     a box, without whitespace, differ from its label (or from nothing when
-    labels are off) (`textUnderBoxes`); or an image or image mask under a box
+    labels are off or the box prints none) (`textUnderBoxes`); or an image or image mask under a box
     is not one uniform value across the pixels the box overlaps
     (`imagesUnderBoxes`, `blankUnder`). The `body` runs only from the
     baseline up to 0.7 × font size (`geometry.ts:bodyOf`);
