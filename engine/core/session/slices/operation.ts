@@ -44,6 +44,7 @@ const operationAfter: Partial<Record<SessionChange["type"], SessionState["operat
   updateFinished: "idle",
   findingsApplying: "marking",
   findingsApplied: "idle",
+  findingsNotApplied: "idle",
 };
 
 function saveAfter(save: SessionState["save"], change: SessionChange): SessionState["save"] {

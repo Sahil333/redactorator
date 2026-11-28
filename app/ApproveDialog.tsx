@@ -35,7 +35,7 @@ function names(files: readonly string[]): string {
   return files.length < 2 ? last : `${files.slice(0, -1).join(", ")} and ${last}`;
 }
 
-/** What approving will do beyond this document, said in a sentence or two. */
+/** What approving will do beyond this document, said in a sentence or two, and the found values it leaves unmarked. */
 function consequences(approval: ApprovalPlan, documents: readonly ProjectDocument[]): string[] {
   const files = new Map(documents.map((document) => [document.id, document.file]));
   const file = (id: DocumentId) => files.get(id) ?? "";
@@ -53,6 +53,9 @@ function consequences(approval: ApprovalPlan, documents: readonly ProjectDocumen
     );
   }
   if (approval.here.hidden > 0) lines.push(`It also hides ${places(approval.here.hidden)} more in this document, where the same values or images appear.`);
+  const unmarked = approval.unmarkedFindings;
+  if (unmarked === 1) lines.push("1 found value is not marked and stays in the file.");
+  else if (unmarked > 1) lines.push(`${unmarked} found values are not marked and stay in the file.`);
   return lines;
 }
 

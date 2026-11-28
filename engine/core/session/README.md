@@ -79,7 +79,15 @@ parts into the published `SessionState`.
   resolves an open review again when the record changed its document's marks
   (`facade.ts:openSession`, `dispatch`).
 - Closing stops a run and ends the detection worker first; the run's hits are
-  lost (`facade.ts:close`).
+  lost. A confirm under way lands before the last save (`facade.ts:close`).
+- `findings.confirm` begins the operation `marking` with `findingsApplying`
+  before its first wait, then reads the stored page texts and tests every hit
+  against them with `textAnchor.ts:readsAt`. Each way out ends the operation:
+  `findingsApplied` with the marks, the lost marks they replace and the
+  rejected values; or `findingsNotApplied`, after which a hit that no longer
+  reads drops the findings review with the notice `text-changed`, and missing
+  stored texts start the update and leave the review open
+  (`effects/findings.ts:marking`).
 - While documents are prepared again for this build, `add`, `mark`, `history`,
   `open`, `apply`, `approve`, `confirm`, `addDocuments` and `markDownloaded`
   and Auto mode's commands are refused with `busy-updating`

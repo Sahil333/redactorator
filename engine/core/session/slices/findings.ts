@@ -19,17 +19,24 @@ export type FindingsPart = ReadonlyMap<DocumentId, OpenFindings>;
 
 export const firstFindings: FindingsPart = new Map();
 
-/** Findings reviews: opened on a run's hits, resolved again as the document's marks change, and ended when nothing is left to offer. */
+/** Findings reviews: opened on a run's hits, changed by the user, resolved again as the document's marks change, and ended when confirmed, closed, or nothing is left to offer. */
 export function findings(part: FindingsPart, change: SessionChange): FindingsPart {
   switch (change.type) {
     case "findingsOpened": {
       const { run, hits, ended, notSearched, changes, findings: resolved } = change;
       return new Map(part).set(change.document, { run, hits, ended, notSearched, changes, findings: resolved });
     }
+    case "findingChanged": {
+      const open = part.get(change.document);
+      if (open === undefined) return part;
+      const changes = new Map(open.changes).set(change.key, { ...open.changes.get(change.key), ...change.change });
+      return new Map(part).set(change.document, { ...open, changes });
+    }
     case "findingsResolved": {
       const open = part.get(change.document);
       return open === undefined ? part : new Map(part).set(change.document, { ...open, findings: change.findings });
     }
+    case "findingsApplied":
     case "findingsClosed": {
       if (!part.has(change.document)) return part;
       const next = new Map(part);

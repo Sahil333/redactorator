@@ -102,10 +102,20 @@ export type SessionChange =
   /** Confirming the findings review began: the operation `marking`. */
   | { readonly type: "findingsApplying"; readonly document: DocumentId }
   /**
-   * The confirmed findings review's marks, the lost marks they take the place of, and the keys of
-   * the values the user unticked. With marks it is one edit, and one undo step.
+   * The confirmed findings review's marks, made for `values` ticked values, the lost marks they
+   * take the place of, and the keys of the values the user unticked. With marks it is one edit,
+   * and one undo step.
    */
-  | { readonly type: "findingsApplied"; readonly document: DocumentId; readonly marks: readonly Mark[]; readonly replaces: readonly Mark["id"][]; readonly rejected: readonly string[] }
+  | {
+      readonly type: "findingsApplied";
+      readonly document: DocumentId;
+      readonly values: number;
+      readonly marks: readonly Mark[];
+      readonly replaces: readonly Mark["id"][];
+      readonly rejected: readonly string[];
+    }
+  /** Confirming the findings review ended with nothing marked or rejected. */
+  | { readonly type: "findingsNotApplied"; readonly document: DocumentId }
   /** The findings review ended without marking: closed, dropped, or every found value marked. */
   | { readonly type: "findingsClosed"; readonly document: DocumentId }
   | { readonly type: "noticeSet"; readonly document: DocumentId; readonly notice: NonNullable<DocumentDetection["notice"]> }

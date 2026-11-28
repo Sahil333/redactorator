@@ -77,3 +77,12 @@ export function toEdits(mark: Mark): Edit[] {
   if (target.kind === "box") return [{ kind: "box", page: target.page, box: target.box, label }];
   return target.pieces.map(({ page, start, end, text }) => ({ kind: "text", page, start, end, text, label }));
 }
+
+/** The lost marks a new text mark stands for: the same letters, on a page they share (CUJ 7). */
+export function markedAgain(lost: readonly Mark[], target: MarkTarget): Mark["id"][] {
+  if (target.kind !== "text") return [];
+  const pages = new Set(markPages(target));
+  return lost
+    .filter(({ target: was }) => was.kind === "text" && was.text === target.text && markPages(was).some((page) => pages.has(page)))
+    .map(({ id }) => id);
+}

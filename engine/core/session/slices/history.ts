@@ -1,12 +1,19 @@
+import type { DocumentDetection } from "../../../api/state";
 import type { DocumentId, Project } from "../../../model/project";
 import type { Edits, SessionChange } from "../changes";
 
 // Undo goes back this many changes per document.
 const HISTORY_LIMIT = 100;
 
+/** What a step undoes: an edit, or the marks a confirmed findings review made, with its counts. */
+export type StepTag = NonNullable<DocumentDetection["nextUndo"]>;
+
+/** Each snapshot's tag is at the same place in its list as the snapshot, and moves with it. */
 interface Steps {
   readonly past: readonly Edits[];
   readonly future: readonly Edits[];
+  readonly pastTags: readonly StepTag[];
+  readonly futureTags: readonly StepTag[];
 }
 
 export interface HistoryPart<P> {
@@ -18,7 +25,7 @@ export interface HistoryPart<P> {
 
 type Slice<P> = (part: P, change: SessionChange) => P;
 
-const noSteps: Steps = { past: [], future: [] };
+const noSteps: Steps = { past: [], future: [], pastTags: [], futureTags: [] };
 
 export const withNoHistory = <P>(present: P): HistoryPart<P> => ({ present, steps: new Map() });
 
@@ -31,17 +38,24 @@ function editsOf(project: Project, id: DocumentId): Edits {
 
 /**
  * Wraps `inner` with per-document undo and redo. `undoable` names the document an undoable record
- * changes. Undo and redo reach `inner` as a `restored` record, which it applies with its own rules.
- * An approval can't be undone, so it ends the history of every document it changed; placing a
- * document's marks again ends its history too.
+ * changes, and tags its step. Undo and redo reach `inner` as a `restored` record, which it applies
+ * with its own rules. An approval can't be undone, so it ends the history of every document it
+ * changed; placing a document's marks again ends its history too.
  */
-export function history<P extends { readonly project: Project }>(inner: Slice<P>, undoable: (change: SessionChange) => DocumentId | undefined): Slice<HistoryPart<P>> {
+export function history<P extends { readonly project: Project }>(
+  inner: Slice<P>,
+  undoable: (change: SessionChange) => { readonly document: DocumentId; readonly tag: StepTag } | undefined,
+): Slice<HistoryPart<P>> {
   function step(part: HistoryPart<P>, document: DocumentId, direction: "undo" | "redo"): HistoryPart<P> {
-    const { past, future } = stepsOf(part, document);
+    const { past, future, pastTags, futureTags } = stepsOf(part, document);
     const to = (direction === "undo" ? past : future).at(-1);
-    if (to === undefined) return part;
+    const tag = (direction === "undo" ? pastTags : futureTags).at(-1);
+    if (to === undefined || tag === undefined) return part;
     const now = editsOf(part.present.project, document);
-    const steps = direction === "undo" ? { past: past.slice(0, -1), future: [...future, now] } : { past: [...past, now], future: future.slice(0, -1) };
+    const steps =
+      direction === "undo"
+        ? { past: past.slice(0, -1), future: [...future, now], pastTags: pastTags.slice(0, -1), futureTags: [...futureTags, tag] }
+        : { past: [...past, now], future: future.slice(0, -1), pastTags: [...pastTags, tag], futureTags: futureTags.slice(0, -1) };
     return { present: inner(part.present, { type: "restored", document, ...to }), steps: new Map(part.steps).set(document, steps) };
   }
 
@@ -54,10 +68,13 @@ export function history<P extends { readonly project: Project }>(inner: Slice<P>
       for (const document of change.type === "approved" ? change.changedDocuments : [change.document]) steps.delete(document);
       return { present, steps };
     }
-    const document = undoable(change);
-    if (document === undefined) return present === part.present ? part : { ...part, present };
+    const undone = undoable(change);
+    if (undone === undefined) return present === part.present ? part : { ...part, present };
+    const { document, tag } = undone;
+    const before = stepsOf(part, document);
     // A new change clears redo.
-    const past = [...stepsOf(part, document).past, editsOf(part.present.project, document)].slice(-HISTORY_LIMIT);
-    return { present, steps: new Map(part.steps).set(document, { past, future: [] }) };
+    const past = [...before.past, editsOf(part.present.project, document)].slice(-HISTORY_LIMIT);
+    const pastTags = [...before.pastTags, tag].slice(-HISTORY_LIMIT);
+    return { present, steps: new Map(part.steps).set(document, { past, future: [], pastTags, futureTags: [] }) };
   };
 }

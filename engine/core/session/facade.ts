@@ -2,7 +2,7 @@ import type { Result } from "../../api/errors";
 import type { IncomingFile, Session, TargetInput } from "../../api/facade";
 import type { DocumentHandle, EngineState } from "../../api/state";
 import { groundTruth } from "../../model/groundTruth";
-import { markKey, markPages, nextId, type Mark, type MarkTarget } from "../../model/marks";
+import { markedAgain, markKey, nextId, type Mark, type MarkTarget } from "../../model/marks";
 import { customTypeName, type MarkType } from "../../model/markTypes";
 import type { DocumentId, Project, Settings } from "../../model/project";
 import { textTarget, type TextPieceRange, type Texts } from "../../model/selection";
@@ -68,15 +68,6 @@ function targetOf(texts: Texts, handle: DocumentHandle, input: TargetInput): Mar
   const { page, box } = input;
   const onPage = handle.pages.some(({ index }) => index === page);
   return onPage && box.x1 > box.x0 && box.y1 > box.y0 ? { kind: "box", page, box } : "empty-box";
-}
-
-/** The lost marks a new text mark stands for: the same letters, on a page they share (CUJ 7). */
-function markedAgain(lost: readonly Mark[], target: MarkTarget): Mark["id"][] {
-  if (target.kind !== "text") return [];
-  const pages = new Set(markPages(target));
-  return lost
-    .filter(({ target: was }) => was.kind === "text" && was.text === target.text && markPages(was).some((page) => pages.has(page)))
-    .map(({ id }) => id);
 }
 
 /**
@@ -150,7 +141,7 @@ export function openSession(
   const approval = approvalOf({ source, view, allowed, dispatch, change });
   const adder = adderOf({ ...source, intake: host.intake, allowed, dispatch, change });
   const viewer = viewerOf({ source, view, allowed, dispatch });
-  const findings = findingsOf({ view, allowed, dispatch });
+  const findings = findingsOf({ source, view, allowed, dispatch, change });
   const detection = detectionOf({ source, allowed, dispatch, client: host.detection, ended: findings.ended });
   const profile = profileOf({ allowed, change });
 
@@ -263,9 +254,10 @@ export function openSession(
       dispatch({ type: "closeStarted" });
       // A run is stopped, and its hits lost, as on a reload.
       await detection.end();
-      // An add or an approval being worked out lands first; one waiting for its heads-up is cancelled.
+      // An add, an approval being worked out or a confirm lands first; an approval waiting for its heads-up is cancelled.
       await adder.settled();
       await approval.settled();
+      await findings.settled();
       await updater.settled();
       if (view()?.parts.operation.operation === "confirming") dispatch({ type: "approvalCancelled" });
       if (!(await saving.flush())) {

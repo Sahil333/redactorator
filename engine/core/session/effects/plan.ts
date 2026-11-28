@@ -34,8 +34,9 @@ const approved = ({ here, changes }: ApprovalPlan, project: Project): SessionCha
 /**
  * Approving a document: working out what spreads (the readings of every document, where the PDF
  * worker finds the values, then `approve`), landing it at once or after the heads-up, and
- * cancelling. The heads-up waits when the approval changes other places, or when preparing the
- * document removed kinds of content no earlier approval of it listed. The gate takes no change to
+ * cancelling. The heads-up waits when the approval changes other places, when preparing the
+ * document removed kinds of content no earlier approval of it listed, or when the document's
+ * findings review is open, whose found values approving leaves unmarked. The gate takes no change to
  * the record while approval plans or waits, so an approval always lands on the record it was
  * worked out from; finding another means a command got past the gate, and nothing is approved.
  * `settled` resolves once no plan is being worked out.
@@ -57,8 +58,9 @@ export function approvalOf({ source, view, allowed, dispatch, change }: Approval
       dispatch({ type: "approvalFailed" });
       return failed;
     }
-    const plan: ApprovalPlan = { planId, document, changes: approval.changes, here: approval.here, removed: approval.removed, unmarkedFindings: 0 };
-    if (plan.changes.length > 0 || changed(plan.here) || plan.removed.length > 0) {
+    const unmarkedFindings = view()?.parts.findings.get(document)?.findings.length ?? 0;
+    const plan: ApprovalPlan = { planId, document, changes: approval.changes, here: approval.here, removed: approval.removed, unmarkedFindings };
+    if (plan.changes.length > 0 || changed(plan.here) || plan.removed.length > 0 || unmarkedFindings > 0) {
       dispatch({ type: "planned", plan, from, project: approval.project });
       return { ok: true, value: { landed: false, plan } };
     }

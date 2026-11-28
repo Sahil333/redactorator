@@ -58,9 +58,8 @@ test("a run counts its pages, then lists the card number in the marks panel's pl
   await expect(row).toContainText("passed its check");
   await expect(row.getByRole("checkbox", { name: `Payment card ${card}` })).toBeChecked();
   await expect(panel).not.toContainText(nearMiss);
-  // Confirming and closing come with slice R1.
-  await expect(panel.getByRole("button", { name: "Mark 1 value for removal" })).toBeDisabled();
-  await expect(panel.getByRole("button", { name: "Close" })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: "Mark 1 value for removal" })).toBeEnabled();
+  await expect(panel.getByRole("button", { name: "Close" })).toBeEnabled();
   await expect(runButton(page)).toBeDisabled();
 });
 

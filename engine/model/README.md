@@ -54,7 +54,7 @@ available are the ones declared in `engine/globals.ts`.
 - `DetectionErrorCode`: `detector-not-started`, `recognizer-failed`,
   `detector-failed`, why a run of Auto mode ended as failed.
 
-### Auto mode (`findings.ts`, `detection.ts`, `identifiers.ts`, `resolver.ts`)
+### Auto mode (`findings.ts`, `detection.ts`, `identifiers.ts`, `resolver.ts`, `findingMarks.ts`)
 
 The contracts of docs/designs/auto-mode.md, Technical Plan, section 3, and the
 resolver.
@@ -78,6 +78,11 @@ resolver.
   and a place where the value as changed is marked is left out. Strongest
   evidence first, then by first place. It reads no page text. The caller
   passes the marks without the lost ones.
+- `findingMarks.ts`: `findingMarks(texts, findings, marks)`, the marks a
+  confirmed findings review makes: one per place of each ticked finding, over
+  its span there, typed with its chosen identifier, its target built by
+  `textTarget` as a hand mark's is, with ids after `marks`. Undefined when a
+  place can't be built. Marks may overlap: each finding gets its own.
 
 ### Parsers (`parse.ts`)
 
@@ -104,6 +109,9 @@ resolver.
 
 - A text piece's letters and boxes are its identity; its offsets only point at
   them in the text as this build reads it.
+- `readsAt(texts, { page, start, end, text })`: whether the text still reads
+  at its offsets, as `rangeText` reads them; empty text never does. It tells a
+  lost piece, and at confirm a hit whose text changed.
 - `lostPieces(target, texts)`: the pieces whose `rangeText` at their offsets is
   not their letters, or that have none.
 - `reanchor(target, texts)`: each lost piece placed again, or `"lost"`. Among
@@ -121,7 +129,9 @@ resolver.
   `generalTypeIds`, `customMarkType`, `customTypeName`, `markTypeLabel`.
 - `marks.ts`: `TextPiece` (with `text`, its letters), `MarkTarget`, `TextTarget`, `Mark`, `nextId`,
   `markKey`, `itemKey`, `markPages`, `boxesOn`, `firstPage`, `markName`,
-  `toEdits`.
+  `toEdits`, and `markedAgain(lost, target)`: the lost marks a new text mark
+  takes the place of, those with the same letters on a page it shares (CUJ 7),
+  for a hand mark and for a confirmed findings review alike.
 
 ### Value matching (`match.ts`)
 

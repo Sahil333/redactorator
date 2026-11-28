@@ -28,8 +28,9 @@ records that the [slices](../slices/README.md) reduce.
 - `plan.ts`
   - `approvalOf(host)`: builds `Session["approval"]` (`plan`, `confirm`,
     `cancel`) plus `settled()`. A plan waits for the heads-up when it changes
-    other places, or when the document's removed kinds (`documentStatus`)
-    hold one no earlier approval of it listed; otherwise it lands at once.
+    other places, when the document's removed kinds (`documentStatus`)
+    hold one no earlier approval of it listed, or when the document's findings
+    review is open; otherwise it lands at once.
 - `add.ts`
   - `adderOf(host)`: builds `documents.add` plus `settled()`.
 - `readings.ts`
@@ -41,6 +42,10 @@ records that the [slices](../slices/README.md) reduce.
   - `imagesOf(source, document)`: a document's placed images.
   - `findPlaces(client, keys, documents)`: every place `PdfClient.match` finds
     each key in each document's text.
+  - `storedTexts(source, document)`: a document's stored page texts, refused
+    with `busy-updating` when they are missing or damaged (the caller starts
+    the update), or with `original-missing` when its original is gone too.
+    `detect.ts` and `findings.ts` read through it.
 - `reprepare.ts`
   - `updaterOf(host)`: `update()` prepares again, one document at a time,
     every document whose tag-folder files are missing or damaged, then saves;
@@ -70,15 +75,19 @@ records that the [slices](../slices/README.md) reduce.
     worker and resolves once a run in progress has ended, for `close`.
 - `findings.ts`
   - `findingsOf(host)`: builds `Session["findings"]` plus `ended(document,
-    record, hits)` and `landed(change)`. `ended` runs the resolver on a run's
-    hits and opens a findings review (`findingsOpened`), or, when nothing is
-    left to offer, sets the `nothing-found` notice. Both carry how the run
-    ended and the pages it did not search.
-    `landed` runs the resolver again on an open findings review after
-    `approved`, `documentPrepared` or `reanchored` changed its document's
-    marks, and ends it (`findingsClosed`) when no finding is left. Ticking,
-    choosing, edges, confirm, close and notices still refuse with
-    `no-findings` once the gate allows them.
+    record, hits)`, `landed(change)` and `settled()`. `ended` runs the
+    resolver on a run's hits and opens a findings review (`findingsOpened`),
+    or, when nothing is left to offer, sets the `nothing-found` notice. Both
+    carry how the run ended and the pages it did not search. `landed` runs
+    the resolver again on an open findings review after `approved`,
+    `documentPrepared` or `reanchored` changed its document's marks, and ends
+    it (`findingsClosed`) when no finding is left. `setTicked` dispatches
+    `findingChanged` and resolves again; a key that is no finding is refused
+    with `unknown-finding`. `confirm` follows section 4's steps 1 to 4
+    (`marking`), and resolves with the values and marks it made; `close`
+    dispatches `findingsClosed`. Choosing, edges and notices still refuse with
+    `no-findings` once the gate allows them (slices R2 and R3). `settled()`
+    resolves once no confirm is under way, for `close`.
 - `profile.ts`
   - `profileOf(host)`: builds `Session["profile"]`. `set` dispatches
     `profileSet` through `change`, so the project is saved.
@@ -122,8 +131,15 @@ records that the [slices](../slices/README.md) reduce.
   every chosen file and adds none (`add.ts:run`, `add-search-failed`,
   `add-save-failed`). Any other failure, such as `intake` rejecting, also
   refuses every chosen file with `add-save-failed` (`add.ts:adderOf`).
-- An approval plan counts no found values yet (`unmarkedFindings: 0`)
-  (`plan.ts:run`).
+- An approval plan counts every found value of the document's open findings
+  review, ticked or not, as `unmarkedFindings` (`plan.ts:run`).
+- A confirm builds one mark per place of each ticked finding with
+  `engine/model/findingMarks.ts`, whose targets come from `textTarget`, as a
+  hand mark's do. It marks nothing when any hit's text no longer reads at its
+  place in the stored page texts: the review is dropped with the notice
+  `text-changed` and the confirm refused with `findings-dropped`
+  (`findings.ts:marking`, `drop`). Unticked findings' keys are its rejected
+  values; a confirm with nothing ticked carries only those.
 - A run's hits are held in memory until it ends; the pages that answered keep
   theirs however it ends, and the others are its `notSearched`
   (`detect.ts:search`). A run the Session's closing stopped opens no findings
@@ -150,7 +166,9 @@ records that the [slices](../slices/README.md) reduce.
 
 - Storage reads through `Store` (via `engine/core/stored/projects`):
   `readWorking` and `findOriginal` (`open.ts`), `readTexts`, `readImages` and
-  `findOriginal` (`readings.ts`, `reprepare.ts`).
+  `findOriginal` (`readings.ts`, `reprepare.ts`); `readTexts` and
+  `findOriginal` through `readings.ts:storedTexts` (`detect.ts`,
+  `findings.ts`).
 - Storage writes through `Store`: `saveProject` (`save.ts`), `writeOriginals`
   (`add.ts`), and `savePrepared` (`reprepare.ts`), all into the tag folder.
 - PDF worker calls through `PdfClient`: `open`, `text`, `render` (`open.ts`),
@@ -161,7 +179,9 @@ records that the [slices](../slices/README.md) reduce.
   `applyFailed`, `planning`, `planned`, `approved`, `approvalFailed`,
   `approvalCancelled`, `addStarted`, `documentsAdded`, `addFailed`, `saved`,
   `saveFailed`, `updateStarted`, `updateFinished`, `documentPrepared`,
-  `preparationFailed`, `reanchored` and `profileSet`.
+  `preparationFailed`, `reanchored`, `profileSet`, and Auto mode's records,
+  among them `findingChanged`, `findingsApplying`, `findingsApplied`,
+  `findingsNotApplied`, `findingsClosed` and `noticeSet`.
 - No network requests are made in this directory.
 
 ## Verification

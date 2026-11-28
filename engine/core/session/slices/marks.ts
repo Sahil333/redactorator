@@ -13,17 +13,26 @@ export const firstMarks = (project: Project): MarksPart => ({ project, edits: ne
 
 /**
  * How a change to a document is kept. An `edit` alters what an apply would write: it can be
- * undone, and puts the document in review. A `label` is labelling data only.
+ * undone, and puts the document in review. A `note` alters nothing an apply writes: labelling
+ * data, or rejected values alone.
  */
-type EditKind = "edit" | "label";
+type EditKind = "edit" | "note";
 
-function withEdits(project: Project, id: DocumentId, { marks, shown }: Edits, kind: EditKind): Project {
+/** A document's marks and kept-visible list after a change, the kind of change, and the keys of values it rejects. */
+interface Edited {
+  readonly edits: Edits;
+  readonly kind: EditKind;
+  readonly rejected?: readonly string[];
+}
+
+function withEdits(project: Project, id: DocumentId, { edits: { marks, shown }, kind, rejected = [] }: Edited): Project {
   // A value marked again is no longer one the user keeps visible here.
   const keep = shown.filter((key) => !marks.some((mark) => markKey(mark) === key));
   const documents = project.documents.map((document): ProjectDocument => {
     if (document.id !== id) return document;
-    if (kind === "label") return { ...document, marks, shown: keep };
-    return { ...document, marks, shown: keep, review: "in-review", download: document.download === "none" ? "none" : "changed" };
+    const changed = { ...document, marks, shown: keep, rejected: [...document.rejected, ...rejected.filter((key) => !document.rejected.includes(key))] };
+    if (kind === "note") return changed;
+    return { ...changed, review: "in-review", download: document.download === "none" ? "none" : "changed" };
   });
   return { ...project, documents };
 }
@@ -38,11 +47,11 @@ function counted(edits: ReadonlyMap<DocumentId, number>, documents: readonly Doc
 function restored(project: Project, id: DocumentId, { marks, shown }: Edits): Project {
   const now = project.documents.find((document) => document.id === id)?.marks ?? [];
   const linkIds = new Map(now.map((mark) => [mark.id, mark.linkId]));
-  return withEdits(project, id, { marks: marks.map((mark) => ({ ...mark, linkId: linkIds.get(mark.id) ?? mark.linkId })), shown }, "edit");
+  return withEdits(project, id, { edits: { marks: marks.map((mark) => ({ ...mark, linkId: linkIds.get(mark.id) ?? mark.linkId })), shown }, kind: "edit" });
 }
 
-/** A document's marks and kept-visible list after a mark command, and whether it was an edit or labelling. */
-function edited(document: ProjectDocument, change: SessionChange): { readonly edits: Edits; readonly kind: EditKind } | undefined {
+/** A document's marks and kept-visible list after a mark command or a confirmed findings review. */
+function edited(document: ProjectDocument, change: SessionChange): Edited | undefined {
   const { marks, shown } = document;
   const item = (markId: number) => {
     const mark = marks.find((each) => each.id === markId);
@@ -64,7 +73,11 @@ function edited(document: ProjectDocument, change: SessionChange): { readonly ed
     case "keptHere":
       return { edits: { marks: marks.filter((each) => itemKey(each) !== change.key), shown: [...shown, change.key] }, kind: "edit" };
     case "linked":
-      return { edits: { marks: onItem(change.markId, (each) => ({ ...each, linkId: change.linkId })), shown }, kind: "label" };
+      return { edits: { marks: onItem(change.markId, (each) => ({ ...each, linkId: change.linkId })), shown }, kind: "note" };
+    case "findingsApplied": {
+      const kept = marks.filter((each) => !change.replaces.includes(each.id));
+      return { edits: { marks: [...kept, ...change.marks], shown }, kind: change.marks.length > 0 ? "edit" : "note", rejected: change.rejected };
+    }
     default:
       return undefined;
   }
@@ -75,7 +88,7 @@ function markCommand(part: MarksPart, change: Extract<SessionChange, { readonly 
   const result = document && edited(document, change);
   if (result === undefined) return part;
   return {
-    project: withEdits(part.project, change.document, result.edits, result.kind),
+    project: withEdits(part.project, change.document, result),
     edits: result.kind === "edit" ? counted(part.edits, [change.document]) : part.edits,
   };
 }
@@ -101,6 +114,7 @@ export function marks(part: MarksPart, change: SessionChange): MarksPart {
     case "markRemoved":
     case "keptHere":
     case "linked":
+    case "findingsApplied":
       return markCommand(part, change);
     case "restored":
       return { project: restored(part.project, change.document, change), edits: counted(part.edits, [change.document]) };

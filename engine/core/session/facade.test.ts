@@ -460,6 +460,70 @@ describe("Auto mode", () => {
     expect(parts().findings.has(id)).toBe(false);
   });
 
+  test("confirming a finding with the same letters as a lost mark takes its place, so apply is then allowed", async () => {
+    const written: Parameters<PdfClient["apply"]>[0][] = [];
+    const pdf: PdfClient = {
+      ...client,
+      apply(edits) {
+        written.push(edits);
+        return Promise.resolve({ bytes: new Uint8Array(0), model: { pages: [page] } });
+      },
+    };
+    const { session, id, parts, land, ended } = await autoSession({ marks: [textMark(1, "123-45-6789", 4)], answer: () => [hit("123-45-6789", 4)], pdf });
+    land({ type: "documentPrepared", document: id, removed: [], lost: [1] });
+    const handle: DocumentHandle = { document: id, pages: [page] };
+    land({ type: "opened", handle });
+    expect(await session.output.apply()).toMatchObject({ ok: false, error: { code: "mark-lost" } });
+    await session.detection.run(id);
+    await ended();
+
+    expect(await session.findings.confirm(id)).toEqual({ ok: true, value: { values: 1, marks: 1 } });
+
+    const marks = parts().record.present.project.documents.find((document) => document.id === id)?.marks ?? [];
+    expect(marks.map(({ id: markId, type, target }) => [markId, type, target.kind === "text" ? target.text : ""])).toEqual([[2, "us-ssn", "123-45-6789"]]);
+    expect(parts().findings.has(id)).toBe(false);
+    expect(await session.output.apply()).toEqual({ ok: true, value: undefined });
+    expect(written.at(-1)).toMatchObject([{ kind: "text", start: 4, end: 15, text: "123-45-6789", label: "SSN" }]);
+  });
+
+  test("a second confirm while the first marks is refused", async () => {
+    const { session, id, ended } = await autoSession({ answer: () => [hit("123-45-6789", 4)] });
+    await session.detection.run(id);
+    await ended();
+
+    const first = session.findings.confirm(id);
+    expect(await session.findings.confirm(id)).toEqual({ ok: false, error: { code: "busy-marking" } });
+    expect(await session.findings.close(id)).toEqual({ ok: false, error: { code: "busy-marking" } });
+    expect(await first).toEqual({ ok: true, value: { values: 1, marks: 1 } });
+  });
+
+  test("a confirm whose found value no longer reads in the stored text marks nothing and drops the findings review with a notice", async () => {
+    const { session, id, parts, stored, ended } = await autoSession({ answer: () => [hit("123-45-6789", 4)] });
+    await session.detection.run(id);
+    await ended();
+    await savePrepared(stored, "Letters", READER_TAG, id, { preparedBytes: new Uint8Array(0), reading: { texts: [textOf("SSN 987-65-4321")], images: [] }, removed: [] });
+
+    expect(await session.findings.confirm(id)).toEqual({ ok: false, error: { code: "findings-dropped" } });
+
+    expect(parts().record.present.project.documents[0]).toMatchObject({ marks: [], rejected: [] });
+    expect(parts().findings.has(id)).toBe(false);
+    expect(parts().detection.get(id)?.notice).toEqual({ kind: "dropped", reason: "text-changed" });
+    expect(parts().operation.operation).toBe("idle");
+  });
+
+  test("a confirm with nothing ticked only rejects: no mark, no undo step, and the review state stays", async () => {
+    const { session, id, parts, ended } = await autoSession({ answer: () => [hit("123-45-6789", 4)] });
+    await session.detection.run(id);
+    await ended();
+    expect(session.findings.setTicked(id, "123456789", false)).toEqual({ ok: true, value: undefined });
+    expect(session.findings.setTicked(id, "000000000", false)).toEqual({ ok: false, error: { code: "unknown-finding" } });
+
+    expect(await session.findings.confirm(id)).toEqual({ ok: true, value: { values: 0, marks: 0 } });
+
+    expect(parts().record.present.project.documents[0]).toMatchObject({ marks: [], rejected: ["123456789"], review: "in-review" });
+    expect(parts().record.steps.get(id)).toBeUndefined();
+  });
+
   test("closing the Session stops a run and ends the worker; the run's hits are lost", async () => {
     const { session, id, parts, stops, running } = await autoSession({ answer: () => "hang" });
     await session.detection.run(id);

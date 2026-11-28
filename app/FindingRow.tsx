@@ -32,8 +32,13 @@ function placesText({ places }: Finding): string {
   return `${plural(places.length, "place")}, ${pagesList(pages)}`;
 }
 
+interface FindingRowProps {
+  readonly finding: Finding;
+  readonly onTicked: (ticked: boolean) => void;
+}
+
 /** One found value: its tick, the exact text that would be removed, its identifier's name, its places and why it was found. */
-export function FindingRow({ finding }: { readonly finding: Finding }) {
+export function FindingRow({ finding, onTicked }: FindingRowProps) {
   const nameId = useId();
   const textId = useId();
   const identifier = finding.candidates[finding.chosen]?.identifier ?? "";
@@ -42,8 +47,13 @@ export function FindingRow({ finding }: { readonly finding: Finding }) {
   return (
     // Tests read the value, its identifier and its places here, as the pack tests compare them with a truth file.
     <li data-text={finding.text} data-identifier={identifier} data-places={finding.places.length} className="flex items-start gap-2 border-b border-rule px-4 py-2">
-      {/* Ticking comes with slice R1. */}
-      <input type="checkbox" checked={finding.ticked} readOnly disabled aria-labelledby={`${nameId} ${textId}`} className="mt-1 size-4 shrink-0 accent-accent" />
+      <input
+        type="checkbox"
+        checked={finding.ticked}
+        onChange={(event) => onTicked(event.target.checked)}
+        aria-labelledby={`${nameId} ${textId}`}
+        className="mt-1 size-4 shrink-0 accent-accent"
+      />
       <div className="min-w-0 flex-1">
         {first === undefined ? (
           <span id={textId} className="block truncate leading-6">
